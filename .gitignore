@@ -1,0 +1,20 @@
+# Signing secrets — NEVER commit
+.signing.env
+*.keystore
+*.jks
+local.properties
+
+# Google service account key
+google-service-account.json
+*.json
+
+# Build outputs
+build/
+.gradle/
+*.apk
+*.aab
+
+# IDE
+.idea/
+*.iml
+.DS_Store
