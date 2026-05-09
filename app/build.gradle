@@ -1,0 +1,114 @@
+// ============================================================================
+// DiimeAI Demo App — app module
+//
+// Prerequisites before building:
+//   1. Build NonaShield SDK AAR:
+//      cd ../payshield-kmp-sdk && ./gradlew :android-sdk:publishToMavenLocal
+//   2. Set DIIMEAI_KEYSTORE_PATH, DIIMEAI_KEY_ALIAS, DIIMEAI_KEY_PASSWORD
+//      in your shell or in a local.properties file (not committed).
+//   3. Enable Play Integrity API in Google Play Console for com.diimeai.demo
+//   4. Set PAYSHIELD_EXPECTED_CERT_HASH env var before release build
+//      (see prerequisite checklist in docs/PREREQUISITES.md)
+// ============================================================================
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace   'com.diimeai.demo'
+    compileSdk  34
+
+    defaultConfig {
+        applicationId  'com.diimeai.demo'
+        minSdk         23
+        targetSdk      34
+        versionCode    1
+        versionName    "1.0.0"
+
+        // ── NonaShield backend URL ───────────────────────────────────────────
+        // Change to your actual gateway URL in production.
+        buildConfigField 'String', 'NONASHIELD_BASE_URL',
+            '"https://api.diimeai.com"'
+
+        // ── Play Integrity configuration ─────────────────────────────────────
+        // Your Google Cloud project number (NOT the Play Console app ID).
+        // Found at: console.cloud.google.com → Project Settings → Project number
+        // Required for Play Integrity API warm-up calls.
+        buildConfigField 'String', 'PLAY_CLOUD_PROJECT_NUMBER',
+            '"YOUR_GOOGLE_CLOUD_PROJECT_NUMBER"'
+
+        // ── DiimeAI mock backend ─────────────────────────────────────────────
+        // The customer's own API Gateway URL (calls NonaShield via verify/gateway)
+        buildConfigField 'String', 'DIIMEAI_API_URL',
+            '"https://api.diimeai.com"'
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        release {
+            storeFile     file(System.getenv('DIIMEAI_KEYSTORE_PATH') ?: 'debug.keystore')
+            storePassword System.getenv('DIIMEAI_STORE_PASSWORD')     ?: 'android'
+            keyAlias      System.getenv('DIIMEAI_KEY_ALIAS')          ?: 'androiddebugkey'
+            keyPassword   System.getenv('DIIMEAI_KEY_PASSWORD')       ?: 'android'
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix '.debug'
+            versionNameSuffix   '-debug'
+            // Debug: Play Integrity in test mode, RASP checks skipped.
+            buildConfigField 'Boolean', 'IS_DEBUG', 'true'
+        }
+        release {
+            minifyEnabled   true
+            shrinkResources true
+            proguardFiles   getDefaultProguardFile('proguard-android-optimize.txt'),
+                            'proguard-rules.pro'
+            signingConfig   signingConfigs.release
+            buildConfigField 'Boolean', 'IS_DEBUG', 'false'
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+        viewBinding true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+dependencies {
+    // ── NonaShield SDK (build locally from ../payshield-kmp-sdk) ────────────
+    // Run: cd ../payshield-kmp-sdk && ./gradlew :android-sdk:publishToMavenLocal
+    implementation 'com.payshield:android-sdk:1.0.0'
+
+    // ── Android core ─────────────────────────────────────────────────────────
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation 'androidx.activity:activity-ktx:1.9.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.1'
+
+    // ── Network ─────────────────────────────────────────────────────────────
+    // OkHttp must be provided by the app — NonaShield SDK uses compileOnly.
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
+
+    // ── Coroutines ───────────────────────────────────────────────────────────
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0'
+
+    // ── Tests ────────────────────────────────────────────────────────────────
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+}

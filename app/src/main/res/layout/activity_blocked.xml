@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#1A0000"
+    android:padding="32dp">
+
+    <TextView
+        android:id="@+id/tvBlockIcon"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🚫"
+        android:textSize="72sp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/tvBlockTitle"
+        android:layout_marginBottom="24dp" />
+
+    <TextView
+        android:id="@+id/tvBlockTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Device Blocked"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:textColor="#FF4444"
+        app:layout_constraintTop_toBottomOf="@id/tvBlockIcon"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/tvBlockSub" />
+
+    <TextView
+        android:id="@+id/tvBlockSub"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="NonaShield detected a security threat on this device"
+        android:textSize="14sp"
+        android:textColor="#AAAAAA"
+        android:textAlignment="center"
+        app:layout_constraintTop_toBottomOf="@id/tvBlockTitle"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="8dp"
+        app:layout_constraintBottom_toTopOf="@id/tvBlockReason" />
+
+    <TextView
+        android:id="@+id/tvBlockReason"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Reason loading…"
+        android:textSize="13sp"
+        android:textColor="#FFFFFF"
+        android:fontFamily="monospace"
+        android:padding="16dp"
+        android:background="#2A0000"
+        android:textAlignment="center"
+        app:layout_constraintTop_toBottomOf="@id/tvBlockSub"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="32dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnContactSupport"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:text="Contact Support"
+        android:textSize="15sp"
+        android:textColor="#FFFFFF"
+        app:backgroundTint="#CC0000"
+        app:cornerRadius="10dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginBottom="32dp" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

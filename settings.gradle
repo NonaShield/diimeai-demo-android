@@ -1,0 +1,24 @@
+// ============================================================================
+// DiimeAI Demo App — Gradle Settings
+// ============================================================================
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        // FreeRASP SDK (TalsecSecurity)
+        maven { url 'https://jitpack.io' }
+        // NonaShield SDK published to local Maven (see SDK README)
+        mavenLocal()
+    }
+}
+
+rootProject.name = "DiimeAI"
+include ':app'

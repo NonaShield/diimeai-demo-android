@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DiimeAI Demo App — AndroidManifest.xml
+
+  Permissions declared here:
+    INTERNET / ACCESS_NETWORK_STATE — also merged from NonaShield SDK AAR
+    QUERY_ALL_PACKAGES               — merged from NonaShield SDK AAR (Android 11+)
+
+  The <queries> block is REQUIRED on Android 11+ when targeting API 30+ so
+  VpnConflictSignal can enumerate installed VPN apps — see NonaShield guide §2.3.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Merged from NonaShield SDK AAR but declared explicitly for clarity -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!--
+      Required on Android 11+ for NonaShield VpnConflictSignal + UserCertificateSignal.
+      Note: QUERY_ALL_PACKAGES requires justification in Google Play Console.
+      Justification: "Security SDK enumerates installed VPN and CA certificate apps
+      to detect man-in-the-middle attack vectors per OWASP MASVS-NETWORK."
+    -->
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission"
+        xmlns:tools="http://schemas.android.com/tools" />
+
+    <!--
+      <queries> block — required alongside QUERY_ALL_PACKAGES on API 30+.
+      Enumerates VPN and CA installer intent actions for threat detection.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.net.VpnService" />
+        </intent>
+        <intent>
+            <action android:name="android.security.INSTALL_CA_CERT" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".DiimeApp"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.DiimeAI"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:hardwareAccelerated="true">
+
+        <!-- Splash / Home screen -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:screenOrientation="portrait">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Login screen -->
+        <activity
+            android:name=".LoginActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Payment screen — NonaShield checkpoint evaluated here -->
+        <activity
+            android:name=".PaymentActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Device blocked / RASP alert screen -->
+        <activity
+            android:name=".BlockedActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+    </application>
+
+</manifest>
