@@ -53,6 +53,56 @@
             app:layout_constraintStart_toStartOf="parent"
             android:layout_marginTop="2dp" />
 
+        <!-- ─── Demo 5: Social Engineering Warning Banner ──────────────── -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardSocialEngWarning"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="#3A0000"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="8dp"
+            app:layout_constraintTop_toBottomOf="@id/tvDeviceId"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="12dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="⚠️  SOCIAL ENGINEERING DETECTED"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="#FF4444"
+                    android:layout_marginBottom="6dp" />
+
+                <TextView
+                    android:id="@+id/tvSocialEngDetail"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="This device was previously registered to a different user. Risk elevated to HIGH."
+                    android:textSize="12sp"
+                    android:textColor="#FFAAAA"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/tvSocialEngPreviousUser"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Previous user: —"
+                    android:textSize="11sp"
+                    android:textColor="#FF8888"
+                    android:fontFamily="monospace" />
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
         <!-- Payment form card -->
         <androidx.cardview.widget.CardView
             android:id="@+id/cardPayment"
@@ -61,10 +111,10 @@
             app:cardBackgroundColor="#111122"
             app:cardCornerRadius="16dp"
             app:cardElevation="6dp"
-            app:layout_constraintTop_toBottomOf="@id/tvDeviceId"
+            app:layout_constraintTop_toBottomOf="@id/cardSocialEngWarning"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            android:layout_marginTop="20dp">
+            android:layout_marginTop="16dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -154,7 +204,7 @@
 
         </androidx.cardview.widget.CardView>
 
-        <!-- Result -->
+        <!-- Result panel -->
         <TextView
             android:id="@+id/tvResult"
             android:layout_width="match_parent"
@@ -170,36 +220,71 @@
             app:layout_constraintEnd_toEndOf="parent"
             android:layout_marginTop="16dp" />
 
+        <!-- Demo 2: Non-Repudiation — View Proof button (appears after success) -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnViewProof"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="🔏 View Non-Repudiation Receipt"
+            android:textSize="13sp"
+            android:textColor="#00FF88"
+            app:backgroundTint="#0A1A0A"
+            app:strokeColor="#00FF88"
+            app:strokeWidth="1dp"
+            app:cornerRadius="10dp"
+            app:layout_constraintTop_toBottomOf="@id/tvResult"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="8dp"
+            android:visibility="gone" />
+
         <!-- Dashboard button -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnViewDashboard"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:text="View Grafana Dashboard →"
+            android:text="View SOC Dashboard →"
             android:textSize="14sp"
             android:textColor="#00D4FF"
             app:backgroundTint="#0D1117"
             app:strokeColor="#00D4FF"
             app:strokeWidth="1dp"
             app:cornerRadius="10dp"
-            app:layout_constraintTop_toBottomOf="@id/tvResult"
+            app:layout_constraintTop_toBottomOf="@id/btnViewProof"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            android:layout_marginTop="16dp" />
+            android:layout_marginTop="12dp" />
+
+        <!-- Demo 5: Switch User button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSwitchUser"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:text="Switch User (Demo 5)"
+            android:textSize="12sp"
+            android:textColor="#FFAA00"
+            app:backgroundTint="#1A1100"
+            app:strokeColor="#FFAA00"
+            app:strokeWidth="1dp"
+            app:cornerRadius="10dp"
+            app:layout_constraintTop_toBottomOf="@id/btnViewDashboard"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/btnLogout"
+            android:layout_marginTop="10dp"
+            android:layout_marginEnd="8dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnLogout"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="44dp"
             android:text="Logout"
             android:textSize="13sp"
             android:textColor="#888888"
             app:backgroundTint="@android:color/transparent"
             app:layout_constraintTop_toBottomOf="@id/btnViewDashboard"
-            app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="24dp" />
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="32dp" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

@@ -178,14 +178,17 @@ object DiimeApiClient {
                         val json = JSONObject(responseBody)
                         PaymentResult.Success(
                             transactionId = json.optString("transaction_id", "TXN_DEMO"),
-                            status        = json.optString("status", "PENDING")
+                            status        = json.optString("status", "PENDING"),
+                            receiptUrl    = json.optString("receipt_url", ""),
+                            decisionId    = json.optString("decision_id", "")
                         )
                     }
                     response.code == 403 -> {
                         // NonaShield blocked this request
                         val json = runCatching { JSONObject(responseBody) }.getOrDefault(JSONObject())
                         PaymentResult.Blocked(
-                            reason = json.optString("detail", "Request blocked by security policy")
+                            reason     = json.optString("detail", "Request blocked by security policy"),
+                            threatType = json.optString("threat_type", "")
                         )
                     }
                     response.code == 402 -> {
@@ -206,6 +209,69 @@ object DiimeApiClient {
         } catch (e: Exception) {
             Log.e(TAG, "Payment network error: ${e.message}", e)
             PaymentResult.Failure("Network error: ${e.message}")
+        }
+    }
+
+    /**
+     * Fetch hardware binding proof for this device — Demo 1.
+     * Returns attestation level, key fingerprint, enrolled date.
+     */
+    fun getBindingProof(deviceId: String): BindingProof? {
+        val request = Request.Builder()
+            .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/device/$deviceId/binding-proof")
+            .get()
+            .build()
+
+        return try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return null
+                val json = JSONObject(response.body?.string() ?: return null)
+                BindingProof(
+                    deviceId         = json.optString("device_id"),
+                    attestationLevel = json.optString("attestation_level", "BASIC"),
+                    pubkeyFingerprint= json.optString("pubkey_fingerprint"),
+                    enrolledAtIso    = json.optString("enrolled_at_iso"),
+                    hardwareBacked   = json.optBoolean("hardware_backed", false),
+                    bindingSummary   = json.optString("binding_summary"),
+                    proofId          = json.optString("proof_id")
+                )
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "getBindingProof failed: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Fetch non-repudiation receipt for a gateway decision — Demo 2.
+     */
+    fun getEvidenceReceipt(decisionId: String): EvidenceReceipt? {
+        val request = Request.Builder()
+            .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/evidence/$decisionId/receipt")
+            .get()
+            .build()
+
+        return try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return null
+                val json = JSONObject(response.body?.string() ?: return null)
+                val chainArr = json.optJSONArray("chain_of_custody")
+                val chain = (0 until (chainArr?.length() ?: 0)).map { chainArr!!.getString(it) }
+                EvidenceReceipt(
+                    decisionId      = json.optString("decision_id"),
+                    deviceId        = json.optString("device_id"),
+                    action          = json.optString("action"),
+                    payloadHash     = json.optString("payload_hash"),
+                    serverSignature = json.optString("server_signature"),
+                    signedAtIso     = json.optString("signed_at_iso"),
+                    signingAlgorithm= json.optString("signing_algorithm"),
+                    chainOfCustody  = chain,
+                    receiptUrl      = json.optString("receipt_url")
+                )
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "getEvidenceReceipt failed: ${e.message}")
+            null
         }
     }
 
@@ -235,7 +301,8 @@ object DiimeApiClient {
                     action        = json.optString("action", "DENY"),
                     decisionId    = json.optString("decision_id", ""),
                     reason        = json.optString("reason", "unknown"),
-                    challengeType = json.optString("challenge_type", "")
+                    challengeType = json.optString("challenge_type", ""),
+                    receiptUrl    = json.optString("receipt_url", "")
                 )
             }
         } catch (e: Exception) {
@@ -255,10 +322,15 @@ sealed class LoginResult {
 }
 
 sealed class PaymentResult {
-    data class Success(val transactionId: String, val status: String)   : PaymentResult()
-    data class Blocked(val reason: String)                              : PaymentResult()
-    data class StepUpRequired(val challengeType: String)                : PaymentResult()
-    data class Failure(val reason: String)                              : PaymentResult()
+    data class Success(
+        val transactionId: String,
+        val status: String,
+        val receiptUrl: String = "",        // Demo 2: non-repudiation receipt URL
+        val decisionId: String = ""
+    ) : PaymentResult()
+    data class Blocked(val reason: String, val threatType: String = "")  : PaymentResult()
+    data class StepUpRequired(val challengeType: String)                 : PaymentResult()
+    data class Failure(val reason: String)                               : PaymentResult()
 }
 
 data class GatewayDecision(
@@ -266,5 +338,34 @@ data class GatewayDecision(
     val action:        String,
     val decisionId:    String,
     val reason:        String,
-    val challengeType: String = ""
+    val challengeType: String = "",
+    val receiptUrl:    String = ""
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Demo 1: Hardware binding proof
+// ─────────────────────────────────────────────────────────────────────────────
+data class BindingProof(
+    val deviceId:          String,
+    val attestationLevel:  String,   // FULL | BASIC | GATEWAY
+    val pubkeyFingerprint: String,
+    val enrolledAtIso:     String,
+    val hardwareBacked:    Boolean,
+    val bindingSummary:    String,
+    val proofId:           String
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Demo 2: Non-repudiation receipt
+// ─────────────────────────────────────────────────────────────────────────────
+data class EvidenceReceipt(
+    val decisionId:       String,
+    val deviceId:         String,
+    val action:           String,
+    val payloadHash:      String,
+    val serverSignature:  String,
+    val signedAtIso:      String,
+    val signingAlgorithm: String,
+    val chainOfCustody:   List<String>,
+    val receiptUrl:       String
 )

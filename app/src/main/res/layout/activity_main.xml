@@ -1,132 +1,273 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
+<ScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#0A0A1A"
-    android:padding="24dp">
+    android:fillViewport="true">
 
-    <!-- DiimeAI logo / title -->
-    <TextView
-        android:id="@+id/tvTitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="DiimeAI"
-        android:textSize="42sp"
-        android:textStyle="bold"
-        android:textColor="#00D4FF"
-        android:fontFamily="sans-serif-medium"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="64dp" />
-
-    <TextView
-        android:id="@+id/tvSubtitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Secured by NonaShield"
-        android:textSize="14sp"
-        android:textColor="#888888"
-        android:letterSpacing="0.1"
-        app:layout_constraintTop_toBottomOf="@id/tvTitle"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="8dp" />
-
-    <!-- NonaShield trust badge -->
-    <androidx.cardview.widget.CardView
-        android:id="@+id/cardTrust"
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:cardBackgroundColor="#111122"
-        app:cardCornerRadius="12dp"
-        app:cardElevation="4dp"
-        app:layout_constraintTop_toBottomOf="@id/tvSubtitle"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="40dp">
+        android:padding="24dp">
 
+        <!-- DiimeAI logo / title -->
+        <TextView
+            android:id="@+id/tvTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="DiimeAI"
+            android:textSize="42sp"
+            android:textStyle="bold"
+            android:textColor="#00D4FF"
+            android:fontFamily="sans-serif-medium"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="48dp" />
+
+        <TextView
+            android:id="@+id/tvSubtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Secured by NonaShield"
+            android:textSize="14sp"
+            android:textColor="#888888"
+            android:letterSpacing="0.1"
+            app:layout_constraintTop_toBottomOf="@id/tvTitle"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="8dp" />
+
+        <!-- ─── Demo 1: Hardware Binding Card ─────────────────────────────── -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardHardwareBinding"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="#0D1117"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="8dp"
+            app:layout_constraintTop_toBottomOf="@id/tvSubtitle"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="32dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <!-- Card header row -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="16dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🔐  Hardware Identity"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="#FFFFFF" />
+
+                    <TextView
+                        android:id="@+id/tvAttestationBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="ENROLLING…"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:textColor="#000000"
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="4dp"
+                        android:background="#888888"
+                        android:backgroundTint="#888888" />
+
+                </LinearLayout>
+
+                <!-- Enrollment status -->
+                <TextView
+                    android:id="@+id/tvEnrollStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="⏳ Enrolling device — please wait…"
+                    android:textSize="14sp"
+                    android:textColor="#FFFFFF"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- Hardware backing indicator -->
+                <LinearLayout
+                    android:id="@+id/rowHardwareBacking"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="120dp"
+                        android:layout_height="wrap_content"
+                        android:text="Key Storage"
+                        android:textSize="12sp"
+                        android:textColor="#888888" />
+
+                    <TextView
+                        android:id="@+id/tvHardwareBacking"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="AndroidKeyStore (TEE)"
+                        android:textSize="12sp"
+                        android:textColor="#00D4FF"
+                        android:fontFamily="monospace" />
+
+                </LinearLayout>
+
+                <!-- Device ID -->
+                <LinearLayout
+                    android:id="@+id/rowDeviceId"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="120dp"
+                        android:layout_height="wrap_content"
+                        android:text="Device ID"
+                        android:textSize="12sp"
+                        android:textColor="#888888" />
+
+                    <TextView
+                        android:id="@+id/tvDeviceId"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="11sp"
+                        android:textColor="#CCCCCC"
+                        android:fontFamily="monospace" />
+
+                </LinearLayout>
+
+                <!-- Public key fingerprint -->
+                <LinearLayout
+                    android:id="@+id/rowFingerprint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="120dp"
+                        android:layout_height="wrap_content"
+                        android:text="Key Fingerprint"
+                        android:textSize="12sp"
+                        android:textColor="#888888" />
+
+                    <TextView
+                        android:id="@+id/tvKeyFingerprint"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:textSize="10sp"
+                        android:textColor="#00FF88"
+                        android:fontFamily="monospace" />
+
+                </LinearLayout>
+
+                <!-- Enrolled since -->
+                <LinearLayout
+                    android:id="@+id/rowEnrolledSince"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="120dp"
+                        android:layout_height="wrap_content"
+                        android:text="Enrolled Since"
+                        android:textSize="12sp"
+                        android:textColor="#888888" />
+
+                    <TextView
+                        android:id="@+id/tvEnrolledSince"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="12sp"
+                        android:textColor="#CCCCCC"
+                        android:fontFamily="monospace" />
+
+                </LinearLayout>
+
+                <!-- Binding proof button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnViewBindingProof"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:text="View Cryptographic Binding Proof"
+                    android:textSize="12sp"
+                    android:textColor="#00D4FF"
+                    app:backgroundTint="#111133"
+                    app:strokeColor="#00D4FF"
+                    app:strokeWidth="1dp"
+                    app:cornerRadius="8dp"
+                    android:layout_marginTop="16dp"
+                    android:visibility="gone" />
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- ─── Feature bullets ───────────────────────────────────────────── -->
         <LinearLayout
+            android:id="@+id/llFeatures"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:layout_marginTop="20dp"
+            app:layout_constraintTop_toBottomOf="@id/cardHardwareBinding"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="🔐 Device Security Status"
-                android:textSize="13sp"
-                android:textColor="#AAAAAA"
-                android:textAllCaps="true"
-                android:letterSpacing="0.08" />
-
-            <TextView
-                android:id="@+id/tvEnrollStatus"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Checking enrollment…"
-                android:textSize="15sp"
-                android:textColor="#FFFFFF"
-                android:layout_marginTop="8dp" />
-
-            <TextView
-                android:id="@+id/tvDeviceId"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="11sp"
-                android:textColor="#666666"
-                android:fontFamily="monospace"
-                android:layout_marginTop="4dp"
-                android:visibility="gone" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="🛡  Hardware-bound identity (TEE/StrongBox)"
+                android:textColor="#CCCCCC" android:textSize="13sp" android:layout_marginBottom="8dp"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="🔏  ECDSA P-256 — private key never leaves device"
+                android:textColor="#CCCCCC" android:textSize="13sp" android:layout_marginBottom="8dp"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="📡  Play Integrity attestation at enrollment"
+                android:textColor="#CCCCCC" android:textSize="13sp" android:layout_marginBottom="8dp"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="🤖  25 RASP threat sensors (root, hook, mirror…)"
+                android:textColor="#CCCCCC" android:textSize="13sp" android:layout_marginBottom="8dp"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="⚡  Fraud decision in &lt;50ms via 5-phase edge pipeline"
+                android:textColor="#CCCCCC" android:textSize="13sp"/>
 
         </LinearLayout>
 
-    </androidx.cardview.widget.CardView>
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnLogin"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="Get Started →"
+            android:textSize="16sp"
+            android:textColor="#000000"
+            app:backgroundTint="#00D4FF"
+            app:cornerRadius="12dp"
+            app:layout_constraintTop_toBottomOf="@id/llFeatures"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="32dp"
+            android:layout_marginBottom="32dp" />
 
-    <!-- Feature bullets -->
-    <LinearLayout
-        android:id="@+id/llFeatures"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:layout_marginTop="32dp"
-        app:layout_constraintTop_toBottomOf="@id/cardTrust"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="🛡  Hardware-bound device identity (TEE/AndroidKeyStore)"
-            android:textColor="#CCCCCC" android:textSize="13sp" android:layout_marginBottom="8dp"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="🔏  ECDSA P-256 signing — key never leaves device"
-            android:textColor="#CCCCCC" android:textSize="13sp" android:layout_marginBottom="8dp"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="📡  Play Integrity attestation at enrollment"
-            android:textColor="#CCCCCC" android:textSize="13sp" android:layout_marginBottom="8dp"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="🤖  25 RASP threat signals (root, hook, emulator…)"
-            android:textColor="#CCCCCC" android:textSize="13sp" android:layout_marginBottom="8dp"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="⚡  Real-time fraud decision in &lt;50ms"
-            android:textColor="#CCCCCC" android:textSize="13sp"/>
-
-    </LinearLayout>
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnLogin"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:text="Get Started"
-        android:textSize="16sp"
-        android:textColor="#000000"
-        app:backgroundTint="#00D4FF"
-        app:cornerRadius="12dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginBottom="32dp" />
-
-</androidx.constraintlayout.widget.ConstraintLayout>
+</ScrollView>
