@@ -215,11 +215,20 @@ object DiimeApiClient {
     /**
      * Fetch hardware binding proof for this device — Demo 1.
      * Returns attestation level, key fingerprint, enrolled date.
+     *
+     * C4 fix: endpoint is now api_key_required — passes X-Api-Key header.
+     * The key is baked into BuildConfig.DEMO_API_KEY at build time via the
+     * DEMO_API_KEY environment variable.
      */
     fun getBindingProof(deviceId: String): BindingProof? {
         val request = Request.Builder()
             .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/device/$deviceId/binding-proof")
             .get()
+            .apply {
+                if (BuildConfig.DEMO_API_KEY.isNotBlank()) {
+                    header("X-Api-Key", BuildConfig.DEMO_API_KEY)
+                }
+            }
             .build()
 
         return try {
@@ -244,11 +253,18 @@ object DiimeApiClient {
 
     /**
      * Fetch non-repudiation receipt for a gateway decision — Demo 2.
+     *
+     * C4 fix: endpoint is now api_key_required — passes X-Api-Key header.
      */
     fun getEvidenceReceipt(decisionId: String): EvidenceReceipt? {
         val request = Request.Builder()
             .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/evidence/$decisionId/receipt")
             .get()
+            .apply {
+                if (BuildConfig.DEMO_API_KEY.isNotBlank()) {
+                    header("X-Api-Key", BuildConfig.DEMO_API_KEY)
+                }
+            }
             .build()
 
         return try {
