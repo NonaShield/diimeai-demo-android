@@ -53,6 +53,231 @@
             app:layout_constraintStart_toStartOf="parent"
             android:layout_marginTop="2dp" />
 
+        <!-- ─── Demo 5: Behavioral Biometrics Live Panel ────────────────── -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardBiometrics"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="#0D1117"
+            app:cardCornerRadius="14dp"
+            app:cardElevation="6dp"
+            app:layout_constraintTop_toBottomOf="@id/tvDeviceId"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <!-- Header row: title + composite score badge -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🧬 Behavioral Biometrics"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="#FFFFFF" />
+
+                    <TextView
+                        android:id="@+id/tvBioRiskBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="CALIBRATING…"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:textColor="#FFFFFF"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="3dp"
+                        android:background="#333333" />
+
+                </LinearLayout>
+
+                <!-- Calibration progress bar (hidden once calibrated) -->
+                <LinearLayout
+                    android:id="@+id/rowCalibration"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="10dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Calibrating user profile  "
+                        android:textSize="11sp"
+                        android:textColor="#888888" />
+
+                    <ProgressBar
+                        android:id="@+id/progressCalibration"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="0dp"
+                        android:layout_height="8dp"
+                        android:layout_weight="1"
+                        android:max="100"
+                        android:progress="0"
+                        android:progressTint="#00D4FF" />
+
+                    <TextView
+                        android:id="@+id/tvCalibrationPct"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="  0%"
+                        android:textSize="11sp"
+                        android:textColor="#00D4FF" />
+
+                </LinearLayout>
+
+                <!-- 6-channel readings (compact grid) -->
+                <!-- Row 1 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="6dp">
+
+                    <LinearLayout android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="Pressure" android:textSize="10sp" android:textColor="#888888" />
+                        <TextView android:id="@+id/tvBioPressure"
+                            android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="🟢 0.00" android:textSize="11sp" android:textColor="#CCCCCC"
+                            android:fontFamily="monospace" />
+                    </LinearLayout>
+
+                    <LinearLayout android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="Finger Size" android:textSize="10sp" android:textColor="#888888" />
+                        <TextView android:id="@+id/tvBioFingerSize"
+                            android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="🟢 0.0px" android:textSize="11sp" android:textColor="#CCCCCC"
+                            android:fontFamily="monospace" />
+                    </LinearLayout>
+
+                    <LinearLayout android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="Swipe Speed" android:textSize="10sp" android:textColor="#888888" />
+                        <TextView android:id="@+id/tvBioSwipe"
+                            android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="🟢 0.0" android:textSize="11sp" android:textColor="#CCCCCC"
+                            android:fontFamily="monospace" />
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <!-- Row 2 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="10dp">
+
+                    <LinearLayout android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="Hesitation" android:textSize="10sp" android:textColor="#888888" />
+                        <TextView android:id="@+id/tvBioHesitation"
+                            android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="🟢 0ms" android:textSize="11sp" android:textColor="#CCCCCC"
+                            android:fontFamily="monospace" />
+                    </LinearLayout>
+
+                    <LinearLayout android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="Phone Hold" android:textSize="10sp" android:textColor="#888888" />
+                        <TextView android:id="@+id/tvBioPosture"
+                            android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="🟢 0°" android:textSize="11sp" android:textColor="#CCCCCC"
+                            android:fontFamily="monospace" />
+                    </LinearLayout>
+
+                    <LinearLayout android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="Grip Stability" android:textSize="10sp" android:textColor="#888888" />
+                        <TextView android:id="@+id/tvBioGrip"
+                            android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="🟢 0.00" android:textSize="11sp" android:textColor="#CCCCCC"
+                            android:fontFamily="monospace" />
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <!-- Composite deviation bar (visible in comparison mode) -->
+                <LinearLayout
+                    android:id="@+id/rowDeviationBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="4dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Identity Deviation vs. Baseline"
+                            android:textSize="11sp"
+                            android:textColor="#AAAAAA" />
+
+                        <TextView
+                            android:id="@+id/tvDeviationPct"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0%"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:textColor="#FF4444"
+                            android:fontFamily="monospace" />
+
+                    </LinearLayout>
+
+                    <ProgressBar
+                        android:id="@+id/progressDeviation"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="match_parent"
+                        android:layout_height="12dp"
+                        android:max="100"
+                        android:progress="0"
+                        android:progressTint="#E02020"
+                        android:progressBackgroundTint="#333333" />
+
+                    <TextView
+                        android:id="@+id/tvDeviationChannels"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text=""
+                        android:textSize="10sp"
+                        android:textColor="#FF8888"
+                        android:fontFamily="monospace"
+                        android:layout_marginTop="4dp" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
         <!-- ─── Demo 5: Social Engineering Warning Banner ──────────────── -->
         <androidx.cardview.widget.CardView
             android:id="@+id/cardSocialEngWarning"
@@ -61,7 +286,7 @@
             app:cardBackgroundColor="#3A0000"
             app:cardCornerRadius="12dp"
             app:cardElevation="8dp"
-            app:layout_constraintTop_toBottomOf="@id/tvDeviceId"
+            app:layout_constraintTop_toBottomOf="@id/cardBiometrics"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             android:layout_marginTop="12dp"
@@ -114,7 +339,7 @@
             app:layout_constraintTop_toBottomOf="@id/cardSocialEngWarning"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            android:layout_marginTop="16dp">
+            android:layout_marginTop="12dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
