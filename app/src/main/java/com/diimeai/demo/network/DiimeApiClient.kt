@@ -302,10 +302,18 @@ object DiimeApiClient {
             put("payload_hash", payloadHash)
         }.toString()
 
-        val request = Request.Builder()
+        // MISMATCH 6a fix: backend /api/v1/verify/gateway requires a valid JWT Bearer
+        // token to identify the caller's session. Without it the backend returns 401
+        // and every gateway verify call is treated as DENY.
+        // SessionHolder.session is null before login completes; in that case we send
+        // no Authorization header and let the backend reject with 401 (correct behaviour).
+        val requestBuilder = Request.Builder()
             .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/verify/gateway")
             .post(body.toRequestBody(JSON))
-            .build()
+        SessionHolder.session?.jwt?.let { jwt ->
+            requestBuilder.header("Authorization", "Bearer $jwt")
+        }
+        val request = requestBuilder.build()
 
         return try {
             client.newCall(request).execute().use { response ->
