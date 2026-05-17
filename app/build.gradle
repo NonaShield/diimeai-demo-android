@@ -1,12 +1,12 @@
 // ============================================================================
-// DiimeAI Demo App — app module
+// NonaShield Demo App — app module
 //
 // Prerequisites before building:
 //   1. Build NonaShield SDK AAR:
 //      cd ../payshield-kmp-sdk && ./gradlew :android-sdk:publishToMavenLocal
 //   2. Set DIIMEAI_KEYSTORE_PATH, DIIMEAI_KEY_ALIAS, DIIMEAI_KEY_PASSWORD
 //      in your shell or in a local.properties file (not committed).
-//   3. Enable Play Integrity API in Google Play Console for com.diimeai.demo
+//   3. Enable Play Integrity API in Google Play Console for com.nonashield.app
 //   4. Set PAYSHIELD_EXPECTED_CERT_HASH env var before release build
 //      (see prerequisite checklist in docs/PREREQUISITES.md)
 // ============================================================================
@@ -16,11 +16,15 @@ plugins {
 }
 
 android {
+    // namespace drives R.java / BuildConfig package — kept as com.diimeai.demo
+    // so existing Kotlin source files need no package renames.
     namespace   'com.diimeai.demo'
     compileSdk  34
 
     defaultConfig {
-        applicationId  'com.diimeai.demo'
+        // applicationId = what Play Console and Play Integrity see.
+        // Must match the package name registered in Play Console.
+        applicationId  'com.nonashield.app'
         minSdk         23
         targetSdk      34
         versionCode    1
@@ -33,8 +37,10 @@ android {
 
         // ── Play Integrity configuration ─────────────────────────────────────
         // Your Google Cloud project number (NOT the Play Console app ID).
-        // Found at: console.cloud.google.com → Project Settings → Project number
-        // Required for Play Integrity API warm-up calls.
+        // Found at: Play Console → App Integrity → (linked project) → Project Number
+        //       OR: console.cloud.google.com → Project Settings → Project number
+        // This is a 12-digit number, e.g. "123456789012"
+        // STEP: Paste your project number here after completing Play Console setup.
         buildConfigField 'String', 'PLAY_CLOUD_PROJECT_NUMBER',
             '"YOUR_GOOGLE_CLOUD_PROJECT_NUMBER"'
 
@@ -66,6 +72,7 @@ android {
 
     buildTypes {
         debug {
+            // Installed as com.nonashield.app.debug — separate from release build
             applicationIdSuffix '.debug'
             versionNameSuffix   '-debug'
             // Debug: Play Integrity in test mode, RASP checks skipped.
