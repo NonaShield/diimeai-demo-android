@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand -->
+    <color name="brand_cyan">#00D4FF</color>
+    <color name="brand_green">#00FF88</color>
+    <color name="brand_dark">#0A0A1A</color>
+    <color name="brand_card">#0D1117</color>
+
+    <!-- Trust tiers -->
+    <color name="trust_trusted">#00AA44</color>
+    <color name="trust_review">#FFAA00</color>
+    <color name="trust_suspect">#FF6600</color>
+    <color name="trust_critical">#DD2222</color>
+
+    <!-- RASP signal states -->
+    <color name="signal_clean">#00CC55</color>
+    <color name="signal_detected">#FF3333</color>
+    <color name="signal_unknown">#888888</color>
+
+    <!-- Text -->
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#AAAAAA</color>
+    <color name="text_muted">#666666</color>
+    <color name="text_mono">#CCCCCC</color>
+</resources>

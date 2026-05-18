@@ -555,7 +555,8 @@ class PaymentActivity : AppCompatActivity() {
     }
 
     private fun openDashboard() {
-        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(DASHBOARD_URL)))
+        // Open in-app live trust monitor first; Grafana link is available inside it
+        startActivity(Intent(this, TrustDashboardActivity::class.java))
     }
 
     private fun logout() {

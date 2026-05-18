@@ -1,0 +1,587 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TrustDashboardActivity — in-app live trust monitor for investor demos.
+
+  Cards (top→bottom):
+    1. Trust Score         — 0-100 gauge, tier badge, RASP/Behaviour/Network breakdown
+    2. RASP Signals        — live status of 9 registered signals + FreeRASP
+    3. Edge Pipeline       — 5-phase NGINX pipeline status per request
+    4. Evidence Chain      — on-device chain depth + last block hash
+    5. Kill-Switch         — operator push simulation (force_block toggle)
+    6. Actions             — View Grafana SOC | New Payment
+-->
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0A0A1A"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- ── Header ───────────────────────────────────────────────────── -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Trust Dashboard"
+                    android:textSize="22sp"
+                    android:textStyle="bold"
+                    android:textColor="#FFFFFF" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="NonaShield Edge Layer"
+                    android:textSize="12sp"
+                    android:textColor="#888888" />
+
+            </LinearLayout>
+
+            <!-- Live indicator -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <View
+                    android:id="@+id/viewLiveDot"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:background="#00FF88"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/tvLiveStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="LIVE"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:textColor="#00FF88"
+                    android:fontFamily="monospace" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- ── 1. Trust Score Card ──────────────────────────────────────── -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardTrustScore"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="#0D1117"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="8dp"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <!-- Card header: Trust Score title + tier badge -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="16dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🛡  Trust Score"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="#FFFFFF" />
+
+                    <TextView
+                        android:id="@+id/tvTrustTierBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="EVALUATING"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:textColor="#FFFFFF"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="5dp"
+                        android:background="#444444" />
+
+                </LinearLayout>
+
+                <!-- Big score number -->
+                <TextView
+                    android:id="@+id/tvTrustScore"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="—"
+                    android:textSize="64sp"
+                    android:textStyle="bold"
+                    android:textColor="#00D4FF"
+                    android:fontFamily="monospace"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Edge Risk Level  (0 = clean · 100 = blocked)"
+                    android:textSize="11sp"
+                    android:textColor="#666666"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginBottom="20dp" />
+
+                <!-- Score bar -->
+                <ProgressBar
+                    android:id="@+id/progressTrustScore"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="12dp"
+                    android:max="100"
+                    android:progress="0"
+                    android:progressTint="#00D4FF"
+                    android:progressBackgroundTint="#1A1A2E"
+                    android:layout_marginBottom="16dp" />
+
+                <!-- Score breakdown: RASP | Behaviour | Network -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <!-- RASP 60% -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:gravity="center_horizontal">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="RASP"
+                            android:textSize="10sp"
+                            android:textColor="#888888" />
+
+                        <TextView
+                            android:id="@+id/tvRaspContrib"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="—"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:textColor="#00D4FF"
+                            android:fontFamily="monospace" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="weight 60%"
+                            android:textSize="9sp"
+                            android:textColor="#555555" />
+
+                    </LinearLayout>
+
+                    <!-- Behaviour 25% -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:gravity="center_horizontal">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="BEHAVIOUR"
+                            android:textSize="10sp"
+                            android:textColor="#888888" />
+
+                        <TextView
+                            android:id="@+id/tvBehaviourContrib"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="—"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:textColor="#00D4FF"
+                            android:fontFamily="monospace" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="weight 25%"
+                            android:textSize="9sp"
+                            android:textColor="#555555" />
+
+                    </LinearLayout>
+
+                    <!-- Network 15% -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:gravity="center_horizontal">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="NETWORK"
+                            android:textSize="10sp"
+                            android:textColor="#888888" />
+
+                        <TextView
+                            android:id="@+id/tvNetworkContrib"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="—"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:textColor="#00D4FF"
+                            android:fontFamily="monospace" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="weight 15%"
+                            android:textSize="9sp"
+                            android:textColor="#555555" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <!-- Last updated -->
+                <TextView
+                    android:id="@+id/tvLastUpdated"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Refreshing…"
+                    android:textSize="10sp"
+                    android:textColor="#444444"
+                    android:fontFamily="monospace"
+                    android:layout_marginTop="12dp" />
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- ── 2. RASP Signals Card ─────────────────────────────────────── -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardRasp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="#0D1117"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="8dp"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="⚡  RASP Signals"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="#FFFFFF" />
+
+                    <TextView
+                        android:id="@+id/tvRaspSummary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="scanning…"
+                        android:textSize="11sp"
+                        android:textColor="#888888"
+                        android:fontFamily="monospace" />
+
+                </LinearLayout>
+
+                <!-- Signal rows — each row: name | status | threatId -->
+                <LinearLayout
+                    android:id="@+id/llSignalRows"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- ── 3. Edge Pipeline Card ────────────────────────────────────── -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardPipeline"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="#0D1117"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="8dp"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📡  5-Phase Edge Pipeline"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="#FFFFFF"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- Phase rows -->
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:layout_marginBottom="8dp" android:gravity="center_vertical">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="1. Header Validation" android:textSize="12sp" android:textColor="#CCCCCC" />
+                    <TextView android:id="@+id/tvPhase1" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="⏳" android:textSize="12sp" android:textColor="#888888" android:fontFamily="monospace" />
+                </LinearLayout>
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:layout_marginBottom="8dp" android:gravity="center_vertical">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="2. Nonce + Signature" android:textSize="12sp" android:textColor="#CCCCCC" />
+                    <TextView android:id="@+id/tvPhase2" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="⏳" android:textSize="12sp" android:textColor="#888888" android:fontFamily="monospace" />
+                </LinearLayout>
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:layout_marginBottom="8dp" android:gravity="center_vertical">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="3. Binding + Attestation" android:textSize="12sp" android:textColor="#CCCCCC" />
+                    <TextView android:id="@+id/tvPhase3" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="⏳" android:textSize="12sp" android:textColor="#888888" android:fontFamily="monospace" />
+                </LinearLayout>
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:layout_marginBottom="8dp" android:gravity="center_vertical">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="4. Policy Check" android:textSize="12sp" android:textColor="#CCCCCC" />
+                    <TextView android:id="@+id/tvPhase4" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="⏳" android:textSize="12sp" android:textColor="#888888" android:fontFamily="monospace" />
+                </LinearLayout>
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="5. Threat + Risk Score" android:textSize="12sp" android:textColor="#CCCCCC" />
+                    <TextView android:id="@+id/tvPhase5" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="⏳" android:textSize="12sp" android:textColor="#888888" android:fontFamily="monospace" />
+                </LinearLayout>
+
+                <!-- Verdict row -->
+                <View android:layout_width="match_parent" android:layout_height="1dp"
+                    android:background="#222233" android:layout_marginTop="12dp" android:layout_marginBottom="12dp" />
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="Verdict" android:textSize="13sp" android:textStyle="bold" android:textColor="#FFFFFF" />
+                    <TextView android:id="@+id/tvVerdict"
+                        android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="PENDING"
+                        android:textSize="13sp" android:textStyle="bold" android:textColor="#FFAA00"
+                        android:fontFamily="monospace" />
+                </LinearLayout>
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- ── 4. Evidence Chain Card ───────────────────────────────────── -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardEvidence"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="#0D1117"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="8dp"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🔗  On-Device Evidence Chain"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="#FFFFFF"
+                    android:layout_marginBottom="12dp" />
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:layout_marginBottom="8dp">
+                    <TextView android:layout_width="130dp" android:layout_height="wrap_content"
+                        android:text="Chain Depth" android:textSize="12sp" android:textColor="#888888" />
+                    <TextView android:id="@+id/tvChainDepth"
+                        android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="0 blocks" android:textSize="12sp" android:textColor="#00D4FF"
+                        android:fontFamily="monospace" />
+                </LinearLayout>
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:layout_marginBottom="8dp">
+                    <TextView android:layout_width="130dp" android:layout_height="wrap_content"
+                        android:text="Integrity" android:textSize="12sp" android:textColor="#888888" />
+                    <TextView android:id="@+id/tvChainIntegrity"
+                        android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="✅ Verified" android:textSize="12sp" android:textColor="#00CC55"
+                        android:fontFamily="monospace" />
+                </LinearLayout>
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:layout_marginBottom="8dp">
+                    <TextView android:layout_width="130dp" android:layout_height="wrap_content"
+                        android:text="Signature" android:textSize="12sp" android:textColor="#888888" />
+                    <TextView android:id="@+id/tvChainSig"
+                        android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="ECDSA P-256 + ML-DSA-65"
+                        android:textSize="11sp" android:textColor="#CCCCCC"
+                        android:fontFamily="monospace" />
+                </LinearLayout>
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+                    <TextView android:layout_width="130dp" android:layout_height="wrap_content"
+                        android:text="Last Hash" android:textSize="12sp" android:textColor="#888888" />
+                    <TextView android:id="@+id/tvLastHash"
+                        android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:text="—"
+                        android:textSize="10sp" android:textColor="#00FF88"
+                        android:fontFamily="monospace" />
+                </LinearLayout>
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- ── 5. Kill-Switch Card ──────────────────────────────────────── -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardKillSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="#0D1117"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="8dp"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🔴  Kill-Switch (Operator)"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="#FFFFFF" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchKillSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="false" />
+
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Simulate operator pushing force_block. Device receives policy update via ThreatBuffer ACK within ≤5 seconds."
+                    android:textSize="12sp"
+                    android:textColor="#888888"
+                    android:layout_marginBottom="12dp" />
+
+                <TextView
+                    android:id="@+id/tvKillSwitchStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="State: INACTIVE — all transactions ALLOWED"
+                    android:textSize="12sp"
+                    android:textColor="#00CC55"
+                    android:fontFamily="monospace"
+                    android:padding="10dp"
+                    android:background="#001100" />
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- ── 6. Action Buttons ────────────────────────────────────────── -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnOpenGrafana"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="📊  Open SOC Dashboard (Grafana)"
+            android:textSize="13sp"
+            android:textColor="#00D4FF"
+            app:backgroundTint="#0D1117"
+            app:strokeColor="#00D4FF"
+            app:strokeWidth="1dp"
+            app:cornerRadius="10dp"
+            android:layout_marginBottom="10dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnBackToPayment"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="← Back to Payment"
+            android:textSize="13sp"
+            android:textColor="#888888"
+            app:backgroundTint="@android:color/transparent"
+            android:layout_marginBottom="32dp" />
+
+    </LinearLayout>
+</ScrollView>

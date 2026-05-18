@@ -81,6 +81,13 @@
             android:exported="false"
             android:screenOrientation="portrait" />
 
+        <!-- Live trust monitor — in-app SOC dashboard for investor demos -->
+        <activity
+            android:name=".TrustDashboardActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:label="Trust Dashboard" />
+
     </application>
 
 </manifest>
