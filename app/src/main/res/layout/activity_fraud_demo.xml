@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FraudScenarioDemoActivity — 16 Fraud Use Case Demo Hub
+  Shows all 16 fraud scenarios as tappable cards. Each card opens
+  FraudScenarioDetailActivity for live signal + pipeline trace.
+-->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#0A0A1A">
+
+    <!-- Header toolbar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="16dp"
+        android:background="#0D1117">
+
+        <TextView
+            android:id="@+id/btnBack"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:text="←"
+            android:textSize="20sp"
+            android:textColor="#00D4FF"
+            android:gravity="center" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginStart="8dp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="NonaShield — Fraud Demo"
+                android:textSize="17sp"
+                android:textStyle="bold"
+                android:textColor="#FFFFFF" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="16 use cases · tap any to simulate"
+                android:textSize="11sp"
+                android:textColor="#666666" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/btnSocDashboard"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SOC ▶"
+            android:textSize="11sp"
+            android:textColor="#00D4FF"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="6dp"
+            android:background="#111133" />
+
+    </LinearLayout>
+
+    <!-- Legend row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp"
+        android:gravity="center_vertical">
+
+        <View android:layout_width="8dp" android:layout_height="8dp"
+            android:background="#DD2222" android:layout_marginEnd="4dp" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="CRITICAL" android:textSize="9sp" android:textColor="#DD2222"
+            android:layout_marginEnd="12dp" />
+
+        <View android:layout_width="8dp" android:layout_height="8dp"
+            android:background="#FF6600" android:layout_marginEnd="4dp" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="HIGH" android:textSize="9sp" android:textColor="#FF6600"
+            android:layout_marginEnd="12dp" />
+
+        <View android:layout_width="8dp" android:layout_height="8dp"
+            android:background="#FFAA00" android:layout_marginEnd="4dp" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="MEDIUM" android:textSize="9sp" android:textColor="#FFAA00"
+            android:layout_marginEnd="0dp" />
+
+        <View android:layout_width="0dp" android:layout_weight="1" android:layout_height="1dp" />
+
+        <TextView android:id="@+id/tvDemoMode"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="● SIMULATION MODE"
+            android:textSize="9sp" android:textColor="#00FF88"
+            android:fontFamily="monospace" />
+
+    </LinearLayout>
+
+    <!-- Scrollable scenario cards -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false">
+
+        <LinearLayout
+            android:id="@+id/llScenarioCards"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp" />
+
+    </ScrollView>
+
+</LinearLayout>

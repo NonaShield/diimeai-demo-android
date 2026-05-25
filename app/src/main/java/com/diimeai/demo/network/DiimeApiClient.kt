@@ -334,6 +334,294 @@ object DiimeApiClient {
             GatewayDecision(allowed = false, action = "DENY", decisionId = "", reason = "Network error")
         }
     }
+
+    // ── SOC Dashboard ─────────────────────────────────────────────────────────
+
+    /**
+     * Fetch aggregate stats for the SOC dashboard.
+     * Endpoint: GET /api/v1/dashboard/stats (api_key_required)
+     * Falls back to realistic simulation if backend not reachable.
+     */
+    fun getDashboardStats(): DashboardStats {
+        val request = Request.Builder()
+            .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/dashboard/stats")
+            .get()
+            .apply { if (BuildConfig.DEMO_API_KEY.isNotBlank()) header("X-Api-Key", BuildConfig.DEMO_API_KEY) }
+            .build()
+        return try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return simulatedDashboardStats()
+                val j = JSONObject(response.body?.string() ?: return simulatedDashboardStats())
+                DashboardStats(
+                    totalDecisions = j.optInt("total_decisions"),
+                    blockedCount   = j.optInt("blocked_count"),
+                    stepUpCount    = j.optInt("step_up_count"),
+                    allowedCount   = j.optInt("allowed_count"),
+                    avgRiskScore   = j.optDouble("avg_risk_score").toFloat(),
+                    activeDevices  = j.optInt("active_devices"),
+                    period         = j.optString("period", "last_24h")
+                )
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "getDashboardStats: ${e.message}")
+            simulatedDashboardStats()
+        }
+    }
+
+    private fun simulatedDashboardStats(): DashboardStats {
+        val total   = (180..620).random()
+        val blocked = (total * 0.07).toInt()
+        val stepUp  = (total * 0.11).toInt()
+        return DashboardStats(
+            totalDecisions = total,
+            blockedCount   = blocked,
+            stepUpCount    = stepUp,
+            allowedCount   = total - blocked - stepUp,
+            avgRiskScore   = (6f..24f).random(),
+            activeDevices  = (8..52).random(),
+            period         = "last_24h"
+        )
+    }
+
+    /**
+     * Fetch the most recent gateway decisions for the live feed.
+     * Endpoint: GET /api/v1/dashboard/decisions?limit=N (api_key_required)
+     */
+    fun getRecentDecisions(limit: Int = 20): List<DecisionRecord> {
+        val request = Request.Builder()
+            .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/dashboard/decisions?limit=$limit")
+            .get()
+            .apply { if (BuildConfig.DEMO_API_KEY.isNotBlank()) header("X-Api-Key", BuildConfig.DEMO_API_KEY) }
+            .build()
+        return try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return simulatedDecisions(limit)
+                val arr = JSONObject(response.body?.string() ?: "{}").optJSONArray("decisions")
+                    ?: return simulatedDecisions(limit)
+                (0 until arr.length()).map { i ->
+                    val d = arr.getJSONObject(i)
+                    val threats = d.optJSONArray("threat_types")
+                    DecisionRecord(
+                        decisionId  = d.optString("decision_id"),
+                        deviceId    = d.optString("device_id"),
+                        action      = d.optString("action"),
+                        riskScore   = d.optInt("risk_score"),
+                        timestamp   = d.optString("timestamp"),
+                        threatTypes = (0 until (threats?.length() ?: 0)).map { threats!!.getString(it) }
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "getRecentDecisions: ${e.message}")
+            simulatedDecisions(limit)
+        }
+    }
+
+    private fun simulatedDecisions(limit: Int): List<DecisionRecord> {
+        val actions = listOf("ALLOW", "ALLOW", "ALLOW", "ALLOW", "STEP_UP", "BLOCK")
+        val threats = listOf(
+            listOf(), listOf(), listOf("NET_VPN_005"), listOf(),
+            listOf("USR_BEH_012"), listOf("RASP_DEV_002", "APP_INT_006")
+        )
+        val now = System.currentTimeMillis()
+        return (0 until limit).map { i ->
+            val idx = actions.indices.random()
+            DecisionRecord(
+                decisionId  = "dec_${(now - i * 18_000L).toString(16)}",
+                deviceId    = "dev_${(1000 + i * 37).toString(16)}",
+                action      = actions[idx],
+                riskScore   = when (actions[idx]) { "ALLOW" -> (2..28).random(); "STEP_UP" -> (30..55).random(); else -> (56..92).random() },
+                timestamp   = formatRelative(now - i * 18_000L),
+                threatTypes = threats[idx]
+            )
+        }
+    }
+
+    /**
+     * Fetch recent threat events (RASP signals, policy violations).
+     * Endpoint: GET /api/v1/dashboard/threats?limit=N (api_key_required)
+     */
+    fun getRecentThreats(limit: Int = 15): List<ThreatEvent> {
+        val request = Request.Builder()
+            .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/dashboard/threats?limit=$limit")
+            .get()
+            .apply { if (BuildConfig.DEMO_API_KEY.isNotBlank()) header("X-Api-Key", BuildConfig.DEMO_API_KEY) }
+            .build()
+        return try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return simulatedThreats(limit)
+                val arr = JSONObject(response.body?.string() ?: "{}").optJSONArray("threats")
+                    ?: return simulatedThreats(limit)
+                (0 until arr.length()).map { i ->
+                    val t = arr.getJSONObject(i)
+                    ThreatEvent(
+                        threatId   = t.optString("threat_id"),
+                        threatType = t.optString("threat_type"),
+                        severity   = t.optString("severity"),
+                        deviceId   = t.optString("device_id"),
+                        timestamp  = t.optString("timestamp"),
+                        details    = t.optString("details")
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "getRecentThreats: ${e.message}")
+            simulatedThreats(limit)
+        }
+    }
+
+    private fun simulatedThreats(limit: Int): List<ThreatEvent> {
+        data class ThreatDef(val id: String, val type: String, val sev: String, val mod: String)
+        val types = listOf(
+            ThreatDef("RASP_DEV_002",  "ROOT_CLOAKING",     "HIGH",     "botnet_correlation"),
+            ThreatDef("NET_VPN_005",   "VPN_CONFLICT",      "MEDIUM",   "sim_swap_proxy"),
+            ThreatDef("APP_INT_006",   "REPACKAGED_APK",    "HIGH",     "botnet_correlation"),
+            ThreatDef("SCAM_CM_001",   "DIGITAL_ARREST",    "CRITICAL", "digital_arrest_detector"),
+            ThreatDef("USR_BEH_002",   "MULE_ACCOUNT",      "HIGH",     "mule_account"),
+            ThreatDef("RASP_DEV_003",  "SCREEN_MIRRORING",  "HIGH",     "botnet_correlation"),
+            ThreatDef("DATA_SEC_020",  "MALWARE_DETECTED",  "CRITICAL", "botnet_correlation"),
+            ThreatDef("SCAM_SS_001",   "SIM_SWAP",          "CRITICAL", "sim_swap_proxy"),
+            ThreatDef("BOT_APP_011",   "ORG_CRIME_CLUSTER", "CRITICAL", "organized_crime_cluster"),
+            ThreatDef("NFC_FRAUD_001", "GHOST_TAP",         "HIGH",     "credential_reuse"),
+        )
+        val now = System.currentTimeMillis()
+        return (0 until limit).map { i ->
+            val t = types[i % types.size]
+            ThreatEvent(
+                threatId   = t.id,
+                threatType = t.type,
+                severity   = t.sev,
+                module     = t.mod,
+                deviceId   = "dev_${(2000 + i * 41).toString(16)}",
+                timestamp  = formatRelative(now - i * 24_000L),
+                details    = "Signal confidence: ${(75..98).random()}%"
+            )
+        }
+    }
+
+    // ── OTP / Step-Up Auth ────────────────────────────────────────────────────
+
+    /**
+     * Request an OTP for step-up authentication.
+     * Endpoint: POST /api/v1/auth/otp/request (jwt required)
+     * Demo: always succeeds; returns 60-second TTL.
+     */
+    fun requestOtp(sessionId: String): OtpRequest {
+        val body = JSONObject().apply { put("session_id", sessionId) }.toString()
+        val request = Request.Builder()
+            .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/auth/otp/request")
+            .post(body.toRequestBody(JSON))
+            .apply { SessionHolder.session?.jwt?.let { header("Authorization", "Bearer $it") } }
+            .build()
+        return try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return OtpRequest(sessionId, 60)
+                val j = JSONObject(response.body?.string() ?: "{}")
+                OtpRequest(j.optString("session_id", sessionId), j.optInt("expires_in_seconds", 60))
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "requestOtp: ${e.message}")
+            OtpRequest(sessionId, 60)
+        }
+    }
+
+    /**
+     * Verify OTP entered by user. Demo accepts "123456" or any 6-digit code.
+     * Endpoint: POST /api/v1/auth/otp/verify (jwt required)
+     */
+    fun verifyOtp(sessionId: String, code: String): OtpVerifyResult {
+        val body = JSONObject().apply {
+            put("session_id", sessionId)
+            put("code", code)
+        }.toString()
+        val request = Request.Builder()
+            .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/auth/otp/verify")
+            .post(body.toRequestBody(JSON))
+            .apply { SessionHolder.session?.jwt?.let { header("Authorization", "Bearer $it") } }
+            .build()
+        return try {
+            client.newCall(request).execute().use { response ->
+                val j = runCatching { JSONObject(response.body?.string() ?: "{}") }.getOrDefault(JSONObject())
+                OtpVerifyResult(
+                    verified = j.optBoolean("verified", code.length == 6),
+                    reason   = j.optString("reason", if (code.length == 6) "OTP verified" else "Invalid OTP")
+                )
+            }
+        } catch (e: Exception) {
+            // Demo fallback: any 6-digit code passes
+            OtpVerifyResult(verified = code.length == 6, reason = "Demo: local verification")
+        }
+    }
+
+    // ── KYC ───────────────────────────────────────────────────────────────────
+
+    /**
+     * Submit a KYC request protected by the full NonaShield pipeline.
+     * Endpoint: POST /api/v1/kyc/submit
+     * The PinningInterceptor automatically attaches X-PayShield-Token + Signature.
+     */
+    fun submitKyc(aadhaar: String, pan: String, deviceId: String): KycResult {
+        // Hash PII before sending — DPDP Act: no raw identity data over the wire
+        val aadhaarHash = sha256hex(aadhaar)
+        val panHash     = sha256hex(pan)
+
+        val body = JSONObject().apply {
+            put("aadhaar_hash", aadhaarHash)
+            put("pan_hash",     panHash)
+            put("device_id",    deviceId)
+            put("timestamp",    System.currentTimeMillis() / 1000)
+        }.toString()
+
+        val request = Request.Builder()
+            .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/kyc/submit")
+            .post(body.toRequestBody(JSON))
+            .header("X-PS-Idempotency-Key", "kyc_${System.currentTimeMillis()}")
+            .apply { SessionHolder.session?.jwt?.let { header("Authorization", "Bearer $it") } }
+            .build()
+
+        return try {
+            client.newCall(request).execute().use { response ->
+                val j = runCatching { JSONObject(response.body?.string() ?: "{}") }.getOrDefault(JSONObject())
+                when {
+                    response.isSuccessful -> KycResult(
+                        status    = j.optString("status", "APPROVED"),
+                        kycId     = j.optString("kyc_id", "kyc_${System.currentTimeMillis()}"),
+                        riskScore = j.optInt("risk_score", (5..18).random()),
+                        reason    = j.optString("reason", "Verified")
+                    )
+                    response.code == 403 -> KycResult(
+                        status    = "BLOCKED",
+                        kycId     = "",
+                        riskScore = j.optInt("risk_score", 72),
+                        reason    = j.optString("detail", "Blocked by security policy")
+                    )
+                    else -> KycResult("PENDING", "kyc_${System.currentTimeMillis()}", 12, "Under review")
+                }
+            }
+        } catch (e: Exception) {
+            // Demo fallback — simulate approved KYC
+            KycResult("APPROVED", "kyc_demo_${System.currentTimeMillis()}", (5..18).random(), "Demo approval")
+        }
+    }
+
+    // ── Utils ─────────────────────────────────────────────────────────────────
+
+    private fun sha256hex(input: String): String =
+        java.security.MessageDigest.getInstance("SHA-256")
+            .digest(input.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+
+    private fun formatRelative(epochMs: Long): String {
+        val diff = System.currentTimeMillis() - epochMs
+        return when {
+            diff < 60_000    -> "${diff / 1000}s ago"
+            diff < 3_600_000 -> "${diff / 60_000}m ago"
+            else             -> "${diff / 3_600_000}h ago"
+        }
+    }
+
+    private fun ClosedFloatingPointRange<Float>.random(): Float =
+        start + (endInclusive - start) * kotlin.random.Random.nextFloat()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -392,4 +680,68 @@ data class EvidenceReceipt(
     val signingAlgorithm: String,
     val chainOfCustody:   List<String>,
     val receiptUrl:       String
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SOC Dashboard
+// ─────────────────────────────────────────────────────────────────────────────
+data class DashboardStats(
+    val totalDecisions: Int,
+    val blockedCount:   Int,
+    val stepUpCount:    Int,
+    val allowedCount:   Int,
+    val avgRiskScore:   Float,
+    val activeDevices:  Int,
+    val period:         String,
+    // Category breakdown percentages (0–100)
+    val raspPct:        Int = 38,
+    val networkPct:     Int = 22,
+    val bioPct:         Int = 18,
+    val appPct:         Int = 22,
+) {
+    // Convenience aliases used by SocDashboardActivity
+    val total:   Int   get() = totalDecisions
+    val blocked: Int   get() = blockedCount
+    val stepUp:  Int   get() = stepUpCount
+    val allowed: Int   get() = allowedCount
+    val avgRisk: Float get() = avgRiskScore
+}
+
+data class DecisionRecord(
+    val decisionId:  String  = "",
+    val deviceId:    String,
+    val action:      String  = "ALLOW",  // ALLOW | STEP_UP | BLOCK
+    val riskScore:   Int,
+    val timestamp:   String,
+    val tenantId:    String  = "",
+    val threatTypes: List<String> = emptyList(),
+) {
+    // Convenience alias — SocDashboardActivity uses 'decision'
+    val decision: String get() = action
+}
+
+data class ThreatEvent(
+    val threatId:   String,
+    val threatType: String  = "",
+    val severity:   String,          // INFO | MEDIUM | HIGH | CRITICAL
+    val deviceId:   String,
+    val timestamp:  String,
+    val module:     String  = "",    // backend module that flagged this
+    val details:    String  = "",
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Step-Up / OTP
+// ─────────────────────────────────────────────────────────────────────────────
+data class OtpRequest(val sessionId: String, val expiresInSeconds: Int)
+data class OtpVerifyResult(val verified: Boolean, val reason: String)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KYC
+// ─────────────────────────────────────────────────────────────────────────────
+data class KycResult(
+    val status:    String,   // APPROVED | PENDING | BLOCKED | REJECTED
+    val kycId:     String,
+    val riskScore: Int,
+    val reason:    String
 )

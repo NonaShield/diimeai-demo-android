@@ -55,6 +55,16 @@ class MainActivity : AppCompatActivity() {
             showBindingProofDialog()
         }
 
+        // 16 fraud use case demo hub
+        binding.btnFraudDemoHub.setOnClickListener {
+            startActivity(Intent(this, FraudScenarioDemoActivity::class.java))
+        }
+
+        // SOC dashboard
+        binding.btnSocDashboardMain.setOnClickListener {
+            startActivity(Intent(this, SocDashboardActivity::class.java))
+        }
+
         refreshEnrollmentStatus()
     }
 
