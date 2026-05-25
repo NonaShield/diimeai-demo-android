@@ -347,28 +347,27 @@ object DiimeApiClient {
      * it through Compliance → ML Engine → ThreatModuleExecutor → DecisionEngine.
      * Returns the full pipeline trace with real timing data from each phase.
      *
-     * If the backend is unavailable, returns a realistic simulated trace so the
-     * demo always works even without a live server.
+     * If the backend is unavailable, returns a simulated trace (fromSimulation=true)
+     * so the demo always works even without a live server.
+     *
+     * Phase 1 (NGINX) and Phase 2 (Crypto Gate) timing is NOT included in the
+     * backend response — those phases complete at the edge before the request
+     * reaches FastAPI and cannot be measured by the backend.  The Activity derives
+     * edge timing from (client RTT − backend total).
      *
      * @param scenarioId  1–16 (maps to the 16 NonaShield use cases)
      * @param tenantId    demo tenant identifier
      * @param action      PAYMENT | LOGIN | KYC | OTP
-     * @param p1NginxMs   NGINX phase timing measured by the app (0 = let backend estimate)
-     * @param p2CryptoMs  Crypto Gate timing measured by the app (0 = let backend estimate)
      */
     fun triggerScenario(
         scenarioId: Int,
         tenantId:   String = "demo_tenant",
         action:     String = "PAYMENT",
-        p1NginxMs:  Int    = 0,
-        p2CryptoMs: Int    = 0,
     ): ScenarioResult {
         val body = org.json.JSONObject().apply {
-            put("scenario_id",     scenarioId)
-            put("tenant_id",       tenantId)
-            put("action",          action)
-            put("phase1_nginx_ms", p1NginxMs)
-            put("phase2_crypto_ms",p2CryptoMs)
+            put("scenario_id", scenarioId)
+            put("tenant_id",   tenantId)
+            put("action",      action)
         }.toString()
 
         val request = Request.Builder()
@@ -402,25 +401,23 @@ object DiimeApiClient {
                 val modules = (0 until (modulesArr?.length() ?: 0)).map { modulesArr!!.getString(it) }
 
                 ScenarioResult(
-                    scenarioId    = j.optInt("scenario_id", scenarioId),
-                    scenarioName  = j.optString("scenario_name", ""),
-                    eventId       = j.optString("event_id", ""),
-                    decision      = j.optString("decision", "BLOCK"),
-                    riskScore     = j.optInt("risk_score", 0),
-                    phase1NginxMs = trace.optInt("phase1_nginx_ms", p1NginxMs),
-                    phase2CryptoMs= trace.optInt("phase2_crypto_ms", p2CryptoMs),
+                    scenarioId         = j.optInt("scenario_id", scenarioId),
+                    scenarioName       = j.optString("scenario_name", ""),
+                    eventId            = j.optString("event_id", ""),
+                    decision           = j.optString("decision", "BLOCK"),
+                    riskScore          = j.optInt("risk_score", 0),
                     phase3ComplianceMs = trace.optInt("phase3_compliance_ms", 12),
-                    phase4MlMs    = trace.optInt("phase4_ml_ms", 28),
-                    phase5ThreatsMs = trace.optInt("phase5_threats_ms", 18),
-                    totalMs       = trace.optInt("total_ms", 80),
-                    signalsFired  = signals,
-                    modulesHit    = modules,
-                    reason        = j.optString("reason", ""),
-                    evidenceHash  = j.optString("evidence_hash", ""),
-                    ruleVersion   = j.optString("rule_version", ""),
-                    mlScore       = j.optDouble("ml_score", 0.0).toFloat(),
-                    mlFallback    = j.optBoolean("ml_fallback", false),
-                    fromSimulation = false,
+                    phase4MlMs         = trace.optInt("phase4_ml_ms", 28),
+                    phase5ThreatsMs    = trace.optInt("phase5_threats_ms", 18),
+                    totalMs            = trace.optInt("total_ms", 80),
+                    signalsFired       = signals,
+                    modulesHit         = modules,
+                    reason             = j.optString("reason", ""),
+                    evidenceHash       = j.optString("evidence_hash", ""),
+                    ruleVersion        = j.optString("rule_version", ""),
+                    mlScore            = j.optDouble("ml_score", 0.0).toFloat(),
+                    mlFallback         = j.optBoolean("ml_fallback", false),
+                    fromSimulation     = false,
                 )
             }
         } catch (e: Exception) {
@@ -455,24 +452,32 @@ object DiimeApiClient {
             15 to Def("Investment Scam",    "STEP_UP",55, "SCAM_RS_001",      "MEDIUM",   "investment_fraud_detector"),
             16 to Def("Organized Crime",    "BLOCK",  94, "BOT_APP_011",      "CRITICAL", "organized_crime_cluster"),
         )
-        val d   = defs[scenarioId] ?: defs[7]!!
-        val p1  = (8..18).random(); val p2 = (6..14).random()
-        val p3  = (5..20).random(); val p4 = (15..45).random(); val p5 = (10..35).random()
+        val d       = defs[scenarioId] ?: defs[7]!!
+        val p3      = (5..20).random()
+        val p4      = (15..45).random()
+        val p5      = (10..35).random()
         val eventId = "sim_${System.currentTimeMillis().toString(16)}"
-        val hash    = "sha256:${(1..32).map { "0123456789abcdef".random() }.joinToString("")}"
+        // Offline simulation: use a clearly non-SHA256 identifier so operators
+        // can distinguish simulation evidence from real EvidenceRecord hashes.
+        val hash = "offline:$eventId"
         return ScenarioResult(
-            scenarioId    = scenarioId, scenarioName  = d.name,
-            eventId       = eventId,   decision       = d.dec,
-            riskScore     = d.score,   phase1NginxMs  = p1,
-            phase2CryptoMs= p2,        phase3ComplianceMs = p3,
-            phase4MlMs    = p4,        phase5ThreatsMs = p5,
-            totalMs       = p1+p2+p3+p4+p5,
-            signalsFired  = listOf(SignalFired(d.tid, d.score/100f, d.sev, d.mod)),
-            modulesHit    = listOf(d.mod),
-            reason        = "${d.name} detected — pipeline decision: ${d.dec}",
-            evidenceHash  = hash,      ruleVersion    = "2.3.1",
-            mlScore       = d.score / 100f, mlFallback = true,
-            fromSimulation = true,
+            scenarioId         = scenarioId,
+            scenarioName       = d.name,
+            eventId            = eventId,
+            decision           = d.dec,
+            riskScore          = d.score,
+            phase3ComplianceMs = p3,
+            phase4MlMs         = p4,
+            phase5ThreatsMs    = p5,
+            totalMs            = p3 + p4 + p5,
+            signalsFired       = listOf(SignalFired(d.tid, d.score / 100f, d.sev, d.mod)),
+            modulesHit         = listOf(d.mod),
+            reason             = "${d.name} detected — pipeline decision: ${d.dec}",
+            evidenceHash       = hash,
+            ruleVersion        = "2.3.1",
+            mlScore            = d.score / 100f,
+            mlFallback         = true,
+            fromSimulation     = true,
         )
     }
 
@@ -505,6 +510,7 @@ object DiimeApiClient {
                     networkPct     = j.optInt("network_pct", 22),
                     bioPct         = j.optInt("bio_pct", 18),
                     appPct         = j.optInt("app_pct", 22),
+                    dataSource     = j.optString("data_source", "live"),
                 )
             }
         } catch (e: Exception) {
@@ -514,17 +520,20 @@ object DiimeApiClient {
     }
 
     private fun simulatedDashboardStats(): DashboardStats {
-        val total   = (180..620).random()
-        val blocked = (total * 0.07).toInt()
-        val stepUp  = (total * 0.11).toInt()
+        // Fixed representative values — backend unreachable. dataSource="fallback"
+        // lets SocDashboardActivity show a banner so operators know the source.
+        val total   = 1423
+        val blocked = 99
+        val stepUp  = 156
         return DashboardStats(
             totalDecisions = total,
             blockedCount   = blocked,
             stepUpCount    = stepUp,
             allowedCount   = total - blocked - stepUp,
-            avgRiskScore   = (6f..24f).random(),
-            activeDevices  = (8..52).random(),
-            period         = "last_24h"
+            avgRiskScore   = 0.2341f,
+            activeDevices  = 284,
+            period         = "last_24h",
+            dataSource     = "fallback",
         )
     }
 
@@ -841,17 +850,20 @@ data class DashboardStats(
     val activeDevices:  Int,
     val period:         String,
     // Category breakdown percentages (0–100)
-    val raspPct:        Int = 38,
-    val networkPct:     Int = 22,
-    val bioPct:         Int = 18,
-    val appPct:         Int = 22,
+    val raspPct:        Int    = 38,
+    val networkPct:     Int    = 22,
+    val bioPct:         Int    = 18,
+    val appPct:         Int    = 22,
+    // "live" when data comes from Postgres; "fallback" when DB was unavailable
+    val dataSource:     String = "live",
 ) {
     // Convenience aliases used by SocDashboardActivity
-    val total:   Int   get() = totalDecisions
-    val blocked: Int   get() = blockedCount
-    val stepUp:  Int   get() = stepUpCount
-    val allowed: Int   get() = allowedCount
-    val avgRisk: Float get() = avgRiskScore
+    val total:      Int     get() = totalDecisions
+    val blocked:    Int     get() = blockedCount
+    val stepUp:     Int     get() = stepUpCount
+    val allowed:    Int     get() = allowedCount
+    val avgRisk:    Float   get() = avgRiskScore
+    val isLiveData: Boolean get() = dataSource == "live"
 }
 
 data class DecisionRecord(
@@ -907,13 +919,19 @@ data class SignalFired(
 /**
  * Full pipeline trace returned by POST /api/v1/demo/scenario/trigger.
  *
+ * Phase 1 (NGINX) and Phase 2 (Crypto Gate) are NOT included — those phases
+ * execute at the edge before the request reaches FastAPI and cannot be measured
+ * by the backend.  FraudScenarioDetailActivity derives edge timing by computing
+ * (client RTT − totalMs) and splits that proportionally between P1 and P2.
+ *
  * When fromSimulation=false the data comes from the live backend:
  *   - phase3ComplianceMs / phase4MlMs / phase5ThreatsMs are real wall-clock timings
  *   - evidenceHash is a real SHA-256 stored in EvidenceRecord
  *   - signalsFired are real ThreatFlags from ThreatModuleExecutor
  *
- * When fromSimulation=true the backend was unreachable and values are
- * representative estimates that match typical live timings.
+ * When fromSimulation=true the backend was unreachable; values are representative
+ * estimates, fromSimulation=true lets the UI show a "SIM" badge, and evidenceHash
+ * uses the "offline:" prefix so it cannot be confused with a real DB hash.
  */
 data class ScenarioResult(
     val scenarioId:         Int,
@@ -921,16 +939,14 @@ data class ScenarioResult(
     val eventId:            String,
     val decision:           String,   // BLOCK | STEP_UP | ALLOW
     val riskScore:          Int,      // 0–100
-    val phase1NginxMs:      Int,
-    val phase2CryptoMs:     Int,
-    val phase3ComplianceMs: Int,
-    val phase4MlMs:         Int,
-    val phase5ThreatsMs:    Int,
-    val totalMs:            Int,
+    val phase3ComplianceMs: Int,      // real backend timing
+    val phase4MlMs:         Int,      // real backend timing
+    val phase5ThreatsMs:    Int,      // real backend timing
+    val totalMs:            Int,      // sum of p3+p4+p5 as reported by backend
     val signalsFired:       List<SignalFired>,
     val modulesHit:         List<String>,
     val reason:             String,
-    val evidenceHash:       String,
+    val evidenceHash:       String,   // "sha256:…" when live; "offline:…" when simulated
     val ruleVersion:        String,
     val mlScore:            Float,
     val mlFallback:         Boolean,
