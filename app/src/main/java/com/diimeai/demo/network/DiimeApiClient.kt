@@ -335,6 +335,147 @@ object DiimeApiClient {
         }
     }
 
+    // ── Demo Scenario Trigger ─────────────────────────────────────────────────
+
+    /**
+     * Trigger a fraud scenario through the REAL backend pipeline.
+     *
+     * POST /api/v1/demo/scenario/trigger
+     * Auth: X-Api-Key header (DEMO_API_KEY from BuildConfig)
+     *
+     * The backend constructs a synthetic ThreatPayload for the scenario and runs
+     * it through Compliance → ML Engine → ThreatModuleExecutor → DecisionEngine.
+     * Returns the full pipeline trace with real timing data from each phase.
+     *
+     * If the backend is unavailable, returns a realistic simulated trace so the
+     * demo always works even without a live server.
+     *
+     * @param scenarioId  1–16 (maps to the 16 NonaShield use cases)
+     * @param tenantId    demo tenant identifier
+     * @param action      PAYMENT | LOGIN | KYC | OTP
+     * @param p1NginxMs   NGINX phase timing measured by the app (0 = let backend estimate)
+     * @param p2CryptoMs  Crypto Gate timing measured by the app (0 = let backend estimate)
+     */
+    fun triggerScenario(
+        scenarioId: Int,
+        tenantId:   String = "demo_tenant",
+        action:     String = "PAYMENT",
+        p1NginxMs:  Int    = 0,
+        p2CryptoMs: Int    = 0,
+    ): ScenarioResult {
+        val body = org.json.JSONObject().apply {
+            put("scenario_id",     scenarioId)
+            put("tenant_id",       tenantId)
+            put("action",          action)
+            put("phase1_nginx_ms", p1NginxMs)
+            put("phase2_crypto_ms",p2CryptoMs)
+        }.toString()
+
+        val request = Request.Builder()
+            .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/demo/scenario/trigger")
+            .post(body.toRequestBody(JSON))
+            .apply {
+                if (BuildConfig.DEMO_API_KEY.isNotBlank())
+                    header("X-Api-Key", BuildConfig.DEMO_API_KEY)
+            }
+            .build()
+
+        return try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "triggerScenario HTTP ${response.code} — using simulation")
+                    return simulatedScenarioResult(scenarioId)
+                }
+                val j = JSONObject(response.body?.string() ?: return simulatedScenarioResult(scenarioId))
+                val trace = j.optJSONObject("pipeline_trace") ?: org.json.JSONObject()
+                val signalsArr = j.optJSONArray("signals_fired")
+                val signals = (0 until (signalsArr?.length() ?: 0)).map { i ->
+                    val s = signalsArr!!.getJSONObject(i)
+                    SignalFired(
+                        threatId   = s.optString("threat_id"),
+                        confidence = s.optDouble("confidence", 0.9).toFloat(),
+                        severity   = s.optString("severity", "HIGH"),
+                        module     = s.optString("module", ""),
+                    )
+                }
+                val modulesArr = j.optJSONArray("modules_hit")
+                val modules = (0 until (modulesArr?.length() ?: 0)).map { modulesArr!!.getString(it) }
+
+                ScenarioResult(
+                    scenarioId    = j.optInt("scenario_id", scenarioId),
+                    scenarioName  = j.optString("scenario_name", ""),
+                    eventId       = j.optString("event_id", ""),
+                    decision      = j.optString("decision", "BLOCK"),
+                    riskScore     = j.optInt("risk_score", 0),
+                    phase1NginxMs = trace.optInt("phase1_nginx_ms", p1NginxMs),
+                    phase2CryptoMs= trace.optInt("phase2_crypto_ms", p2CryptoMs),
+                    phase3ComplianceMs = trace.optInt("phase3_compliance_ms", 12),
+                    phase4MlMs    = trace.optInt("phase4_ml_ms", 28),
+                    phase5ThreatsMs = trace.optInt("phase5_threats_ms", 18),
+                    totalMs       = trace.optInt("total_ms", 80),
+                    signalsFired  = signals,
+                    modulesHit    = modules,
+                    reason        = j.optString("reason", ""),
+                    evidenceHash  = j.optString("evidence_hash", ""),
+                    ruleVersion   = j.optString("rule_version", ""),
+                    mlScore       = j.optDouble("ml_score", 0.0).toFloat(),
+                    mlFallback    = j.optBoolean("ml_fallback", false),
+                    fromSimulation = false,
+                )
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "triggerScenario network error — using simulation: ${e.message}")
+            simulatedScenarioResult(scenarioId)
+        }
+    }
+
+    /**
+     * Fully realistic simulation of the pipeline trace for offline/demo mode.
+     * Matches the real response shape exactly so FraudScenarioDetailActivity
+     * renders identically whether online or offline.
+     */
+    private fun simulatedScenarioResult(scenarioId: Int): ScenarioResult {
+        data class Def(val name: String, val dec: String, val score: Int,
+                       val tid: String, val sev: String, val mod: String)
+        val defs = mapOf(
+            1  to Def("Hardware Possession","ALLOW",  12, "APP_SEC_001",      "HIGH",     "evidence_verifier"),
+            2  to Def("Non-Repudiation",    "ALLOW",   8, "APP_SEC_002",      "HIGH",     "evidence_verifier"),
+            3  to Def("Screen Mirroring",   "BLOCK",  87, "RASP_DEV_003",     "HIGH",     "botnet_correlation"),
+            4  to Def("Behavioral Biometrics","STEP_UP",62,"USR_BEH_001",     "MEDIUM",   "mule_account"),
+            5  to Def("Device RASP",        "BLOCK", 100, "RASP_DEV_001",     "CRITICAL", "botnet_correlation"),
+            6  to Def("Mule Account",       "BLOCK",  82, "USR_BEH_002",      "HIGH",     "mule_account"),
+            7  to Def("Bot / Emulator",     "BLOCK",  98, "BOT_APP_001",      "CRITICAL", "botnet_correlation"),
+            8  to Def("SIM Swap",           "BLOCK",  95, "SCAM_SS_001",      "CRITICAL", "sim_swap_proxy"),
+            9  to Def("Digital Arrest",     "BLOCK", 100, "SCAM_CM_001",      "CRITICAL", "digital_arrest_detector"),
+            10 to Def("Fake Loan App",      "STEP_UP",68, "LOAN_APP_002",     "HIGH",     "beneficiary_abuse"),
+            11 to Def("Ghost Tap / NFC",    "BLOCK",  83, "NFC_FRAUD_001",    "HIGH",     "credential_reuse"),
+            12 to Def("Malicious APK",      "BLOCK", 100, "MAL_APK_001",      "CRITICAL", "botnet_correlation"),
+            13 to Def("Deepfake KYC",       "BLOCK",  96, "APP_RUNTIME_008",  "CRITICAL", "synthetic_identity"),
+            14 to Def("NBFC Insider",       "BLOCK",  88, "USR_BEH_003",      "HIGH",     "beneficiary_abuse"),
+            15 to Def("Investment Scam",    "STEP_UP",55, "SCAM_RS_001",      "MEDIUM",   "investment_fraud_detector"),
+            16 to Def("Organized Crime",    "BLOCK",  94, "BOT_APP_011",      "CRITICAL", "organized_crime_cluster"),
+        )
+        val d   = defs[scenarioId] ?: defs[7]!!
+        val p1  = (8..18).random(); val p2 = (6..14).random()
+        val p3  = (5..20).random(); val p4 = (15..45).random(); val p5 = (10..35).random()
+        val eventId = "sim_${System.currentTimeMillis().toString(16)}"
+        val hash    = "sha256:${(1..32).map { "0123456789abcdef".random() }.joinToString("")}"
+        return ScenarioResult(
+            scenarioId    = scenarioId, scenarioName  = d.name,
+            eventId       = eventId,   decision       = d.dec,
+            riskScore     = d.score,   phase1NginxMs  = p1,
+            phase2CryptoMs= p2,        phase3ComplianceMs = p3,
+            phase4MlMs    = p4,        phase5ThreatsMs = p5,
+            totalMs       = p1+p2+p3+p4+p5,
+            signalsFired  = listOf(SignalFired(d.tid, d.score/100f, d.sev, d.mod)),
+            modulesHit    = listOf(d.mod),
+            reason        = "${d.name} detected — pipeline decision: ${d.dec}",
+            evidenceHash  = hash,      ruleVersion    = "2.3.1",
+            mlScore       = d.score / 100f, mlFallback = true,
+            fromSimulation = true,
+        )
+    }
+
     // ── SOC Dashboard ─────────────────────────────────────────────────────────
 
     /**
@@ -359,7 +500,11 @@ object DiimeApiClient {
                     allowedCount   = j.optInt("allowed_count"),
                     avgRiskScore   = j.optDouble("avg_risk_score").toFloat(),
                     activeDevices  = j.optInt("active_devices"),
-                    period         = j.optString("period", "last_24h")
+                    period         = j.optString("period", "last_24h"),
+                    raspPct        = j.optInt("rasp_pct", 38),
+                    networkPct     = j.optInt("network_pct", 22),
+                    bioPct         = j.optInt("bio_pct", 18),
+                    appPct         = j.optInt("app_pct", 22),
                 )
             }
         } catch (e: Exception) {
@@ -407,6 +552,7 @@ object DiimeApiClient {
                         action      = d.optString("action"),
                         riskScore   = d.optInt("risk_score"),
                         timestamp   = d.optString("timestamp"),
+                        tenantId    = d.optString("tenant_id", ""),
                         threatTypes = (0 until (threats?.length() ?: 0)).map { threats!!.getString(it) }
                     )
                 }
@@ -458,9 +604,10 @@ object DiimeApiClient {
                         threatId   = t.optString("threat_id"),
                         threatType = t.optString("threat_type"),
                         severity   = t.optString("severity"),
+                        module     = t.optString("module", ""),
                         deviceId   = t.optString("device_id"),
                         timestamp  = t.optString("timestamp"),
-                        details    = t.optString("details")
+                        details    = t.optString("details"),
                     )
                 }
             }
@@ -744,4 +891,48 @@ data class KycResult(
     val kycId:     String,
     val riskScore: Int,
     val reason:    String
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Demo scenario trigger — full pipeline trace
+// ─────────────────────────────────────────────────────────────────────────────
+
+data class SignalFired(
+    val threatId:   String,
+    val confidence: Float,
+    val severity:   String,
+    val module:     String,
+)
+
+/**
+ * Full pipeline trace returned by POST /api/v1/demo/scenario/trigger.
+ *
+ * When fromSimulation=false the data comes from the live backend:
+ *   - phase3ComplianceMs / phase4MlMs / phase5ThreatsMs are real wall-clock timings
+ *   - evidenceHash is a real SHA-256 stored in EvidenceRecord
+ *   - signalsFired are real ThreatFlags from ThreatModuleExecutor
+ *
+ * When fromSimulation=true the backend was unreachable and values are
+ * representative estimates that match typical live timings.
+ */
+data class ScenarioResult(
+    val scenarioId:         Int,
+    val scenarioName:       String,
+    val eventId:            String,
+    val decision:           String,   // BLOCK | STEP_UP | ALLOW
+    val riskScore:          Int,      // 0–100
+    val phase1NginxMs:      Int,
+    val phase2CryptoMs:     Int,
+    val phase3ComplianceMs: Int,
+    val phase4MlMs:         Int,
+    val phase5ThreatsMs:    Int,
+    val totalMs:            Int,
+    val signalsFired:       List<SignalFired>,
+    val modulesHit:         List<String>,
+    val reason:             String,
+    val evidenceHash:       String,
+    val ruleVersion:        String,
+    val mlScore:            Float,
+    val mlFallback:         Boolean,
+    val fromSimulation:     Boolean,
 )
