@@ -103,9 +103,12 @@ android {
 }
 
 dependencies {
-    // ── NonaShield SDK (build locally from ../payshield-kmp-sdk) ────────────
-    // Run: cd ../payshield-kmp-sdk && ./gradlew :android-sdk:publishToMavenLocal
-    implementation 'com.payshield:android-sdk:1.0.0'
+    // ── NonaShield SDK ────────────────────────────────────────────────────────
+    // CI-built AAR bundled at app/libs/ (from NonaShield/nonashield-sdk CI artifact).
+    // Also declared in mavenLocal() so IDE resolution works when building locally
+    // after running: cd ../payshield-kmp-sdk && ./gradlew :android-sdk:publishToMavenLocal
+    // Resolved via libs/ fileTree first (settings.gradle flatDir), then mavenLocal().
+    implementation(name: 'payshield-android-sdk-1.0.0', ext: 'aar')
 
     // ── Android core ─────────────────────────────────────────────────────────
     implementation 'androidx.core:core-ktx:1.13.1'

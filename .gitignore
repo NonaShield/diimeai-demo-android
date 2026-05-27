@@ -14,6 +14,9 @@ build/
 *.apk
 *.aab
 
+# Explicitly track the bundled vendor SDK AAR (CI-built, version-pinned)
+!app/libs/*.aar
+
 # IDE
 .idea/
 *.iml

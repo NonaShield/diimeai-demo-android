@@ -15,7 +15,10 @@ dependencyResolutionManagement {
         mavenCentral()
         // FreeRASP SDK (TalsecSecurity)
         maven { url 'https://jitpack.io' }
-        // NonaShield SDK published to local Maven (see SDK README)
+        // NonaShield SDK — AAR bundled at app/libs/payshield-android-sdk-1.0.0.aar
+        // flatDir lets the name+ext declaration in app/build.gradle resolve to that file.
+        flatDir { dirs 'app/libs' }
+        // Also check Maven local for developers who built the SDK from source.
         mavenLocal()
     }
 }

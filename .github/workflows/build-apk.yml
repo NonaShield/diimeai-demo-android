@@ -1,0 +1,105 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type (debug or release)'
+        required: false
+        default: 'debug'
+        type: choice
+        options: [ debug, release ]
+
+env:
+  JAVA_VERSION: '17'
+  JAVA_DISTRIBUTION: 'temurin'
+  # Override to pull a specific SDK version. Defaults to the SDK artifact below.
+  SDK_ARTIFACT_ID: '7234393199'
+
+jobs:
+  build:
+    name: Build ${{ inputs.build_type || 'debug' }} APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────────────
+      - name: Checkout demo app
+        uses: actions/checkout@v4
+
+      # ── Java ──────────────────────────────────────────────────────────────────
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+
+      # ── Gradle cache ──────────────────────────────────────────────────────────
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      # ── Verify bundled SDK AAR ────────────────────────────────────────────────
+      - name: Verify SDK AAR present
+        run: |
+          AAR="app/libs/payshield-android-sdk-1.0.0.aar"
+          if [ -f "$AAR" ]; then
+            echo "SDK AAR found: $(ls -lh "$AAR" | awk '{print $5}') bytes"
+          else
+            echo "ERROR: SDK AAR not found at $AAR"
+            echo "Expected the AAR to be bundled in the repo at app/libs/"
+            exit 1
+          fi
+
+      # ── Build ─────────────────────────────────────────────────────────────────
+      - name: Build debug APK
+        if: ${{ inputs.build_type != 'release' }}
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
+
+      - name: Build release APK
+        if: ${{ inputs.build_type == 'release' }}
+        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
+          DIIMEAI_KEYSTORE_PATH: ${{ secrets.DIIMEAI_KEYSTORE_PATH }}
+          DIIMEAI_STORE_PASSWORD: ${{ secrets.DIIMEAI_STORE_PASSWORD }}
+          DIIMEAI_KEY_ALIAS: ${{ secrets.DIIMEAI_KEY_ALIAS }}
+          DIIMEAI_KEY_PASSWORD: ${{ secrets.DIIMEAI_KEY_PASSWORD }}
+          PAYSHIELD_EXPECTED_CERT_HASH: ${{ secrets.PAYSHIELD_EXPECTED_CERT_HASH }}
+          DEMO_API_KEY: ${{ secrets.DEMO_API_KEY }}
+
+      # ── APK info ──────────────────────────────────────────────────────────────
+      - name: Show APK details
+        run: |
+          find app/build/outputs/apk -name "*.apk" | while read apk; do
+            echo "APK: $apk ($(ls -lh "$apk" | awk '{print $5}'))"
+          done
+
+      # ── Upload debug APK ──────────────────────────────────────────────────────
+      - name: Upload debug APK artifact
+        if: ${{ inputs.build_type != 'release' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: diimeai-debug-${{ github.sha }}
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14
+
+      - name: Upload release APK artifact
+        if: ${{ inputs.build_type == 'release' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: diimeai-release-${{ github.sha }}
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 30
