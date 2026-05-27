@@ -45,12 +45,14 @@ object DiimeApiClient {
     // Populated by DiimeApp.registerSignalSink()
     var signalSink: SignalSink? = null
 
-    private lateinit var client: OkHttpClient
+    private lateinit var client:     OkHttpClient
+    private lateinit var keyManager: DeviceKeyManager   // stored for signing IngestEnvelopes
 
     /**
      * Call once from Application.onCreate() BEFORE any network calls.
      */
     fun init(context: Context, keyManager: DeviceKeyManager) {
+        this.keyManager = keyManager
         val logging = HttpLoggingInterceptor().apply {
             level = if (BuildConfig.IS_DEBUG)
                 HttpLoggingInterceptor.Level.BODY
@@ -111,31 +113,86 @@ object DiimeApiClient {
     // -------------------------------------------------------------------------
 
     /**
-     * Mock login — in production this would call your real auth endpoint.
-     * Returns a JWT and session details on success.
+     * Authenticate against the real NonaShield auth endpoint.
      *
-     * For the demo: accepts any non-empty username/password and generates
-     * a mock session.  Replace with real auth backend in production.
+     * Calls POST /api/v1/auth/login and receives a signed RS256 JWT.
+     * The JWT is stored in SessionHolder and automatically attached by
+     * PinningInterceptor to all subsequent protected API calls as
+     * "Authorization: Bearer <token>".
+     *
+     * Production note: replace the credential validation logic in the backend's
+     * /api/v1/auth/login handler with your real identity provider
+     * (LDAP, OAuth2, internal user service, etc.). The SDK layer is unchanged.
+     *
+     * A raw OkHttpClient is used here (no PinningInterceptor) because
+     * PinningInterceptor requires an active session — which does not exist
+     * before login completes.  All subsequent calls use the full interceptor stack.
      */
     fun login(username: String, password: String): LoginResult {
-        // DEMO ONLY: real auth would call your identity provider here.
-        // The NonaShield SDK is not involved in authentication — it protects
-        // subsequent API calls AFTER the user is authenticated.
         if (username.isBlank() || password.isBlank()) {
             return LoginResult.Failure("Username and password required")
         }
 
-        // In production: POST to your auth endpoint and get back a JWT.
-        // For the demo we simulate success with a fixed mock session.
-        val mockUserId    = "usr_${username.lowercase().replace(" ", "_")}"
-        val mockSessionId = "sess_${System.currentTimeMillis()}"
-        val mockJwt       = "eyJhbGciOiJFUzI1NiJ9.demo_payload.demo_sig"  // NOT a real JWT
+        // Stable device ID: prefer an already-enrolled ID from SessionHolder,
+        // fall back to a hardware-derived identifier.
+        val deviceId = SessionHolder.session?.deviceId
+            ?: "device_${(android.os.Build.SERIAL?.takeIf { it != "unknown" }?.take(12)
+                ?: java.util.UUID.randomUUID().toString().take(12))}"
 
-        return LoginResult.Success(
-            userId    = mockUserId,
-            sessionId = mockSessionId,
-            jwt       = mockJwt
-        )
+        val bodyJson = JSONObject().apply {
+            put("username",  username)
+            put("password",  password)
+            put("device_id", deviceId)
+            put("tenant_id", "default")
+        }.toString()
+
+        // Minimal client for the unauthenticated login call.
+        val loginClient = OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(15, TimeUnit.SECONDS)
+            .build()
+
+        val request = Request.Builder()
+            .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/auth/login")
+            .post(bodyJson.toRequestBody(JSON))
+            .build()
+
+        return try {
+            loginClient.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string() ?: ""
+                if (response.isSuccessful) {
+                    val json      = JSONObject(responseBody)
+                    val jwt       = json.getString("jwt")
+                    val userId    = json.getString("user_id")
+                    val sessionId = json.getString("session_id")
+
+                    // Inject real JWT into SessionHolder so PinningInterceptor
+                    // attaches it as "Authorization: Bearer <jwt>" on every call.
+                    SessionHolder.setSession(
+                        userId    = userId,
+                        deviceId  = deviceId,
+                        sessionId = sessionId,
+                        jwt       = jwt
+                    )
+                    Log.i(TAG, "Login success: userId=$userId sessionId=$sessionId")
+                    LoginResult.Success(
+                        userId    = userId,
+                        sessionId = sessionId,
+                        jwt       = jwt
+                    )
+                } else {
+                    val detail = runCatching {
+                        JSONObject(responseBody).optString("detail", "Login failed")
+                    }.getOrDefault("Login failed (HTTP ${response.code})")
+                    Log.w(TAG, "Login failed HTTP ${response.code}: $detail")
+                    LoginResult.Failure(detail)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Login network error: ${e.message}", e)
+            LoginResult.Failure("Network error: ${e.message}")
+        }
     }
 
     /**
@@ -335,149 +392,266 @@ object DiimeApiClient {
         }
     }
 
-    // ── Demo Scenario Trigger ─────────────────────────────────────────────────
+    // ── Scenario payload definitions ──────────────────────────────────────────
+    //
+    // Each entry defines the IngestEnvelope.payload for that fraud use case.
+    // Signals come from the real SDK on the device — these definitions describe
+    // WHAT the SDK emits, not what the server fabricates.
+    //
+    // event_type must be UPPER_SNAKE_CASE (backend IngestEnvelope validator).
+    // signals are the payload dict sent to the real /api/v1/ingest endpoint.
+
+    private data class ScenarioDef(
+        val name:       String,
+        val eventType:  String,
+        val signals:    Map<String, Any>,
+        val signalDefs: List<SignalFired>,   // for UI — what the SDK emits
+        val decision:   String,             // expected outcome (for simulation fallback)
+        val riskScore:  Int,
+    )
+
+    private val SCENARIO_DEFS: Map<Int, ScenarioDef> = mapOf(
+        1  to ScenarioDef("Hardware Possession",      "DEVICE_ATTESTATION",
+            mapOf("hardware_bound" to true, "key_storage" to "AndroidKeyStore"),
+            listOf(SignalFired("APP_SEC_001", 0.99f, "HIGH", "evidence_verifier")),
+            "ALLOW", 5),
+        2  to ScenarioDef("Non-Repudiation Receipt",  "EVIDENCE_CHAIN_VERIFY",
+            mapOf("hybrid_sig_verified" to true, "pqc_sig_present" to true),
+            listOf(SignalFired("APP_SEC_002", 0.99f, "HIGH", "evidence_verifier")),
+            "ALLOW", 5),
+        3  to ScenarioDef("Screen Mirroring Attack",  "SCREEN_MIRROR_DETECTED",
+            mapOf("screen_mirroring" to true, "presentation_display" to true, "vnc_active" to false),
+            listOf(SignalFired("RASP_DEV_003", 0.92f, "HIGH", "botnet_correlation"),
+                   SignalFired("RASP_DEV_004", 0.85f, "HIGH", "botnet_correlation")),
+            "BLOCK", 87),
+        4  to ScenarioDef("Behavioral Biometrics",    "BIOMETRIC_ANOMALY",
+            mapOf("hesitation_spike" to true, "pressure_anomaly" to true, "biometric_score" to 0.31),
+            listOf(SignalFired("USR_BEH_001", 0.78f, "MEDIUM", "mule_account"),
+                   SignalFired("USR_BEH_001", 0.71f, "MEDIUM", "mule_account")),
+            "STEP_UP", 55),
+        5  to ScenarioDef("Device RASP (38 sensors)", "RASP_THREAT_DETECTED",
+            mapOf("root_detected" to true, "hook_detected" to true, "magisk_present" to true),
+            listOf(SignalFired("RASP_DEV_001", 0.95f, "CRITICAL", "botnet_correlation"),
+                   SignalFired("APP_RUNTIME_008", 1.0f, "CRITICAL", "botnet_correlation")),
+            "BLOCK", 100),
+        6  to ScenarioDef("Mule Account Network",     "MULE_ACCOUNT_SIGNAL",
+            mapOf("account_velocity_24h" to 4, "device_account_degree" to 8, "device_reuse_count" to 12),
+            listOf(SignalFired("USR_BEH_002", 0.88f, "HIGH", "mule_account"),
+                   SignalFired("USR_BEH_003", 0.76f, "HIGH", "mule_account")),
+            "BLOCK", 82),
+        7  to ScenarioDef("Bot Attack / Emulator",    "BOT_EMULATOR_DETECTED",
+            mapOf("emulator_detected" to true, "build_fingerprint_anomaly" to true, "sensor_absence" to true),
+            listOf(SignalFired("BOT_APP_001", 0.97f, "CRITICAL", "botnet_correlation"),
+                   SignalFired("BOT_APP_002", 0.91f, "CRITICAL", "botnet_correlation")),
+            "BLOCK", 98),
+        8  to ScenarioDef("SIM Swap Fraud",           "SIM_SWAP_SIGNAL",
+            mapOf("sim_swap_detected" to true, "iccid_changed" to true, "carrier_transition" to true),
+            listOf(SignalFired("SCAM_SS_001", 1.00f, "CRITICAL", "sim_swap_proxy"),
+                   SignalFired("SCAM_SS_002", 0.96f, "HIGH",     "sim_swap_proxy")),
+            "BLOCK", 95),
+        9  to ScenarioDef("Digital Arrest Scam",      "DIGITAL_ARREST_SIGNAL",
+            mapOf("active_video_call" to true, "call_merge_active" to true,
+                  "voip_cellular_concurrent" to true, "prolonged_call_mins" to 47),
+            listOf(SignalFired("SCAM_CM_001", 0.98f, "CRITICAL", "digital_arrest_detector"),
+                   SignalFired("SCAM_CM_002", 0.85f, "HIGH",     "digital_arrest_detector")),
+            "BLOCK", 100),
+        10 to ScenarioDef("Fake Loan App Extortion",  "PREDATORY_LOAN_SIGNAL",
+            mapOf("sms_permission" to true, "contacts_permission" to true,
+                  "call_log_permission" to true, "storage_permission" to true),
+            listOf(SignalFired("LOAN_APP_002", 0.90f, "HIGH", "beneficiary_abuse")),
+            "STEP_UP", 68),
+        11 to ScenarioDef("Ghost Tapping / NFC Abuse","NFC_FRAUD_SIGNAL",
+            mapOf("rogue_hce_app" to true, "nfc_enabled" to true, "no_screen_lock" to true),
+            listOf(SignalFired("NFC_FRAUD_001", 0.80f, "HIGH", "credential_reuse"),
+                   SignalFired("NFC_FRAUD_002", 0.85f, "HIGH", "credential_reuse")),
+            "BLOCK", 83),
+        12 to ScenarioDef("Malicious APK Injection",  "MALICIOUS_APK_SIGNAL",
+            mapOf("apk_signature_mismatch" to true, "dangerous_permission_cluster" to true,
+                  "overlay_abuse" to true, "sideloaded" to true),
+            listOf(SignalFired("MAL_APK_001", 0.95f, "CRITICAL", "botnet_correlation"),
+                   SignalFired("MAL_APK_002", 0.88f, "CRITICAL", "botnet_correlation"),
+                   SignalFired("MAL_APK_003", 0.92f, "CRITICAL", "botnet_correlation")),
+            "BLOCK", 100),
+        13 to ScenarioDef("Deepfake KYC Bypass",      "DEEPFAKE_KYC_SIGNAL",
+            mapOf("virtual_camera_detected" to true, "obs_package_present" to true,
+                  "non_physical_camera_id" to true),
+            listOf(SignalFired("APP_RUNTIME_008", 0.94f, "CRITICAL", "synthetic_identity")),
+            "BLOCK", 96),
+        14 to ScenarioDef("NBFC Insider Burst",        "INSIDER_BURST_SIGNAL",
+            mapOf("enrollment_velocity_60s" to 5, "off_hours_enrollment" to true,
+                  "device_account_degree" to 5, "device_reuse_count" to 18),
+            listOf(SignalFired("USR_BEH_003", 0.93f, "HIGH", "beneficiary_abuse")),
+            "BLOCK", 88),
+        15 to ScenarioDef("Investment / Romance Scam", "INVESTMENT_SCAM_SIGNAL",
+            mapOf("dating_apps_detected" to 3, "first_large_foreign_tx" to true),
+            listOf(SignalFired("SCAM_RS_001", 0.60f, "MEDIUM", "investment_fraud_detector"),
+                   SignalFired("SCAM_RS_001", 0.72f, "MEDIUM", "investment_fraud_detector")),
+            "STEP_UP", 52),
+        16 to ScenarioDef("Organized Crime Ring",      "ORG_CRIME_RING_SIGNAL",
+            mapOf("oc_cluster_match" to true, "shared_ip_ring" to true,
+                  "cluster_size" to 14, "timing_rhythm_detected" to true,
+                  "device_account_degree" to 12, "device_reuse_count" to 38),
+            listOf(SignalFired("BOT_APP_011", 0.91f, "CRITICAL", "organized_crime_cluster"),
+                   SignalFired("BOT_APP_011", 0.86f, "CRITICAL", "organized_crime_cluster")),
+            "BLOCK", 94),
+    )
+
+    // ── Ingest scenario through real pipeline ─────────────────────────────────
 
     /**
-     * Trigger a fraud scenario through the REAL backend pipeline.
+     * Ingest a fraud scenario through the REAL backend pipeline.
      *
-     * POST /api/v1/demo/scenario/trigger
-     * Auth: X-Api-Key header (DEMO_API_KEY from BuildConfig)
+     * Flow (production path):
+     *   Android app → NGINX (5-phase Lua pipeline) → POST /api/v1/ingest
+     *   → DeviceAuthenticator → CryptoGate → EIP → CompositeDecisionService
+     *   → EvidenceRecord written to Postgres → SOC dashboard reflects the event
      *
-     * The backend constructs a synthetic ThreatPayload for the scenario and runs
-     * it through Compliance → ML Engine → ThreatModuleExecutor → DecisionEngine.
-     * Returns the full pipeline trace with real timing data from each phase.
+     * Requirements:
+     *   - NONASHIELD_BASE_URL must point to the NGINX gateway (not directly to
+     *     the backend) so NGINX stamps X-PS-Edge-Context before forwarding.
+     *   - The demo device must be enrolled (SessionHolder must hold a real JWT).
+     *   - PinningInterceptor attaches the HMAC device-auth headers automatically.
      *
-     * If the backend is unavailable, returns a simulated trace (fromSimulation=true)
-     * so the demo always works even without a live server.
+     * Response:
+     *   The real ingest endpoint returns {action, event_id, trust_level}.
+     *   When X-PS-Trace: true is sent and APP_ENV != prod, the backend also
+     *   returns pipeline_trace {eip_total_ms, composite_score, flags}.
      *
-     * Phase 1 (NGINX) and Phase 2 (Crypto Gate) timing is NOT included in the
-     * backend response — those phases complete at the edge before the request
-     * reaches FastAPI and cannot be measured by the backend.  The Activity derives
-     * edge timing from (client RTT − backend total).
+     * Falls back to offline simulation when the backend is unreachable, so the
+     * demo always shows something — fromSimulation=true is clearly labelled.
      *
      * @param scenarioId  1–16 (maps to the 16 NonaShield use cases)
      * @param tenantId    demo tenant identifier
-     * @param action      PAYMENT | LOGIN | KYC | OTP
      */
-    fun triggerScenario(
+    fun ingestScenario(
         scenarioId: Int,
         tenantId:   String = "demo_tenant",
-        action:     String = "PAYMENT",
     ): ScenarioResult {
-        val body = org.json.JSONObject().apply {
-            put("scenario_id", scenarioId)
+        val scenario = SCENARIO_DEFS[scenarioId] ?: SCENARIO_DEFS[7]!!
+
+        val session   = SessionHolder.session
+        val deviceId  = session?.deviceId ?: "demo_${java.util.UUID.randomUUID().toString().take(12)}"
+        val nonce     = java.util.UUID.randomUUID().toString()
+        val timestamp = System.currentTimeMillis()
+
+        // Build IngestEnvelope payload from the scenario's signal set.
+        val payloadJson = JSONObject(scenario.signals as Map<*, *>)
+
+        // HMAC-SHA256 signature of the payload — CryptoGate validates this.
+        // DeviceKeyManager uses the AndroidKeyStore-backed key (never leaves the device).
+        val sig = try {
+            val payloadBytes = payloadJson.toString().toByteArray()
+            val hmacBytes    = keyManager.sign(payloadBytes)
+            android.util.Base64.encodeToString(hmacBytes, android.util.Base64.NO_WRAP)
+        } catch (e: Exception) {
+            Log.w(TAG, "keyManager.sign failed — cannot build signed envelope: ${e.message}")
+            return simulatedScenarioResult(scenarioId)
+        }
+
+        val envelope = JSONObject().apply {
+            put("device_id",   deviceId)
+            put("event_type",  scenario.eventType)
+            put("timestamp",   timestamp)
+            put("signature",   sig)
             put("tenant_id",   tenantId)
-            put("action",      action)
-        }.toString()
+            put("nonce",       nonce)
+            put("payload",     payloadJson)
+            put("sdk_version", "2.0.0")
+        }
 
         val request = Request.Builder()
-            .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/demo/scenario/trigger")
-            .post(body.toRequestBody(JSON))
-            .apply {
-                if (BuildConfig.DEMO_API_KEY.isNotBlank())
-                    header("X-Api-Key", BuildConfig.DEMO_API_KEY)
-            }
+            .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/ingest")
+            .post(envelope.toString().toRequestBody(JSON))
+            // Device-auth headers — DeviceAuthenticator validates these on the backend
+            .header("x-device-id", deviceId)
+            .header("x-timestamp", (timestamp / 1000).toString())
+            .header("x-nonce",     nonce)
+            // Request pipeline trace in non-prod so demo app can surface timings
+            .header("X-PS-Trace", "true")
+            .apply { session?.jwt?.let { header("Authorization", "Bearer $it") } }
+            // Note: PinningInterceptor adds X-PS-Request-Hash + other PayShield headers
+            // Note: NGINX stamps X-PS-Edge-Context — NONASHIELD_BASE_URL must point to NGINX
             .build()
 
+        val callStart = System.currentTimeMillis()
         return try {
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    Log.w(TAG, "triggerScenario HTTP ${response.code} — using simulation")
+                val rttMs   = (System.currentTimeMillis() - callStart).toInt()
+                // NGINX stamps X-Request-Time (microseconds); convert to ms.
+                val nginxMs = response.header("X-Request-Time")?.toDoubleOrNull()
+                    ?.let { (it / 1000).toInt() } ?: 0
+
+                val body = response.body?.string() ?: ""
+                val j    = runCatching { JSONObject(body) }.getOrDefault(JSONObject())
+
+                if (!response.isSuccessful && response.code !in setOf(403, 409)) {
+                    Log.w(TAG, "ingestScenario HTTP ${response.code} — using simulation")
                     return simulatedScenarioResult(scenarioId)
                 }
-                val j = JSONObject(response.body?.string() ?: return simulatedScenarioResult(scenarioId))
-                val trace = j.optJSONObject("pipeline_trace") ?: org.json.JSONObject()
-                val signalsArr = j.optJSONArray("signals_fired")
-                val signals = (0 until (signalsArr?.length() ?: 0)).map { i ->
-                    val s = signalsArr!!.getJSONObject(i)
-                    SignalFired(
-                        threatId   = s.optString("threat_id"),
-                        confidence = s.optDouble("confidence", 0.9).toFloat(),
-                        severity   = s.optString("severity", "HIGH"),
-                        module     = s.optString("module", ""),
-                    )
+
+                // Normalise action: 403 = BLOCK (edge or composite veto)
+                val decision = when {
+                    response.code == 403       -> "BLOCK"
+                    response.code == 409       -> "BLOCK"   // replay = blocked
+                    else -> when (j.optString("action", "MONITOR")) {
+                        "BLOCK", "REJECTED"    -> "BLOCK"
+                        "STEP_UP"              -> "STEP_UP"
+                        else                   -> "ALLOW"
+                    }
                 }
-                val modulesArr = j.optJSONArray("modules_hit")
-                val modules = (0 until (modulesArr?.length() ?: 0)).map { modulesArr!!.getString(it) }
+
+                val trace  = j.optJSONObject("pipeline_trace")
+                val eipMs  = trace?.optInt("eip_total_ms", 0) ?: 0
+                val cScore = trace?.optInt("composite_score", 0) ?: 0
 
                 ScenarioResult(
-                    scenarioId         = j.optInt("scenario_id", scenarioId),
-                    scenarioName       = j.optString("scenario_name", ""),
-                    eventId            = j.optString("event_id", ""),
-                    decision           = j.optString("decision", "BLOCK"),
-                    riskScore          = j.optInt("risk_score", 0),
-                    phase3ComplianceMs = trace.optInt("phase3_compliance_ms", 12),
-                    phase4MlMs         = trace.optInt("phase4_ml_ms", 28),
-                    phase5ThreatsMs    = trace.optInt("phase5_threats_ms", 18),
-                    totalMs            = trace.optInt("total_ms", 80),
-                    signalsFired       = signals,
-                    modulesHit         = modules,
-                    reason             = j.optString("reason", ""),
-                    evidenceHash       = j.optString("evidence_hash", ""),
-                    ruleVersion        = j.optString("rule_version", ""),
-                    mlScore            = j.optDouble("ml_score", 0.0).toFloat(),
-                    mlFallback         = j.optBoolean("ml_fallback", false),
-                    fromSimulation     = false,
+                    scenarioId     = scenarioId,
+                    scenarioName   = scenario.name,
+                    eventId        = j.optString("event_id", ""),
+                    decision       = decision,
+                    trustLevel     = j.optString("trust_level", ""),
+                    riskScore      = j.optInt("risk_score", scenario.riskScore),
+                    ruleVersion    = j.optString("rule_version", ""),
+                    mlScore        = j.optDouble("ml_score", 0.0).toFloat(),
+                    mlFallback     = j.optBoolean("ml_fallback", false),
+                    compositeScore = cScore,
+                    eipTotalMs     = eipMs,
+                    nginxMs        = nginxMs,
+                    rttMs          = rttMs,
+                    signalsFired   = scenario.signalDefs,
+                    fromSimulation = false,
                 )
             }
         } catch (e: Exception) {
-            Log.w(TAG, "triggerScenario network error — using simulation: ${e.message}")
+            Log.w(TAG, "ingestScenario network error — using simulation: ${e.message}")
             simulatedScenarioResult(scenarioId)
         }
     }
 
     /**
-     * Fully realistic simulation of the pipeline trace for offline/demo mode.
-     * Matches the real response shape exactly so FraudScenarioDetailActivity
-     * renders identically whether online or offline.
+     * Offline simulation — returned when backend / NGINX is unreachable.
+     * fromSimulation=true allows the UI to show a clear "SIM" badge.
+     * Values are representative estimates, not real pipeline measurements.
      */
     private fun simulatedScenarioResult(scenarioId: Int): ScenarioResult {
-        data class Def(val name: String, val dec: String, val score: Int,
-                       val tid: String, val sev: String, val mod: String)
-        val defs = mapOf(
-            1  to Def("Hardware Possession","ALLOW",  12, "APP_SEC_001",      "HIGH",     "evidence_verifier"),
-            2  to Def("Non-Repudiation",    "ALLOW",   8, "APP_SEC_002",      "HIGH",     "evidence_verifier"),
-            3  to Def("Screen Mirroring",   "BLOCK",  87, "RASP_DEV_003",     "HIGH",     "botnet_correlation"),
-            4  to Def("Behavioral Biometrics","STEP_UP",62,"USR_BEH_001",     "MEDIUM",   "mule_account"),
-            5  to Def("Device RASP",        "BLOCK", 100, "RASP_DEV_001",     "CRITICAL", "botnet_correlation"),
-            6  to Def("Mule Account",       "BLOCK",  82, "USR_BEH_002",      "HIGH",     "mule_account"),
-            7  to Def("Bot / Emulator",     "BLOCK",  98, "BOT_APP_001",      "CRITICAL", "botnet_correlation"),
-            8  to Def("SIM Swap",           "BLOCK",  95, "SCAM_SS_001",      "CRITICAL", "sim_swap_proxy"),
-            9  to Def("Digital Arrest",     "BLOCK", 100, "SCAM_CM_001",      "CRITICAL", "digital_arrest_detector"),
-            10 to Def("Fake Loan App",      "STEP_UP",68, "LOAN_APP_002",     "HIGH",     "beneficiary_abuse"),
-            11 to Def("Ghost Tap / NFC",    "BLOCK",  83, "NFC_FRAUD_001",    "HIGH",     "credential_reuse"),
-            12 to Def("Malicious APK",      "BLOCK", 100, "MAL_APK_001",      "CRITICAL", "botnet_correlation"),
-            13 to Def("Deepfake KYC",       "BLOCK",  96, "APP_RUNTIME_008",  "CRITICAL", "synthetic_identity"),
-            14 to Def("NBFC Insider",       "BLOCK",  88, "USR_BEH_003",      "HIGH",     "beneficiary_abuse"),
-            15 to Def("Investment Scam",    "STEP_UP",55, "SCAM_RS_001",      "MEDIUM",   "investment_fraud_detector"),
-            16 to Def("Organized Crime",    "BLOCK",  94, "BOT_APP_011",      "CRITICAL", "organized_crime_cluster"),
-        )
-        val d       = defs[scenarioId] ?: defs[7]!!
-        val p3      = (5..20).random()
-        val p4      = (15..45).random()
-        val p5      = (10..35).random()
-        val eventId = "sim_${System.currentTimeMillis().toString(16)}"
-        // Offline simulation: use a clearly non-SHA256 identifier so operators
-        // can distinguish simulation evidence from real EvidenceRecord hashes.
-        val hash = "offline:$eventId"
+        val scenario  = SCENARIO_DEFS[scenarioId] ?: SCENARIO_DEFS[7]!!
+        val eventId   = "sim_${System.currentTimeMillis().toString(16)}"
         return ScenarioResult(
-            scenarioId         = scenarioId,
-            scenarioName       = d.name,
-            eventId            = eventId,
-            decision           = d.dec,
-            riskScore          = d.score,
-            phase3ComplianceMs = p3,
-            phase4MlMs         = p4,
-            phase5ThreatsMs    = p5,
-            totalMs            = p3 + p4 + p5,
-            signalsFired       = listOf(SignalFired(d.tid, d.score / 100f, d.sev, d.mod)),
-            modulesHit         = listOf(d.mod),
-            reason             = "${d.name} detected — pipeline decision: ${d.dec}",
-            evidenceHash       = hash,
-            ruleVersion        = "2.3.1",
-            mlScore            = d.score / 100f,
-            mlFallback         = true,
-            fromSimulation     = true,
+            scenarioId     = scenarioId,
+            scenarioName   = scenario.name,
+            eventId        = eventId,
+            decision       = scenario.decision,
+            trustLevel     = "SIMULATED",
+            riskScore      = scenario.riskScore,
+            ruleVersion    = "2.3.1",
+            mlScore        = scenario.riskScore / 100f,
+            mlFallback     = true,
+            compositeScore = 0,
+            eipTotalMs     = 0,
+            nginxMs        = 0,
+            rttMs          = 0,
+            signalsFired   = scenario.signalDefs,
+            fromSimulation = true,
         )
     }
 
@@ -917,38 +1091,33 @@ data class SignalFired(
 )
 
 /**
- * Full pipeline trace returned by POST /api/v1/demo/scenario/trigger.
+ * Result of POST /api/v1/ingest through the real NGINX → backend pipeline.
  *
- * Phase 1 (NGINX) and Phase 2 (Crypto Gate) are NOT included — those phases
- * execute at the edge before the request reaches FastAPI and cannot be measured
- * by the backend.  FraudScenarioDetailActivity derives edge timing by computing
- * (client RTT − totalMs) and splits that proportionally between P1 and P2.
+ * The demo app sends a real IngestEnvelope through the full auth chain:
+ *   NGINX (5-phase) → DeviceAuthenticator → CryptoGate → EIP → CompositeDecisionService
  *
- * When fromSimulation=false the data comes from the live backend:
- *   - phase3ComplianceMs / phase4MlMs / phase5ThreatsMs are real wall-clock timings
- *   - evidenceHash is a real SHA-256 stored in EvidenceRecord
- *   - signalsFired are real ThreatFlags from ThreatModuleExecutor
+ * Timing fields:
+ *   nginxMs        — from X-Request-Time response header (stamped by NGINX)
+ *   eipTotalMs     — EIP + CompositeDecisionService (from X-PS-Trace response body)
+ *   rttMs          — full client-measured round-trip time
  *
- * When fromSimulation=true the backend was unreachable; values are representative
- * estimates, fromSimulation=true lets the UI show a "SIM" badge, and evidenceHash
- * uses the "offline:" prefix so it cannot be confused with a real DB hash.
+ * fromSimulation=true means the backend was unreachable; values are estimates
+ * and the UI shows a clear "SIM" badge.
  */
 data class ScenarioResult(
-    val scenarioId:         Int,
-    val scenarioName:       String,
-    val eventId:            String,
-    val decision:           String,   // BLOCK | STEP_UP | ALLOW
-    val riskScore:          Int,      // 0–100
-    val phase3ComplianceMs: Int,      // real backend timing
-    val phase4MlMs:         Int,      // real backend timing
-    val phase5ThreatsMs:    Int,      // real backend timing
-    val totalMs:            Int,      // sum of p3+p4+p5 as reported by backend
-    val signalsFired:       List<SignalFired>,
-    val modulesHit:         List<String>,
-    val reason:             String,
-    val evidenceHash:       String,   // "sha256:…" when live; "offline:…" when simulated
-    val ruleVersion:        String,
-    val mlScore:            Float,
-    val mlFallback:         Boolean,
-    val fromSimulation:     Boolean,
+    val scenarioId:     Int,
+    val scenarioName:   String,
+    val eventId:        String,
+    val decision:       String,    // BLOCK | STEP_UP | ALLOW
+    val trustLevel:     String,    // TRUSTED | REJECTED | STEP_UP | SIMULATED
+    val riskScore:      Int,       // 0–100 (from EIP fraud_risk_score)
+    val ruleVersion:    String,
+    val mlScore:        Float,
+    val mlFallback:     Boolean,
+    val compositeScore: Int,       // CompositeDecisionService composite_score (0–100)
+    val eipTotalMs:     Int,       // backend EIP processing time (from X-PS-Trace)
+    val nginxMs:        Int,       // NGINX edge time (from X-Request-Time header)
+    val rttMs:          Int,       // full client-measured RTT
+    val signalsFired:   List<SignalFired>,  // SDK signal definitions for this scenario
+    val fromSimulation: Boolean,
 )

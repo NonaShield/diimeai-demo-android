@@ -165,7 +165,7 @@ class FraudScenarioDetailActivity : AppCompatActivity() {
 
         // Call backend immediately on a background thread
         Thread {
-            val result = DiimeApiClient.triggerScenario(scenarioId = scenarioId)
+            val result = DiimeApiClient.ingestScenario(scenarioId = scenarioId)
             val rttMs  = (System.currentTimeMillis() - callStartMs).toInt()
             handler.post { renderPipelineResult(result, rttMs) }
         }.start()
