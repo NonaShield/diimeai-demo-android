@@ -95,10 +95,10 @@ object DiimeApiClient {
      */
     fun setSession(userId: String, deviceId: String, sessionId: String, jwt: String? = null) {
         SessionHolder.setSession(
-            userId    = userId,
-            deviceId  = deviceId,
-            sessionId = sessionId,
-            jwt       = jwt
+            uid = userId,
+            did = deviceId,
+            sid = sessionId,
+            jwt = jwt
         )
         Log.i(TAG, "Session set: userId=$userId deviceId=$deviceId")
     }
@@ -170,10 +170,10 @@ object DiimeApiClient {
                     // Inject real JWT into SessionHolder so PinningInterceptor
                     // attaches it as "Authorization: Bearer <jwt>" on every call.
                     SessionHolder.setSession(
-                        userId    = userId,
-                        deviceId  = deviceId,
-                        sessionId = sessionId,
-                        jwt       = jwt
+                        uid = userId,
+                        did = deviceId,
+                        sid = sessionId,
+                        jwt = jwt
                     )
                     Log.i(TAG, "Login success: userId=$userId sessionId=$sessionId")
                     LoginResult.Success(
