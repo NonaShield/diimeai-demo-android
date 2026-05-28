@@ -67,7 +67,7 @@ class SocDashboardActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnOpenGrafanaSoc).setOnClickListener {
             try {
                 startActivity(Intent(Intent.ACTION_VIEW,
-                    Uri.parse("http://localhost:3000/d/payshield")))
+                    Uri.parse("https://api.diimeai.com/dashboard/")))
             } catch (_: Exception) { /* offline demo — Grafana not available */ }
         }
 
