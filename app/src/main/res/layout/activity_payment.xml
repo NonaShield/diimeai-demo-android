@@ -480,6 +480,23 @@
             app:layout_constraintEnd_toEndOf="parent"
             android:layout_marginTop="12dp" />
 
+        <!-- UC-06: KYC Enrollment button — fires real mule account signal on 2nd+ enrollment -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnEnrollKyc"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:text="🪪  Enroll KYC (UC-06 Mule Demo)"
+            android:textSize="12sp"
+            android:textColor="#00CC55"
+            app:backgroundTint="#001A00"
+            app:strokeColor="#00CC55"
+            app:strokeWidth="1dp"
+            app:cornerRadius="10dp"
+            app:layout_constraintTop_toBottomOf="@id/btnViewDashboard"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="10dp" />
+
         <!-- Demo 5: Switch User button -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSwitchUser"
@@ -492,7 +509,7 @@
             app:strokeColor="#FFAA00"
             app:strokeWidth="1dp"
             app:cornerRadius="10dp"
-            app:layout_constraintTop_toBottomOf="@id/btnViewDashboard"
+            app:layout_constraintTop_toBottomOf="@id/btnEnrollKyc"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toStartOf="@id/btnLogout"
             android:layout_marginTop="10dp"
@@ -506,7 +523,7 @@
             android:textSize="13sp"
             android:textColor="#888888"
             app:backgroundTint="@android:color/transparent"
-            app:layout_constraintTop_toBottomOf="@id/btnViewDashboard"
+            app:layout_constraintTop_toBottomOf="@id/btnEnrollKyc"
             app:layout_constraintEnd_toEndOf="parent"
             android:layout_marginTop="10dp"
             android:layout_marginBottom="32dp" />

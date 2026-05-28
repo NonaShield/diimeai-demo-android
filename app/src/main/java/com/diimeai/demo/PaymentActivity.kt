@@ -110,6 +110,7 @@ class PaymentActivity : AppCompatActivity() {
         binding.btnSendPayment.setOnClickListener   { initiatePayment() }
         binding.btnViewDashboard.setOnClickListener { openDashboard() }
         binding.btnViewProof.setOnClickListener     { openReceipt() }
+        binding.btnEnrollKyc.setOnClickListener     { promptKycEnrollment() }
         binding.btnSwitchUser.setOnClickListener    { promptSwitchUser() }
         binding.btnLogout.setOnClickListener        { logout() }
     }
@@ -117,7 +118,18 @@ class PaymentActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateRiskBadge()
+        updateKycButtonLabel()
         handler.post(bioRefreshRunnable)
+    }
+
+    private fun updateKycButtonLabel() {
+        val count = DeviceSignalStore.getEnrollmentCount(this)
+        val nextAction = when {
+            count == 0 -> "baseline"
+            count == 1 -> "STEP_UP"
+            else       -> "BLOCK"
+        }
+        binding.btnEnrollKyc.text = "🪪  Enroll KYC  (degree=$count → next: $nextAction)"
     }
 
     override fun onPause() {
@@ -539,6 +551,119 @@ class PaymentActivity : AppCompatActivity() {
             .setPositiveButton("View Dashboard") { _, _ -> openDashboard() }
             .setNegativeButton("OK", null)
             .show()
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // UC-06: Mule Account — KYC Enrollment
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Prompt a KYC enrollment dialog for the mule account demo.
+     *
+     * Each enrollment increments [DeviceSignalStore.getEnrollmentCount] and sends
+     * the real device_account_degree to the backend via [DiimeApiClient.submitKyc].
+     *
+     * Investor flow:
+     *   Tap 1st time (as User A) → APPROVED, degree=1, baseline established
+     *   Switch User → tap 2nd time (as User B) → STEP_UP alert, degree=2, mule signal fired
+     *   Tap 3rd time (another switch) → BLOCK, degree=3, mule confirmed
+     *
+     * The demo values shown in the dialog are realistic but fabricated — DPDP compliant.
+     * Actual hashes of Aadhaar/PAN are sent (never raw values).
+     */
+    private fun promptKycEnrollment() {
+        val currentCount = DeviceSignalStore.getEnrollmentCount(this)
+        val deviceId = DiimeApp.enrollmentState?.deviceId ?: DiimeApp.keyManager.getStableDeviceId()
+
+        // Pre-fill demo KYC values that change with enrollment count for realism
+        val demoAadhaar = when (currentCount) {
+            0    -> "1234 5678 9012"
+            1    -> "9876 5432 1098"
+            else -> "1111 2222 3333"
+        }
+        val demoPan = when (currentCount) {
+            0    -> "ABCDE1234F"
+            1    -> "FGHIJ5678K"
+            else -> "LMNOP9012Q"
+        }
+        val demoName = when (currentCount) {
+            0    -> currentUserId
+            1    -> "Priya Sharma"
+            else -> "Ravi Kumar"
+        }
+
+        val muleWarning = when {
+            currentCount == 0 -> ""
+            currentCount == 1 -> "\n\n⚠️ 2nd enrollment on this device → STEP_UP expected"
+            else              -> "\n\n🔴 ${currentCount + 1}th enrollment on this device → BLOCK expected"
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("🪪  KYC Enrollment — UC-06 Mule Demo")
+            .setMessage(buildString {
+                append("Device enrollment count: $currentCount (this will be #${currentCount + 1})\n\n")
+                append("Demo identity:\n")
+                append("  Name:    $demoName\n")
+                append("  Aadhaar: $demoAadhaar (hashed before sending)\n")
+                append("  PAN:     $demoPan (hashed before sending)\n")
+                append(muleWarning)
+                append("\n\nDevice ID: ${deviceId.take(16)}…")
+            })
+            .setPositiveButton("Submit KYC") { _, _ ->
+                performKycEnrollment(demoAadhaar.replace(" ", ""), demoPan, deviceId)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun performKycEnrollment(aadhaar: String, pan: String, deviceId: String) {
+        setLoading(true)
+        binding.tvResult.visibility = View.GONE
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            val result = DiimeApiClient.submitKyc(aadhaar, pan, deviceId)
+            withContext(Dispatchers.Main) {
+                setLoading(false)
+                showKycResult(result)
+            }
+        }
+    }
+
+    private fun showKycResult(result: com.diimeai.demo.network.KycResult) {
+        val degree = result.enrollmentDegree
+
+        val (statusIcon, statusColor) = when (result.status) {
+            "APPROVED" -> "✅" to 0xFF00AA44.toInt()
+            "BLOCKED"  -> "🔴" to 0xFFDD2222.toInt()
+            "PENDING"  -> "⏳" to 0xFFFFAA00.toInt()
+            else       -> "⚠️" to 0xFFFF6600.toInt()
+        }
+
+        val muleSignal = when {
+            degree >= 3 -> "\n\n🔴 MULE ACCOUNT — BLOCK\ndevice_account_degree=$degree\nUSR_BEH_002 · CRITICAL — mule_account module\nLive SCAM signal sent to backend ✓"
+            degree == 2 -> "\n\n⚠️ MULE RISK — STEP_UP\ndevice_account_degree=$degree\nUSR_BEH_002 · HIGH — mule_account module\nLive STEP_UP signal sent to backend ✓"
+            else        -> "\n\n✅ First enrollment — baseline established\ndevice_account_degree=$degree\nSIM fingerprint captured ✓"
+        }
+
+        binding.tvResult.apply {
+            text = buildString {
+                append("$statusIcon  KYC ${result.status}\n\n")
+                append("KYC ID:  ${result.kycId.take(24)}…\n")
+                append("Risk:    ${result.riskScore}\n")
+                append("Reason:  ${result.reason}")
+                append(muleSignal)
+            }
+            setTextColor(when (result.status) {
+                "APPROVED" -> getColor(android.R.color.holo_green_dark)
+                "BLOCKED"  -> getColor(android.R.color.holo_red_dark)
+                else       -> getColor(android.R.color.holo_orange_dark)
+            })
+            visibility = View.VISIBLE
+        }
+
+        // Update KYC button label to show current enrollment count
+        val newCount = DeviceSignalStore.getEnrollmentCount(this)
+        binding.btnEnrollKyc.text = "🪪  Enroll KYC (degree=$newCount, next →${if (newCount >= 2) " BLOCK" else if (newCount == 1) " STEP_UP" else " baseline"})"
     }
 
     private fun promptSwitchUser() {
