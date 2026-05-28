@@ -12,6 +12,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.diimeai.demo.network.DecisionRecord
+import com.diimeai.demo.network.DashboardStats
 import com.diimeai.demo.network.DiimeApiClient
 import com.diimeai.demo.network.ThreatEvent
 import kotlin.random.Random
@@ -109,7 +110,7 @@ class SocDashboardActivity : AppCompatActivity() {
 
     // ── Stats ──────────────────────────────────────────────────────────────────
 
-    private fun applyRealStats(stats: DiimeApiClient.DashboardStats) {
+    private fun applyRealStats(stats: DashboardStats) {
         val blockRate = if (stats.totalDecisions > 0)
             100.0 * stats.blockedCount / stats.totalDecisions else 0.0
         tvStatTotal.text     = stats.totalDecisions.toString()

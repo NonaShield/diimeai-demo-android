@@ -104,7 +104,7 @@ object DiimeApiClient {
     }
 
     fun clearSession() {
-        SessionHolder.clear()
+        SessionHolder.clearSession()
     }
 
     // -------------------------------------------------------------------------
