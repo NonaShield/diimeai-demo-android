@@ -600,26 +600,39 @@ object DiimeApiClient {
                     }
                 }
 
-                val trace  = j.optJSONObject("pipeline_trace")
-                val eipMs  = trace?.optInt("eip_total_ms", 0) ?: 0
-                val cScore = trace?.optInt("composite_score", 0) ?: 0
+                val trace         = j.optJSONObject("pipeline_trace")
+                val eipMs         = trace?.optInt("eip_total_ms", 0) ?: 0
+                val cScore        = trace?.optInt("composite_score", 0) ?: 0
+                val p3Ms          = trace?.optInt("compliance_ms",  0) ?: 0
+                val p4Ms          = trace?.optInt("ml_ms",          0) ?: 0
+                val p5Ms          = trace?.optInt("threat_ms",      0) ?: 0
+                val modsArr       = trace?.optJSONArray("modules_hit")
+                val modsList      = (0 until (modsArr?.length() ?: 0)).map { modsArr!!.getString(it) }
+                val evHash        = j.optString("evidence_hash", "")
+                val decisionReason = j.optString("reason", "")
 
                 ScenarioResult(
-                    scenarioId     = scenarioId,
-                    scenarioName   = scenario.name,
-                    eventId        = j.optString("event_id", ""),
-                    decision       = decision,
-                    trustLevel     = j.optString("trust_level", ""),
-                    riskScore      = j.optInt("risk_score", scenario.riskScore),
-                    ruleVersion    = j.optString("rule_version", ""),
-                    mlScore        = j.optDouble("ml_score", 0.0).toFloat(),
-                    mlFallback     = j.optBoolean("ml_fallback", false),
-                    compositeScore = cScore,
-                    eipTotalMs     = eipMs,
-                    nginxMs        = nginxMs,
-                    rttMs          = rttMs,
-                    signalsFired   = scenario.signalDefs,
-                    fromSimulation = false,
+                    scenarioId         = scenarioId,
+                    scenarioName       = scenario.name,
+                    eventId            = j.optString("event_id", ""),
+                    decision           = decision,
+                    trustLevel         = j.optString("trust_level", ""),
+                    riskScore          = j.optInt("risk_score", scenario.riskScore),
+                    ruleVersion        = j.optString("rule_version", ""),
+                    mlScore            = j.optDouble("ml_score", 0.0).toFloat(),
+                    mlFallback         = j.optBoolean("ml_fallback", false),
+                    compositeScore     = cScore,
+                    eipTotalMs         = eipMs,
+                    nginxMs            = nginxMs,
+                    rttMs              = rttMs,
+                    signalsFired       = scenario.signalDefs,
+                    fromSimulation     = false,
+                    phase3ComplianceMs = p3Ms,
+                    phase4MlMs         = p4Ms,
+                    phase5ThreatsMs    = p5Ms,
+                    modulesHit         = modsList,
+                    evidenceHash       = evHash,
+                    reason             = decisionReason,
                 )
             }
         } catch (e: Exception) {
@@ -636,22 +649,39 @@ object DiimeApiClient {
     private fun simulatedScenarioResult(scenarioId: Int): ScenarioResult {
         val scenario  = SCENARIO_DEFS[scenarioId] ?: SCENARIO_DEFS[7]!!
         val eventId   = "sim_${System.currentTimeMillis().toString(16)}"
+        val simReason = when (scenario.decision) {
+            "BLOCK"   -> "Threat signals confirmed — request blocked by security policy"
+            "STEP_UP" -> "Elevated risk score — step-up authentication required"
+            else      -> "No active threats — request allowed"
+        }
+        val simModules = when {
+            scenario.decision == "BLOCK"   -> listOf("compliance_evaluator", "ml_engine", "threat_executor", "botnet_correlation")
+            scenario.decision == "STEP_UP" -> listOf("compliance_evaluator", "ml_engine", "threat_executor")
+            else                           -> listOf("compliance_evaluator", "ml_engine")
+        }
+        val simEipMs = (55..95).random()
         return ScenarioResult(
-            scenarioId     = scenarioId,
-            scenarioName   = scenario.name,
-            eventId        = eventId,
-            decision       = scenario.decision,
-            trustLevel     = "SIMULATED",
-            riskScore      = scenario.riskScore,
-            ruleVersion    = "2.3.1",
-            mlScore        = scenario.riskScore / 100f,
-            mlFallback     = true,
-            compositeScore = 0,
-            eipTotalMs     = 0,
-            nginxMs        = 0,
-            rttMs          = 0,
-            signalsFired   = scenario.signalDefs,
-            fromSimulation = true,
+            scenarioId         = scenarioId,
+            scenarioName       = scenario.name,
+            eventId            = eventId,
+            decision           = scenario.decision,
+            trustLevel         = "SIMULATED",
+            riskScore          = scenario.riskScore,
+            ruleVersion        = "2.3.1",
+            mlScore            = scenario.riskScore / 100f,
+            mlFallback         = true,
+            compositeScore     = 0,
+            eipTotalMs         = simEipMs,
+            nginxMs            = 0,
+            rttMs              = simEipMs + (18..35).random(),
+            signalsFired       = scenario.signalDefs,
+            fromSimulation     = true,
+            phase3ComplianceMs = (22..44).random(),
+            phase4MlMs         = (14..32).random(),
+            phase5ThreatsMs    = (8..18).random(),
+            modulesHit         = simModules,
+            evidenceHash       = "sha256:${eventId.hashCode().toUInt().toString(16).padStart(16, '0')}",
+            reason             = simReason,
         )
     }
 
@@ -1105,19 +1135,32 @@ data class SignalFired(
  * and the UI shows a clear "SIM" badge.
  */
 data class ScenarioResult(
-    val scenarioId:     Int,
-    val scenarioName:   String,
-    val eventId:        String,
-    val decision:       String,    // BLOCK | STEP_UP | ALLOW
-    val trustLevel:     String,    // TRUSTED | REJECTED | STEP_UP | SIMULATED
-    val riskScore:      Int,       // 0–100 (from EIP fraud_risk_score)
-    val ruleVersion:    String,
-    val mlScore:        Float,
-    val mlFallback:     Boolean,
-    val compositeScore: Int,       // CompositeDecisionService composite_score (0–100)
-    val eipTotalMs:     Int,       // backend EIP processing time (from X-PS-Trace)
-    val nginxMs:        Int,       // NGINX edge time (from X-Request-Time header)
-    val rttMs:          Int,       // full client-measured RTT
-    val signalsFired:   List<SignalFired>,  // SDK signal definitions for this scenario
-    val fromSimulation: Boolean,
-)
+    val scenarioId:         Int,
+    val scenarioName:       String,
+    val eventId:            String,
+    val decision:           String,    // BLOCK | STEP_UP | ALLOW
+    val trustLevel:         String,    // TRUSTED | REJECTED | STEP_UP | SIMULATED
+    val riskScore:          Int,       // 0–100 (from EIP fraud_risk_score)
+    val ruleVersion:        String,
+    val mlScore:            Float,
+    val mlFallback:         Boolean,
+    val compositeScore:     Int,       // CompositeDecisionService composite_score (0–100)
+    val eipTotalMs:         Int,       // backend EIP processing time (from X-PS-Trace)
+    val nginxMs:            Int,       // NGINX edge time (from X-Request-Time header)
+    val rttMs:              Int,       // full client-measured RTT
+    val signalsFired:       List<SignalFired>,  // SDK signal definitions for this scenario
+    val fromSimulation:     Boolean,
+    // Phase breakdown timings (ms) — parsed from pipeline_trace or estimated in simulation
+    val phase3ComplianceMs: Int             = 0,
+    val phase4MlMs:         Int             = 0,
+    val phase5ThreatsMs:    Int             = 0,
+    // Modules that ran in the backend pipeline (for UI display)
+    val modulesHit:         List<String>    = emptyList(),
+    // SHA-256 evidence chain hash returned by the backend
+    val evidenceHash:       String          = "",
+    // Human-readable reason for the decision
+    val reason:             String          = "",
+) {
+    /** Alias for backward compatibility — total backend pipeline time = eipTotalMs. */
+    val totalMs: Int get() = eipTotalMs
+}
