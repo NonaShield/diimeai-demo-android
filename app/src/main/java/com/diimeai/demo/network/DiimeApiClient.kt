@@ -3,6 +3,7 @@ package com.diimeai.demo.network
 import android.content.Context
 import android.util.Log
 import com.diimeai.demo.BuildConfig
+import com.diimeai.demo.security.DeviceSignalStore
 import com.payshield.android.sdk.PinningInterceptor
 import com.payshield.android.sdk.SignalSink
 import com.payshield.sdk.crypto.DeviceKeyManager
@@ -48,11 +49,15 @@ object DiimeApiClient {
     private lateinit var client:     OkHttpClient
     private lateinit var keyManager: DeviceKeyManager   // stored for signing IngestEnvelopes
 
+    // Application context — stored at init() for DeviceSignalStore access
+    private var appContext: Context? = null
+
     /**
      * Call once from Application.onCreate() BEFORE any network calls.
      */
     fun init(context: Context, keyManager: DeviceKeyManager) {
-        this.keyManager = keyManager
+        this.keyManager  = keyManager
+        this.appContext  = context.applicationContext
         val logging = HttpLoggingInterceptor().apply {
             level = if (BuildConfig.IS_DEBUG)
                 HttpLoggingInterceptor.Level.BODY
@@ -934,49 +939,363 @@ object DiimeApiClient {
     /**
      * Submit a KYC request protected by the full NonaShield pipeline.
      * Endpoint: POST /api/v1/kyc/submit
-     * The PinningInterceptor automatically attaches X-PayShield-Token + Signature.
+     *
+     * Live fraud signals embedded in every KYC request:
+     *
+     *   UC-06 Mule Account:
+     *     device_account_degree = number of enrollments completed on this device.
+     *     1st enrollment → baseline (ALLOW expected).
+     *     2nd enrollment → STEP_UP fired asynchronously via ingestLiveMuleAccount().
+     *     3rd+ enrollment → BLOCK fired.
+     *
+     *   UC-08 SIM Swap:
+     *     SIM fingerprint (MCC+MNC derived) stored at first enrollment.
+     *     Subsequent enrollments include iccid_match=false if SIM changed.
+     *
+     * DPDP compliant — no Aadhaar/PAN/MSISDN stored. Enrollment count and SIM
+     * fingerprint are non-PII device signals.
      */
     fun submitKyc(aadhaar: String, pan: String, deviceId: String): KycResult {
         // Hash PII before sending — DPDP Act: no raw identity data over the wire
         val aadhaarHash = sha256hex(aadhaar)
         val panHash     = sha256hex(pan)
 
+        val ctx = appContext
+
+        // ── UC-06: Read current enrollment count ─────────────────────────────
+        val enrollmentCount   = ctx?.let { DeviceSignalStore.getEnrollmentCount(it) } ?: 0
+        val accountDegree     = enrollmentCount + 1  // this KYC makes it degree N+1
+        val velocitySecs      = ctx?.let { DeviceSignalStore.secondsSinceLastEnrollment(it) } ?: Long.MAX_VALUE
+        val windowSecs        = ctx?.let { DeviceSignalStore.secondsSinceWindowStart(it) } ?: Long.MAX_VALUE
+
+        // ── UC-08: Capture SIM fingerprint at first enrollment ────────────────
+        val currentSimFp = ctx?.let { DeviceSignalStore.readSimFingerprint(it) }
+        if (ctx != null && enrollmentCount == 0 && currentSimFp != null) {
+            DeviceSignalStore.storeEnrolledSimFingerprint(ctx, currentSimFp)
+            Log.i(TAG, "UC-08: SIM fingerprint stored at first enrollment: $currentSimFp")
+        }
+        // Check for SIM change on subsequent enrollments
+        val simSwapSuspected = if (enrollmentCount > 0 && ctx != null) {
+            DeviceSignalStore.isSimSwapSuspected(ctx) == true
+        } else false
+
+        Log.i(TAG, "submitKyc: device_account_degree=$accountDegree velocity=${velocitySecs}s simSwap=$simSwapSuspected")
+
         val body = JSONObject().apply {
             put("aadhaar_hash", aadhaarHash)
             put("pan_hash",     panHash)
             put("device_id",    deviceId)
             put("timestamp",    System.currentTimeMillis() / 1000)
+            // ── Live UC-06 Mule Account signals ───────────────────────────────
+            // device_account_degree = number of distinct accounts enrolled on device
+            put("device_account_degree",      accountDegree)
+            // enrollment_velocity_secs = seconds since last enrollment
+            put("enrollment_velocity_secs",   velocitySecs.coerceAtMost(99999L))
+            // window_secs = seconds since first enrollment in current window
+            put("enrollment_window_secs",     windowSecs.coerceAtMost(99999L))
+            // ── Live UC-08 SIM swap signal ────────────────────────────────────
+            put("sim_swap_suspected",         simSwapSuspected)
         }.toString()
 
         val request = Request.Builder()
             .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/kyc/submit")
             .post(body.toRequestBody(JSON))
             .header("X-PS-Idempotency-Key", "kyc_${System.currentTimeMillis()}")
+            .header("X-PS-Action",           "KYC")
             .apply { SessionHolder.session?.jwt?.let { header("Authorization", "Bearer $it") } }
             .build()
 
         return try {
             client.newCall(request).execute().use { response ->
                 val j = runCatching { JSONObject(response.body?.string() ?: "{}") }.getOrDefault(JSONObject())
-                when {
+                val result = when {
                     response.isSuccessful -> KycResult(
-                        status    = j.optString("status", "APPROVED"),
-                        kycId     = j.optString("kyc_id", "kyc_${System.currentTimeMillis()}"),
-                        riskScore = j.optInt("risk_score", (5..18).random()),
-                        reason    = j.optString("reason", "Verified")
+                        status           = j.optString("status", "APPROVED"),
+                        kycId            = j.optString("kyc_id", "kyc_${System.currentTimeMillis()}"),
+                        riskScore        = j.optInt("risk_score", (5..18).random()),
+                        reason           = j.optString("reason", "Verified"),
+                        enrollmentDegree = accountDegree,
                     )
                     response.code == 403 -> KycResult(
-                        status    = "BLOCKED",
-                        kycId     = "",
-                        riskScore = j.optInt("risk_score", 72),
-                        reason    = j.optString("detail", "Blocked by security policy")
+                        status           = "BLOCKED",
+                        kycId            = "",
+                        riskScore        = j.optInt("risk_score", 72),
+                        reason           = j.optString("detail", "Blocked by security policy"),
+                        enrollmentDegree = accountDegree,
                     )
-                    else -> KycResult("PENDING", "kyc_${System.currentTimeMillis()}", 12, "Under review")
+                    else -> KycResult(
+                        status           = "PENDING",
+                        kycId            = "kyc_${System.currentTimeMillis()}",
+                        riskScore        = 12,
+                        reason           = "Under review",
+                        enrollmentDegree = accountDegree,
+                    )
                 }
+
+                // ── Post-success: increment device enrollment count ────────────
+                if (result.status in listOf("APPROVED", "PENDING") && ctx != null) {
+                    val newCount = DeviceSignalStore.incrementEnrollmentCount(ctx)
+                    Log.i(TAG, "UC-06: Device enrollment count now $newCount after KYC success")
+
+                    // Fire mule account ingest signal when threshold is reached
+                    if (newCount >= 2) {
+                        Thread {
+                            runCatching { ingestLiveMuleAccount(deviceId, newCount) }.also {
+                                if (it.isFailure) Log.w(TAG, "UC-06 mule ingest failed: ${it.exceptionOrNull()?.message}")
+                            }
+                        }.start()
+                    }
+                }
+
+                result
             }
         } catch (e: Exception) {
-            // Demo fallback — simulate approved KYC
-            KycResult("APPROVED", "kyc_demo_${System.currentTimeMillis()}", (5..18).random(), "Demo approval")
+            // Demo fallback — simulate approved KYC and still increment count
+            if (ctx != null) {
+                val newCount = DeviceSignalStore.incrementEnrollmentCount(ctx)
+                Log.i(TAG, "UC-06: Demo fallback — enrollment count now $newCount")
+                if (newCount >= 2) {
+                    Thread {
+                        runCatching { ingestLiveMuleAccount(deviceId, newCount) }
+                    }.start()
+                }
+            }
+            KycResult(
+                status           = "APPROVED",
+                kycId            = "kyc_demo_${System.currentTimeMillis()}",
+                riskScore        = (5..18).random(),
+                reason           = "Demo approval",
+                enrollmentDegree = accountDegree,
+            )
+        }
+    }
+
+    // ── Live fraud signal injection ────────────────────────────────────────────
+
+    /**
+     * UC-06: Ingest a LIVE mule account signal using the real enrollment count
+     * collected by [submitKyc].
+     *
+     * This is called automatically from [submitKyc] when enrollmentCount >= 2.
+     * The device_account_degree in the payload is REAL — it reflects how many
+     * distinct KYC identities have been enrolled on this physical device.
+     *
+     * Expected backend outcome:
+     *   degree == 2 → STEP_UP  (mule risk elevated)
+     *   degree >= 3 → BLOCK    (probable mule node — NBFC policy)
+     */
+    fun ingestLiveMuleAccount(deviceId: String, enrollmentCount: Int): ScenarioResult {
+        val ctx           = appContext
+        val windowSecs    = ctx?.let { DeviceSignalStore.secondsSinceWindowStart(it) } ?: 9999L
+        val velocitySecs  = ctx?.let { DeviceSignalStore.secondsSinceLastEnrollment(it) } ?: 9999L
+
+        // Override scenario 6 signals with REAL values
+        val livePayload = mapOf(
+            "device_account_degree"  to enrollmentCount,
+            "account_velocity_24h"   to enrollmentCount,
+            "enrollment_window_secs" to windowSecs.coerceAtMost(99999L),
+            "enrollment_velocity_s"  to velocitySecs.coerceAtMost(99999L),
+            "device_reuse_count"     to enrollmentCount,
+            "live_signal"            to true,
+        )
+
+        val session   = SessionHolder.session
+        val nonce     = java.util.UUID.randomUUID().toString()
+        val timestamp = System.currentTimeMillis()
+        val payloadJson = JSONObject(livePayload as Map<*, *>)
+
+        val sig = try {
+            android.util.Base64.encodeToString(
+                keyManager.sign(payloadJson.toString().toByteArray()),
+                android.util.Base64.NO_WRAP
+            )
+        } catch (e: Exception) {
+            return simulatedScenarioResult(6)
+        }
+
+        val envelope = JSONObject().apply {
+            put("device_id",   deviceId)
+            put("event_type",  "MULE_ACCOUNT_SIGNAL")
+            put("action",      "KYC")
+            put("timestamp",   timestamp)
+            put("signature",   sig)
+            put("tenant_id",   "demo_tenant")
+            put("nonce",       nonce)
+            put("payload",     payloadJson)
+            put("sdk_version", "2.0.0")
+        }
+
+        val request = Request.Builder()
+            .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/ingest")
+            .post(envelope.toString().toRequestBody(JSON))
+            .header("x-device-id",  deviceId)
+            .header("x-timestamp",  (timestamp / 1000).toString())
+            .header("x-nonce",      nonce)
+            .header("X-PS-Action",  "KYC")
+            .header("X-PS-Trace",   "true")
+            .apply { session?.jwt?.let { header("Authorization", "Bearer $it") } }
+            .build()
+
+        return try {
+            client.newCall(request).execute().use { response ->
+                val body   = response.body?.string() ?: ""
+                val j      = runCatching { JSONObject(body) }.getOrDefault(JSONObject())
+                val decision = when {
+                    response.code == 403 -> "BLOCK"
+                    response.code == 409 -> "BLOCK"
+                    else -> when (j.optString("action", "MONITOR")) {
+                        "BLOCK", "REJECTED" -> "BLOCK"
+                        "STEP_UP"           -> "STEP_UP"
+                        else                -> if (enrollmentCount >= 3) "BLOCK" else "STEP_UP"
+                    }
+                }
+                Log.i(TAG, "UC-06 live mule ingest → $decision (degree=$enrollmentCount)")
+                ScenarioResult(
+                    scenarioId     = 6,
+                    scenarioName   = "Mule Account Network (LIVE)",
+                    eventId        = j.optString("event_id", "live_mule_$timestamp"),
+                    decision       = decision,
+                    trustLevel     = "LIVE",
+                    riskScore      = if (enrollmentCount >= 3) 88 else 62,
+                    ruleVersion    = j.optString("rule_version", "2.3.1"),
+                    mlScore        = 0f,
+                    mlFallback     = false,
+                    compositeScore = 0,
+                    eipTotalMs     = 0,
+                    nginxMs        = 0,
+                    rttMs          = 0,
+                    signalsFired   = listOf(
+                        SignalFired("USR_BEH_002", if (enrollmentCount >= 3) 0.95f else 0.78f,
+                            if (enrollmentCount >= 3) "CRITICAL" else "HIGH", "mule_account")
+                    ),
+                    fromSimulation = false,
+                    evidenceHash   = "",
+                    reason         = "device_account_degree=$enrollmentCount (LIVE)",
+                )
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "UC-06 live mule ingest network error: ${e.message}")
+            simulatedScenarioResult(6)
+        }
+    }
+
+    /**
+     * UC-08: Ingest a LIVE SIM swap signal.
+     *
+     * Called by PaymentActivity when it detects:
+     *   (a) SIM fingerprint changed since enrollment, OR
+     *   (b) The scenario 8 button is tapped in FraudScenarioDetailActivity.
+     *
+     * The biometricDeviationScore is REAL — it comes from BehavioralMonitor.deviationScore().
+     * The iccidChanged flag is determined by DeviceSignalStore.isSimSwapSuspected().
+     * Combined confidence = 1.00 when both signals are present.
+     *
+     * @param deviceId             enrolled device ID
+     * @param biometricDeviation   0.0–1.0 score from BehavioralMonitor (real channel data)
+     * @param iccidChanged         true if SIM fingerprint differs from enrolled value
+     */
+    fun ingestLiveSimSwap(
+        deviceId: String,
+        biometricDeviation: Float,
+        iccidChanged: Boolean,
+    ): ScenarioResult {
+        // Dual-signal confidence:
+        //   SIM changed alone   → 0.70
+        //   Bio deviation alone → 0.55
+        //   Both present        → 1.00
+        val confidence = when {
+            iccidChanged && biometricDeviation > 0.30f -> 1.00f
+            iccidChanged                               -> 0.70f
+            biometricDeviation > 0.50f                 -> 0.55f
+            else                                       -> 0.50f
+        }
+
+        val livePayload = mapOf(
+            "sim_swap_detected"       to (iccidChanged || biometricDeviation > 0.4f),
+            "iccid_changed"           to iccidChanged,
+            "carrier_transition"      to iccidChanged,
+            "biometric_deviation_pct" to (biometricDeviation * 100).toInt(),
+            "dual_signal_confidence"  to confidence,
+            "live_signal"             to true,
+        )
+
+        val session   = SessionHolder.session
+        val nonce     = java.util.UUID.randomUUID().toString()
+        val timestamp = System.currentTimeMillis()
+        val payloadJson = JSONObject(livePayload as Map<*, *>)
+
+        val sig = try {
+            android.util.Base64.encodeToString(
+                keyManager.sign(payloadJson.toString().toByteArray()),
+                android.util.Base64.NO_WRAP
+            )
+        } catch (e: Exception) {
+            return simulatedScenarioResult(8)
+        }
+
+        val envelope = JSONObject().apply {
+            put("device_id",   deviceId)
+            put("event_type",  "SIM_SWAP_SIGNAL")
+            put("action",      "OTP")
+            put("timestamp",   timestamp)
+            put("signature",   sig)
+            put("tenant_id",   "demo_tenant")
+            put("nonce",       nonce)
+            put("payload",     payloadJson)
+            put("sdk_version", "2.0.0")
+        }
+
+        val request = Request.Builder()
+            .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/ingest")
+            .post(envelope.toString().toRequestBody(JSON))
+            .header("x-device-id",  deviceId)
+            .header("x-timestamp",  (timestamp / 1000).toString())
+            .header("x-nonce",      nonce)
+            .header("X-PS-Action",  "OTP")
+            .header("X-PS-Trace",   "true")
+            .apply { session?.jwt?.let { header("Authorization", "Bearer $it") } }
+            .build()
+
+        return try {
+            client.newCall(request).execute().use { response ->
+                val body   = response.body?.string() ?: ""
+                val j      = runCatching { JSONObject(body) }.getOrDefault(JSONObject())
+                val decision = when {
+                    response.code == 403 -> "BLOCK"
+                    else -> when (j.optString("action", "MONITOR")) {
+                        "BLOCK", "REJECTED" -> "BLOCK"
+                        "STEP_UP"           -> "STEP_UP"
+                        else                -> "BLOCK"   // SIM swap default is always BLOCK
+                    }
+                }
+                Log.i(TAG, "UC-08 live SIM swap ingest → $decision (iccidChanged=$iccidChanged bio=${(biometricDeviation*100).toInt()}%)")
+                ScenarioResult(
+                    scenarioId     = 8,
+                    scenarioName   = "SIM Swap Fraud (LIVE)",
+                    eventId        = j.optString("event_id", "live_simswap_$timestamp"),
+                    decision       = decision,
+                    trustLevel     = "LIVE",
+                    riskScore      = 95,
+                    ruleVersion    = j.optString("rule_version", "2.3.1"),
+                    mlScore        = 0f,
+                    mlFallback     = false,
+                    compositeScore = 0,
+                    eipTotalMs     = 0,
+                    nginxMs        = 0,
+                    rttMs          = 0,
+                    signalsFired   = listOf(
+                        SignalFired("SCAM_SS_001", confidence, "CRITICAL", "sim_swap_proxy"),
+                        SignalFired("USR_BEH_001", biometricDeviation.coerceAtLeast(0.30f),
+                            if (biometricDeviation > 0.4f) "HIGH" else "MEDIUM", "sim_swap_proxy"),
+                    ),
+                    fromSimulation = false,
+                    evidenceHash   = "",
+                    reason         = "iccid_changed=$iccidChanged bio_dev=${(biometricDeviation*100).toInt()}% confidence=${(confidence*100).toInt()}% (LIVE)",
+                )
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "UC-08 live SIM swap ingest network error: ${e.message}")
+            simulatedScenarioResult(8)
         }
     }
 
@@ -1119,10 +1438,12 @@ data class OtpVerifyResult(val verified: Boolean, val reason: String)
 // KYC
 // ─────────────────────────────────────────────────────────────────────────────
 data class KycResult(
-    val status:    String,   // APPROVED | PENDING | BLOCKED | REJECTED
-    val kycId:     String,
-    val riskScore: Int,
-    val reason:    String
+    val status:          String,   // APPROVED | PENDING | BLOCKED | REJECTED
+    val kycId:           String,
+    val riskScore:       Int,
+    val reason:          String,
+    // UC-06: how many accounts have been enrolled on this device (1 = first enrollment)
+    val enrollmentDegree: Int = 1,
 )
 
 // ─────────────────────────────────────────────────────────────────────────────

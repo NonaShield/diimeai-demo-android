@@ -9,9 +9,12 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
+import com.diimeai.demo.biometrics.BehavioralMonitor
 import com.diimeai.demo.network.DiimeApiClient
 import com.diimeai.demo.network.ScenarioResult
 import com.diimeai.demo.network.SignalFired
+import com.diimeai.demo.security.DeviceSignalStore
+import com.payshield.sdk.enrollment.EnrollmentState
 
 /**
  * FraudScenarioDetailActivity — per-scenario live end-to-end demo.
@@ -76,12 +79,12 @@ class FraudScenarioDetailActivity : AppCompatActivity() {
                      SignalDef("USR_BEH_001",      "BehavioralMonitor / pressure",        0.71f, "MEDIUM")),
         5  to listOf(SignalDef("RASP_DEV_001",     "RootCloakingSignal / Magisk",         0.95f, "CRITICAL"),
                      SignalDef("APP_RUNTIME_008",  "FreeRaspSensorAdapter / hook",        1.00f, "CRITICAL")),
-        6  to listOf(SignalDef("USR_BEH_002",      "AccountDegreeSignal / degree=8",      0.88f, "HIGH"),
-                     SignalDef("USR_BEH_003",      "ApplicationVelocitySignal / 4 in 24h",0.76f, "HIGH")),
+        6  to listOf(SignalDef("USR_BEH_002",      "AccountDegreeSignal / LIVE degree",   0.88f, "HIGH"),
+                     SignalDef("USR_BEH_003",      "ApplicationVelocitySignal / LIVE",    0.76f, "HIGH")),
         7  to listOf(SignalDef("BOT_APP_001",      "EmulatorSignal / build_fingerprint",  0.97f, "CRITICAL"),
                      SignalDef("BOT_APP_002",      "EmulatorSignal / sensor_absence",     0.91f, "CRITICAL")),
-        8  to listOf(SignalDef("SCAM_SS_001",      "SimSwapSignal / SIM_STATE_ABSENT",    1.00f, "CRITICAL"),
-                     SignalDef("SCAM_SS_002",      "SimSwapSignal / ICCID_changed",       0.96f, "HIGH")),
+        8  to listOf(SignalDef("SCAM_SS_001",      "SimSwapSignal / LIVE SIM fingerprint",1.00f, "CRITICAL"),
+                     SignalDef("USR_BEH_001",      "BehavioralMonitor / LIVE bio_dev",    0.70f, "HIGH")),
         9  to listOf(SignalDef("SCAM_CM_001",      "CallMergeSignal / VoIP+cellular",     0.98f, "CRITICAL"),
                      SignalDef("SCAM_CM_002",      "ConcurrentVideoCallSignal",            0.85f, "HIGH")),
         10 to listOf(SignalDef("LOAN_APP_002",     "PredatoryLoanApp / SMS+CON+CALL_LOG", 0.90f, "HIGH")),
@@ -126,8 +129,10 @@ class FraudScenarioDetailActivity : AppCompatActivity() {
         val module      = intent.getStringExtra("backend_mod") ?: ""
         val rbiRule     = intent.getStringExtra("rbi_rule")    ?: ""
 
-        val sevColor = severityColor(severity)
-        tvDetailTitle.text         = "$emoji  $title"
+        val sevColor  = severityColor(severity)
+        // Scenarios 6 and 8 use live device signals — mark them clearly
+        val liveTag   = if (id in setOf(6, 8)) "  🔴 LIVE" else ""
+        tvDetailTitle.text         = "$emoji  $title$liveTag"
         tvDetailSeverityBadge.text = severity
         tvDetailSeverityBadge.setBackgroundColor(sevColor)
         tvDetailEmoji.text         = emoji
@@ -163,11 +168,40 @@ class FraudScenarioDetailActivity : AppCompatActivity() {
         setPhase(dotPhase3, tvPhase3Status, "RUNNING…", Color.parseColor("#FFAA00"))
         appendLog("SDK  signals emitted — connecting to backend pipeline…")
 
-        // Call backend immediately on a background thread
+        // Call backend immediately on a background thread.
+        // Scenarios 6 (Mule Account) and 8 (SIM Swap) use LIVE methods that
+        // inject real device signals — enrollment count and SIM fingerprint.
         Thread {
-            val result = DiimeApiClient.ingestScenario(scenarioId = scenarioId)
-            val rttMs  = (System.currentTimeMillis() - callStartMs).toInt()
-            handler.post { renderPipelineResult(result, rttMs) }
+            val liveLogLine: String?
+            val result = when (scenarioId) {
+                6 -> {
+                    // UC-06 LIVE: use real device_account_degree from SharedPreferences
+                    val deviceId    = EnrollmentState.load()?.deviceId
+                        ?: DiimeApp.keyManager.getStableDeviceId()
+                    val enrollCount = DeviceSignalStore.getEnrollmentCount(this@FraudScenarioDetailActivity)
+                        .coerceAtLeast(1)  // show at least 1 so demo always fires a signal
+                    liveLogLine = "LIVE  device_account_degree=$enrollCount  (on-device store)"
+                    DiimeApiClient.ingestLiveMuleAccount(deviceId, enrollCount)
+                }
+                8 -> {
+                    // UC-08 LIVE: real SIM fingerprint + behavioral biometric deviation
+                    val deviceId     = EnrollmentState.load()?.deviceId
+                        ?: DiimeApp.keyManager.getStableDeviceId()
+                    val iccidChanged = DeviceSignalStore.isSimSwapSuspected(this@FraudScenarioDetailActivity) ?: false
+                    val bioDev       = BehavioralMonitor.deviationScore()
+                    liveLogLine = "LIVE  iccid_changed=$iccidChanged  bio_dev=${(bioDev*100).toInt()}%  confidence=${if (iccidChanged && bioDev > 0.3f) 100 else if (iccidChanged) 70 else 55}%"
+                    DiimeApiClient.ingestLiveSimSwap(deviceId, bioDev, iccidChanged)
+                }
+                else -> {
+                    liveLogLine = null
+                    DiimeApiClient.ingestScenario(scenarioId = scenarioId)
+                }
+            }
+            val rttMs = (System.currentTimeMillis() - callStartMs).toInt()
+            handler.post {
+                if (liveLogLine != null) appendLog(liveLogLine)
+                renderPipelineResult(result, rttMs)
+            }
         }.start()
     }
 

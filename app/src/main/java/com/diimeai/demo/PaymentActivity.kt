@@ -20,6 +20,7 @@ import com.diimeai.demo.databinding.ActivityPaymentBinding
 import com.diimeai.demo.network.DiimeApiClient
 import com.diimeai.demo.network.EvidenceReceipt
 import com.diimeai.demo.network.PaymentResult
+import com.diimeai.demo.security.DeviceSignalStore
 import com.payshield.android.edge.EdgeRiskEnforcer
 import com.payshield.sdk.enrollment.EnrollmentState
 import kotlinx.coroutines.Dispatchers
@@ -240,6 +241,24 @@ class PaymentActivity : AppCompatActivity() {
             return
         }
 
+        // ── UC-08 LIVE: SIM swap check ────────────────────────────────────────
+        // Compare current SIM fingerprint against the one stored at KYC enrollment.
+        // Combines with behavioral biometric deviation for dual-signal confidence.
+        val simSwapSuspected = DeviceSignalStore.isSimSwapSuspected(this) == true
+        val bioDev = BehavioralMonitor.deviationScore()
+        if (simSwapSuspected) {
+            Log.w(TAG, "[UC-08] SIM swap suspected — bioDev=${(bioDev * 100).toInt()}%")
+            showSimSwapDialog(iccidChanged = true, biometricDeviation = bioDev)
+            // Fire live signal to backend asynchronously (don't block UI)
+            val deviceId = DiimeApp.enrollmentState?.deviceId
+                ?: DiimeApp.keyManager.getStableDeviceId()
+            lifecycleScope.launch(Dispatchers.IO) {
+                runCatching { DiimeApiClient.ingestLiveSimSwap(deviceId, bioDev, iccidChanged = true) }
+                    .also { Log.i(TAG, "[UC-08] live ingest result: ${it.getOrNull()?.decision}") }
+            }
+            return
+        }
+
         // ── Demo 5: Behavioral mismatch gate ─────────────────────────────────
         if (BehavioralMonitor.isComparisonMode) {
             val dev = BehavioralMonitor.deviationScore()
@@ -406,6 +425,64 @@ class PaymentActivity : AppCompatActivity() {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // UC-08: SIM Swap live detection dialog
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Show the live SIM swap detection alert.
+     *
+     * This dialog is shown when the SIM fingerprint recorded at KYC enrollment
+     * does not match the current SIM fingerprint — indicating a SIM swap has
+     * occurred since the user enrolled.
+     *
+     * When biometric deviation is also elevated, the dual-signal confidence
+     * reaches 1.00 (strongest possible detection — attacker physically has the
+     * SIM AND is using a different biometric profile).
+     *
+     * Investor talking point:
+     *   "The device just detected that the SIM card was changed since this user
+     *    enrolled. In the SIM swap scenario, the attacker has ported the victim's
+     *    number to their own SIM. NonaShield caught it using a cryptographic
+     *    fingerprint of the SIM captured at enrollment — no carrier API needed."
+     */
+    private fun showSimSwapDialog(iccidChanged: Boolean, biometricDeviation: Float) {
+        val confidence = when {
+            iccidChanged && biometricDeviation > 0.30f -> 1.00f
+            iccidChanged                               -> 0.70f
+            else                                       -> 0.55f
+        }
+        val bioPct = (biometricDeviation * 100).toInt()
+
+        AlertDialog.Builder(this)
+            .setTitle("📱  SIM Swap Detected — Payment Blocked")
+            .setMessage(buildString {
+                append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+                append("⚠️  LIVE DETECTION  ·  SCAM_SS_001\n")
+                append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+                append("The SIM card on this device does not match the SIM that was\n")
+                append("present when this account enrolled.\n\n")
+                append("Signal sources:\n")
+                if (iccidChanged) {
+                    append("  🔴 SIM Fingerprint: CHANGED  (MCC+MNC mismatch)\n")
+                }
+                if (biometricDeviation > 0.20f) {
+                    append("  🔴 Behavioral deviation: $bioPct%  (6-channel biometric)\n")
+                } else {
+                    append("  🟡 Behavioral deviation: $bioPct%  (within baseline)\n")
+                }
+                append("\nDual-signal confidence:  ${(confidence * 100).toInt()}%\n")
+                append("Threat ID:  SCAM_SS_001  ·  sim_swap_proxy\n")
+                append("Action:  BLOCK  ·  CRITICAL\n\n")
+                append("In production: payment blocked, account flagged for\n")
+                append("manual review. Step-up re-enrollment required.")
+            })
+            .setPositiveButton("View SOC Dashboard") { _, _ -> openDashboard() }
+            .setNegativeButton("Close", null)
+            .setCancelable(false)
+            .show()
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Demo 5: Social Engineering + Behavioral Biometrics
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -535,12 +612,15 @@ class PaymentActivity : AppCompatActivity() {
     private fun updateRiskBadge() {
         val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         val isMirroring = dm.displays.size > 1
-        val tier = if (isMirroring || (BehavioralMonitor.isComparisonMode && BehavioralMonitor.deviationScore() > 0.55f))
+        val simSwap     = DeviceSignalStore.isSimSwapSuspected(this) == true
+        val tier = if (isMirroring || simSwap ||
+            (BehavioralMonitor.isComparisonMode && BehavioralMonitor.deviationScore() > 0.55f))
             "HIGH"
         else
             EdgeRiskEnforcer.currentRiskTier()
         val label = when {
             isMirroring -> "Risk: HIGH ⚠️ Mirror"
+            simSwap     -> "Risk: HIGH 📱 SIM Swap"
             BehavioralMonitor.isComparisonMode && tier == "HIGH" -> "Risk: HIGH 🧬 Bio"
             else -> "Risk: $tier"
         }
