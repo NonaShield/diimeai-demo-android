@@ -408,92 +408,98 @@ object DiimeApiClient {
         val signalDefs: List<SignalFired>,   // for UI — what the SDK emits
         val decision:   String,             // expected outcome (for simulation fallback)
         val riskScore:  Int,
+        // Action context — the sensitive operation being guarded.
+        // PAYMENT | KYC | OTP | LOGIN | SESSION_CREATE
+        // Flows as X-PS-Action header + JSON body "action" field so NGINX policy
+        // enforcement and the backend compliance engine apply action-specific rules.
+        val action:     String,
     )
 
     private val SCENARIO_DEFS: Map<Int, ScenarioDef> = mapOf(
+        //           name                            eventType                   signals                                                                       signalDefs                                                                                                  decision    riskScore  action
         1  to ScenarioDef("Hardware Possession",      "DEVICE_ATTESTATION",
             mapOf("hardware_bound" to true, "key_storage" to "AndroidKeyStore"),
             listOf(SignalFired("APP_SEC_001", 0.99f, "HIGH", "evidence_verifier")),
-            "ALLOW", 5),
+            "ALLOW", 5, "SESSION_CREATE"),
         2  to ScenarioDef("Non-Repudiation Receipt",  "EVIDENCE_CHAIN_VERIFY",
             mapOf("hybrid_sig_verified" to true, "pqc_sig_present" to true),
             listOf(SignalFired("APP_SEC_002", 0.99f, "HIGH", "evidence_verifier")),
-            "ALLOW", 5),
+            "ALLOW", 5, "SESSION_CREATE"),
         3  to ScenarioDef("Screen Mirroring Attack",  "SCREEN_MIRROR_DETECTED",
             mapOf("screen_mirroring" to true, "presentation_display" to true, "vnc_active" to false),
             listOf(SignalFired("RASP_DEV_003", 0.92f, "HIGH", "botnet_correlation"),
                    SignalFired("RASP_DEV_004", 0.85f, "HIGH", "botnet_correlation")),
-            "BLOCK", 87),
+            "BLOCK", 87, "PAYMENT"),
         4  to ScenarioDef("Behavioral Biometrics",    "BIOMETRIC_ANOMALY",
             mapOf("hesitation_spike" to true, "pressure_anomaly" to true, "biometric_score" to 0.31),
             listOf(SignalFired("USR_BEH_001", 0.78f, "MEDIUM", "mule_account"),
                    SignalFired("USR_BEH_001", 0.71f, "MEDIUM", "mule_account")),
-            "STEP_UP", 55),
+            "STEP_UP", 55, "PAYMENT"),
         5  to ScenarioDef("Device RASP (38 sensors)", "RASP_THREAT_DETECTED",
             mapOf("root_detected" to true, "hook_detected" to true, "magisk_present" to true),
             listOf(SignalFired("RASP_DEV_001", 0.95f, "CRITICAL", "botnet_correlation"),
                    SignalFired("APP_RUNTIME_008", 1.0f, "CRITICAL", "botnet_correlation")),
-            "BLOCK", 100),
+            "BLOCK", 100, "PAYMENT"),
         6  to ScenarioDef("Mule Account Network",     "MULE_ACCOUNT_SIGNAL",
             mapOf("account_velocity_24h" to 4, "device_account_degree" to 8, "device_reuse_count" to 12),
             listOf(SignalFired("USR_BEH_002", 0.88f, "HIGH", "mule_account"),
                    SignalFired("USR_BEH_003", 0.76f, "HIGH", "mule_account")),
-            "BLOCK", 82),
+            "BLOCK", 82, "PAYMENT"),
         7  to ScenarioDef("Bot Attack / Emulator",    "BOT_EMULATOR_DETECTED",
             mapOf("emulator_detected" to true, "build_fingerprint_anomaly" to true, "sensor_absence" to true),
             listOf(SignalFired("BOT_APP_001", 0.97f, "CRITICAL", "botnet_correlation"),
                    SignalFired("BOT_APP_002", 0.91f, "CRITICAL", "botnet_correlation")),
-            "BLOCK", 98),
+            "BLOCK", 98, "LOGIN"),
         8  to ScenarioDef("SIM Swap Fraud",           "SIM_SWAP_SIGNAL",
             mapOf("sim_swap_detected" to true, "iccid_changed" to true, "carrier_transition" to true),
             listOf(SignalFired("SCAM_SS_001", 1.00f, "CRITICAL", "sim_swap_proxy"),
                    SignalFired("SCAM_SS_002", 0.96f, "HIGH",     "sim_swap_proxy")),
-            "BLOCK", 95),
+            "BLOCK", 95, "OTP"),
         9  to ScenarioDef("Digital Arrest Scam",      "DIGITAL_ARREST_SIGNAL",
             mapOf("active_video_call" to true, "call_merge_active" to true,
                   "voip_cellular_concurrent" to true, "prolonged_call_mins" to 47),
             listOf(SignalFired("SCAM_CM_001", 0.98f, "CRITICAL", "digital_arrest_detector"),
                    SignalFired("SCAM_CM_002", 0.85f, "HIGH",     "digital_arrest_detector")),
-            "BLOCK", 100),
+            "BLOCK", 100, "PAYMENT"),
         10 to ScenarioDef("Fake Loan App Extortion",  "PREDATORY_LOAN_SIGNAL",
             mapOf("sms_permission" to true, "contacts_permission" to true,
                   "call_log_permission" to true, "storage_permission" to true),
             listOf(SignalFired("LOAN_APP_002", 0.90f, "HIGH", "beneficiary_abuse")),
-            "STEP_UP", 68),
+            "STEP_UP", 68, "KYC"),
         11 to ScenarioDef("Ghost Tapping / NFC Abuse","NFC_FRAUD_SIGNAL",
             mapOf("rogue_hce_app" to true, "nfc_enabled" to true, "no_screen_lock" to true),
             listOf(SignalFired("NFC_FRAUD_001", 0.80f, "HIGH", "credential_reuse"),
                    SignalFired("NFC_FRAUD_002", 0.85f, "HIGH", "credential_reuse")),
-            "BLOCK", 83),
+            "BLOCK", 83, "PAYMENT"),
         12 to ScenarioDef("Malicious APK Injection",  "MALICIOUS_APK_SIGNAL",
             mapOf("apk_signature_mismatch" to true, "dangerous_permission_cluster" to true,
                   "overlay_abuse" to true, "sideloaded" to true),
             listOf(SignalFired("MAL_APK_001", 0.95f, "CRITICAL", "botnet_correlation"),
                    SignalFired("MAL_APK_002", 0.88f, "CRITICAL", "botnet_correlation"),
                    SignalFired("MAL_APK_003", 0.92f, "CRITICAL", "botnet_correlation")),
-            "BLOCK", 100),
+            "BLOCK", 100, "PAYMENT"),
         13 to ScenarioDef("Deepfake KYC Bypass",      "DEEPFAKE_KYC_SIGNAL",
             mapOf("virtual_camera_detected" to true, "obs_package_present" to true,
                   "non_physical_camera_id" to true),
             listOf(SignalFired("APP_RUNTIME_008", 0.94f, "CRITICAL", "synthetic_identity")),
-            "BLOCK", 96),
+            "BLOCK", 96, "KYC"),
         14 to ScenarioDef("NBFC Insider Burst",        "INSIDER_BURST_SIGNAL",
             mapOf("enrollment_velocity_60s" to 5, "off_hours_enrollment" to true,
                   "device_account_degree" to 5, "device_reuse_count" to 18),
             listOf(SignalFired("USR_BEH_003", 0.93f, "HIGH", "beneficiary_abuse")),
-            "BLOCK", 88),
+            "BLOCK", 88, "PAYMENT"),
         15 to ScenarioDef("Investment / Romance Scam", "INVESTMENT_SCAM_SIGNAL",
             mapOf("dating_apps_detected" to 3, "first_large_foreign_tx" to true),
             listOf(SignalFired("SCAM_RS_001", 0.60f, "MEDIUM", "investment_fraud_detector"),
                    SignalFired("SCAM_RS_001", 0.72f, "MEDIUM", "investment_fraud_detector")),
-            "STEP_UP", 52),
+            "STEP_UP", 52, "PAYMENT"),
         16 to ScenarioDef("Organized Crime Ring",      "ORG_CRIME_RING_SIGNAL",
             mapOf("oc_cluster_match" to true, "shared_ip_ring" to true,
                   "cluster_size" to 14, "timing_rhythm_detected" to true,
                   "device_account_degree" to 12, "device_reuse_count" to 38),
             listOf(SignalFired("BOT_APP_011", 0.91f, "CRITICAL", "organized_crime_cluster"),
                    SignalFired("BOT_APP_011", 0.86f, "CRITICAL", "organized_crime_cluster")),
-            "BLOCK", 94),
+            "BLOCK", 94, "PAYMENT"),
     )
 
     // ── Ingest scenario through real pipeline ─────────────────────────────────
@@ -551,6 +557,10 @@ object DiimeApiClient {
         val envelope = JSONObject().apply {
             put("device_id",   deviceId)
             put("event_type",  scenario.eventType)
+            // action = the sensitive operation being guarded (PAYMENT | KYC | OTP | LOGIN | SESSION_CREATE).
+            // EIP reads this from verified_payload.telemetry["action"] for compliance rule lookup,
+            // policy evaluation (DefaultPolicyEvaluator.evaluate), and signal context gating.
+            put("action",      scenario.action)
             put("timestamp",   timestamp)
             put("signature",   sig)
             put("tenant_id",   tenantId)
@@ -563,13 +573,19 @@ object DiimeApiClient {
             .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/ingest")
             .post(envelope.toString().toRequestBody(JSON))
             // Device-auth headers — DeviceAuthenticator validates these on the backend
-            .header("x-device-id", deviceId)
-            .header("x-timestamp", (timestamp / 1000).toString())
-            .header("x-nonce",     nonce)
+            .header("x-device-id",  deviceId)
+            .header("x-timestamp",  (timestamp / 1000).toString())
+            .header("x-nonce",      nonce)
+            // X-PS-Action — action context header consumed by:
+            //   • PinningInterceptor: embedded as JWT "act" claim in X-PayShield-Token
+            //   • NGINX header_validator: overrides JWT act if present → ngx.ctx.validated_action
+            //   • NGINX trust_context_builder: included in X-PS-Trust-Context forwarded to backend
+            //   • Backend ingest.py: x_ps_action Header injected into VerifiedPayload for EIP
+            .header("X-PS-Action",  scenario.action)
             // Request pipeline trace in non-prod so demo app can surface timings
-            .header("X-PS-Trace", "true")
+            .header("X-PS-Trace",   "true")
             .apply { session?.jwt?.let { header("Authorization", "Bearer $it") } }
-            // Note: PinningInterceptor adds X-PS-Request-Hash + other PayShield headers
+            // Note: PinningInterceptor reads X-PS-Action and uses it as the JWT act claim
             // Note: NGINX stamps X-PS-Edge-Context — NONASHIELD_BASE_URL must point to NGINX
             .build()
 
