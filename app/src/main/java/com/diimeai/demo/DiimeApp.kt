@@ -15,7 +15,6 @@ import com.payshield.sdk.storage.SecureStorage
 // ATL-2027: Autonomous Trust Layer initialisation
 import com.payshield.sdk.PayShieldEdgeInitializer
 import com.payshield.sdk.SdkEnvironment
-import com.payshield.sdk.enrollment.EnrollmentState
 import com.payshield.sdk.state.SdkState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -55,6 +54,16 @@ class DiimeApp : Application() {
     // ATL-2027: SDK state tracks PayShieldEdgeInitializer lifecycle.
     // Stored at Application scope so it survives configuration changes.
     private val sdkState = SdkState()
+
+    // Resolved once in initPayShieldEdge() and reused throughout the Application
+    // lifecycle so enrollDevice() and initPayShieldEdge() use the same environment.
+    private val sdkEnvironment: SdkEnvironment by lazy {
+        when (BuildConfig.SDK_ENVIRONMENT) {
+            "STAGING"    -> SdkEnvironment.STAGING
+            "PRODUCTION" -> SdkEnvironment.PRODUCTION
+            else         -> SdkEnvironment.DEVELOPMENT
+        }
+    }
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -125,9 +134,10 @@ class DiimeApp : Application() {
      * `com.payshield.sdk.signal.SignalSink` (used by [SignalOrchestrator]) to the
      * android-sdk layer `com.payshield.android.sdk.SignalSink` (used by [DiimeApiClient]).
      *
-     * Environment gating:
-     *   DEBUG build  → DEVELOPMENT (no attestation enforcement, relaxed checks)
-     *   RELEASE build → PRODUCTION (full StrongBox attestation + attestation mandatory)
+     * Environment gating (set per buildType via SDK_ENVIRONMENT in app/build.gradle):
+     *   debug   → DEVELOPMENT (no attestation enforcement, emulators allowed)
+     *   staging → STAGING     (full attestation enforcement, QA / pen-test)
+     *   release → PRODUCTION  (full attestation enforcement, live customers)
      */
     private fun initPayShieldEdge() {
         // Bridge: com.payshield.sdk.signal.SignalSink → DiimeApiClient.signalSink
@@ -143,11 +153,6 @@ class DiimeApp : Application() {
             }
         }
 
-        val environment = if (BuildConfig.IS_DEBUG)
-            SdkEnvironment.DEVELOPMENT
-        else
-            SdkEnvironment.PRODUCTION
-
         PayShieldEdgeInitializer.initialize(
             context        = applicationContext,
             signalSink     = sdkSignalSink,
@@ -155,7 +160,12 @@ class DiimeApp : Application() {
             backendBaseUrl = BuildConfig.NONASHIELD_BASE_URL,
             // talsecConfig: null in demo — FreeRASP integration is optional
             talsecConfig   = null,
-            environment    = environment,
+            // ATL-2027: Three-way attestation enforcement.
+            //   DEVELOPMENT → fail open (emulators / dev devices safe)
+            //   STAGING     → full enforcement (QA / pen-test / UAT)
+            //   PRODUCTION  → full enforcement (live customers)
+            // Set per buildType via SDK_ENVIRONMENT in app/build.gradle.
+            environment    = sdkEnvironment,
             // ATL-2027: tenant identity for autonomous command receiver + capability reporter.
             // DPIP salt is NOT passed here — it is read from SecureStorage (via
             // EnrollmentState.loadDpipSalt()) by PinningInterceptor and
@@ -163,7 +173,7 @@ class DiimeApp : Application() {
             tenantId       = "default"
         )
 
-        Log.i(TAG, "PayShield Edge initialized (env=$environment, atl2027=true, " +
+        Log.i(TAG, "PayShield Edge initialized (env=$sdkEnvironment, atl2027=true, " +
             "dpipSalt=${if (EnrollmentState.loadDpipSalt().isNotBlank()) "ISSUED" else "PENDING_ENROLLMENT"})")
     }
 
@@ -185,7 +195,12 @@ class DiimeApp : Application() {
             val enrollmentMgr = EnrollmentManager(
                 context        = applicationContext,
                 keyManager     = keyManager,
-                backendBaseUrl = BuildConfig.NONASHIELD_BASE_URL
+                backendBaseUrl = BuildConfig.NONASHIELD_BASE_URL,
+                // ATL-2027: pass the same environment used by PayShieldEdgeInitializer.
+                // STAGING / PRODUCTION → Play Integrity failure = hard enrollment failure
+                //   (SecurityException; no "PLAY_INTEGRITY_UNAVAILABLE" sentinel bypass).
+                // DEVELOPMENT → fail open (emulators / sideloaded APKs allowed).
+                environment    = sdkEnvironment
             )
 
             when (val result = enrollmentMgr.enroll(deviceId)) {

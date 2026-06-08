@@ -87,8 +87,33 @@ android {
             // Installed as com.nonashield.app.debug — separate from release build
             applicationIdSuffix '.debug'
             versionNameSuffix   '-debug'
-            // Debug: Play Integrity in test mode, RASP checks skipped.
+            // Debug: Play Integrity skipped, attestation failures emitted at LOW.
             buildConfigField 'Boolean', 'IS_DEBUG', 'true'
+            // ATL-2027: SDK environment controls attestation enforcement level.
+            // DEVELOPMENT — fail open; safe for emulators and dev devices.
+            buildConfigField 'String', 'SDK_ENVIRONMENT', '"DEVELOPMENT"'
+        }
+        // Staging: full attestation enforcement (same as production) but with
+        // a separate applicationId suffix so it installs alongside production.
+        // Use this buildType for QA, pen-test, and UAT — Play Integrity must
+        // pass and StrongBox attestation failures are emitted at CRITICAL.
+        staging {
+            initWith release
+            applicationIdSuffix '.staging'
+            versionNameSuffix   '-staging'
+            minifyEnabled   true
+            shrinkResources true
+            proguardFiles   getDefaultProguardFile('proguard-android-optimize.txt'),
+                            'proguard-rules.pro'
+            signingConfig   signingConfigs.release
+            buildConfigField 'Boolean', 'IS_DEBUG', 'false'
+            // ATL-2027: STAGING enforces attestation — same as PRODUCTION.
+            // Play Integrity failure → hard enrollment failure (no sentinel bypass).
+            // StrongBoxAttestationSignal failures → CRITICAL severity.
+            buildConfigField 'String', 'SDK_ENVIRONMENT', '"STAGING"'
+            // Matchable: staging builds can be debugged via adb (for QA teams)
+            // but attestation is still fully enforced at the SDK layer.
+            debuggable false
         }
         release {
             minifyEnabled   true
@@ -97,6 +122,10 @@ android {
                             'proguard-rules.pro'
             signingConfig   signingConfigs.release
             buildConfigField 'Boolean', 'IS_DEBUG', 'false'
+            // ATL-2027: PRODUCTION — full attestation enforcement.
+            // Play Integrity failure → hard enrollment failure.
+            // StrongBoxAttestationSignal failures → CRITICAL severity.
+            buildConfigField 'String', 'SDK_ENVIRONMENT', '"PRODUCTION"'
         }
     }
 
