@@ -10,6 +10,7 @@ import com.payshield.sdk.enrollment.EnrollmentResult
 import com.payshield.sdk.enrollment.EnrollmentState
 import com.payshield.sdk.crypto.DeviceKeyManager
 import com.payshield.sdk.signal.EdgeSignal
+import com.payshield.sdk.behavioral.BehavioralTelemetrySender
 import com.payshield.sdk.storage.SecureStorage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -65,6 +66,11 @@ class DiimeApp : Application() {
         // DiimeApiClient sets up OkHttp with PinningInterceptor + PayShieldAuthInterceptor.
         // Session is injected later (after login) via SessionHolder.setSession().
         DiimeApiClient.init(applicationContext, keyManager)
+
+        // ── Step 3b: Wire behavioral telemetry sender ─────────────────────────
+        // BehavioralTelemetrySender POSTs to /api/v1/security/telemetry at each
+        // PAYMENT / KYC / LOGIN checkpoint.  Must be set before any Activity starts.
+        BehavioralTelemetrySender.backendBaseUrl = BuildConfig.NONASHIELD_BASE_URL
 
         // ── Step 4: Register RASP signal sink ─────────────────────────────────
         // Routes all RASP signals to backend and triggers BlockedActivity on termination.

@@ -62,17 +62,26 @@
         </activity>
 
         <!-- Login screen -->
+        <!--
+          configChanges: orientation|screenSize|keyboardHidden — activity handles rotation
+          itself (calls onConfigurationChanged) so BehavioralCaptureManager.recordOrientationChange()
+          receives the event and increments screen_orientation_changes without an Activity restart.
+        -->
         <activity
             android:name=".LoginActivity"
             android:exported="false"
-            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize" />
 
         <!-- Payment screen — NonaShield checkpoint evaluated here -->
+        <!--
+          configChanges: same as LoginActivity — orientation changes are recorded by
+          BehavioralCaptureManager.recordOrientationChange() for behavioral telemetry.
+        -->
         <activity
             android:name=".PaymentActivity"
             android:exported="false"
-            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize" />
 
         <!-- Device blocked / RASP alert screen -->

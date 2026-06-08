@@ -2,6 +2,7 @@ package com.diimeai.demo
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.hardware.display.DisplayManager
 import android.net.Uri
 import android.os.Bundle
@@ -22,7 +23,12 @@ import com.diimeai.demo.network.EvidenceReceipt
 import com.diimeai.demo.network.PaymentResult
 import com.diimeai.demo.security.DeviceSignalStore
 import com.payshield.android.edge.EdgeRiskEnforcer
+import com.payshield.sdk.behavioral.BehavioralCaptureManager
+import com.payshield.sdk.behavioral.BehavioralTelemetrySender
+import com.payshield.sdk.behavioral.KeystrokeDynamicsCapture
 import com.payshield.sdk.enrollment.EnrollmentState
+import com.payshield.sdk.signal.EdgeSignal
+import com.payshield.sdk.token.SessionHolder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -61,6 +67,42 @@ class PaymentActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivityPaymentBinding
+
+    // ── Behavioral SDK (NonaShield 11-field telemetry) ────────────────────────
+    //
+    // [keystrokeDynamics] captures typing rhythm on amount, recipient, note fields.
+    // [captureManager]    captures touch pressure, velocity, hesitation, scroll
+    //                     velocity, orientation changes, and navigation events.
+    //
+    // Both are attached in [onResume] and detached in [onPause].
+    // [BehavioralTelemetrySender.send] is called inside [initiatePayment] before
+    // the backend API call so the backend decision includes behavioral context.
+    //
+    // Bridge: routes [com.payshield.sdk.signal.SignalSink] (SDK internal interface)
+    // to [DiimeApiClient.signalSink] ([com.payshield.android.sdk.SignalSink]).
+    private val behavioralSink = object : com.payshield.sdk.signal.SignalSink {
+        override fun emit(signal: EdgeSignal) {
+            DiimeApiClient.signalSink?.onSignalsCollected(listOf(signal))
+        }
+        override fun onBlock(reason: String) {
+            DiimeApiClient.signalSink?.onBlock(reason)
+        }
+    }
+
+    private val keystrokeDynamics = KeystrokeDynamicsCapture()
+
+    private val captureManager by lazy {
+        BehavioralCaptureManager(
+            sink              = behavioralSink,
+            sessionId         = resolveSessionId(),
+            keystrokeDynamics = keystrokeDynamics
+        )
+    }
+
+    /** Resolves the active session ID from SessionHolder, or falls back to a local timestamp. */
+    private fun resolveSessionId(): String =
+        runCatching { SessionHolder.requireSession().sessionId }
+            .getOrElse { "payment_${System.currentTimeMillis()}" }
 
     // ── Session state ─────────────────────────────────────────────────────────
     private var currentUserId:  String = ""
@@ -120,6 +162,14 @@ class PaymentActivity : AppCompatActivity() {
         updateRiskBadge()
         updateKycButtonLabel()
         handler.post(bioRefreshRunnable)
+
+        // ── Behavioral: attach capture on every screen entry ───────────────────
+        // keystrokeDynamics wraps amount / recipient / note EditText fields.
+        // captureManager transparently intercepts all touch events on the root view.
+        keystrokeDynamics.attachToRoot(binding.root)
+        captureManager.attachTo(binding.root)
+        // Record this screen entry as a transition — dwell-time measurement starts.
+        captureManager.sessionFlowAnalyzer.onScreenTransition()
     }
 
     private fun updateKycButtonLabel() {
@@ -135,6 +185,9 @@ class PaymentActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         handler.removeCallbacks(bioRefreshRunnable)
+        // ── Behavioral: detach listeners to avoid leaking references ───────────
+        keystrokeDynamics.detachFromRoot()
+        captureManager.detachFrom(binding.root)
     }
 
     override fun onDestroy() {
@@ -145,8 +198,33 @@ class PaymentActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Called when device is rotated (requires android:configChanges="orientation|screenSize"
+     * in AndroidManifest.xml — the activity is NOT recreated on rotation).
+     *
+     * Increments [BehavioralFeatures.screenOrientationChanges] — backend field
+     * [screen_orientation_changes] in BehavioralFeaturesPayload.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        captureManager.recordOrientationChange(newConfig)
+    }
+
+    /**
+     * Intercept system back press to record it in SessionFlowAnalyzer.
+     *
+     * [BehavioralFeatures.backtrackCount] is incremented — elevated back navigation
+     * during payment correlates with hesitant / coached user behaviour (Romance Fraud).
+     */
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        captureManager.sessionFlowAnalyzer.onBackNavigation()
+        @Suppress("DEPRECATION")
+        super.onBackPressed()
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
-    // Touch routing → BehavioralBiometricsCollector
+    // Touch routing → BehavioralBiometricsCollector + BehavioralCaptureManager
     // ─────────────────────────────────────────────────────────────────────────
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
@@ -292,12 +370,39 @@ class PaymentActivity : AppCompatActivity() {
         binding.tvResult.visibility    = View.GONE
         binding.btnViewProof.visibility = View.GONE
 
+        // Snapshot the note text on the UI thread before launching the coroutine.
+        val noteText = binding.etNote.text.toString().trim()
+
         lifecycleScope.launch(Dispatchers.IO) {
+            // ── Behavioral telemetry: send BEFORE payment so the backend decision
+            //    engine has up-to-date behavioral features when it evaluates this
+            //    PAYMENT action.  Fail-open — a network error here does NOT block
+            //    the payment (BehavioralTelemetrySender returns null on error).
+            val behavioralFeatures = captureManager.getLatestFeatures()
+            if (behavioralFeatures != null) {
+                val sessionId = resolveSessionId()
+                val sessionFlow = captureManager.sessionFlowAnalyzer.build()
+                val telemetryResponse = runCatching {
+                    BehavioralTelemetrySender.send(
+                        features            = behavioralFeatures,
+                        sessionId           = sessionId,
+                        tenantId            = "default",
+                        action              = "PAYMENT",
+                        sessionFlowFeatures = sessionFlow
+                    )
+                }.getOrNull()
+                if (telemetryResponse != null) {
+                    Log.d(TAG, "[Behavioral] telemetry action=${telemetryResponse.action} " +
+                        "score=${telemetryResponse.behavioralScore} " +
+                        "level=${telemetryResponse.riskLevel}")
+                }
+            }
+
             val result = DiimeApiClient.initiatePayment(
                 amount      = amount,
                 currency    = "INR",
                 recipientId = recipient,
-                note        = binding.etNote.text.toString().trim()
+                note        = noteText
             )
             withContext(Dispatchers.Main) {
                 setLoading(false)
@@ -697,6 +802,9 @@ class PaymentActivity : AppCompatActivity() {
         // Save the first user's behavioral baseline before the switch
         BehavioralMonitor.saveBaseline()
 
+        // Record screen transition — captures Session A dwell time before the switch.
+        captureManager.sessionFlowAnalyzer.onScreenTransition()
+
         DiimeApiClient.setSession(
             userId    = newUser,
             deviceId  = deviceId,
@@ -760,11 +868,14 @@ class PaymentActivity : AppCompatActivity() {
     }
 
     private fun openDashboard() {
-        // Open in-app live trust monitor first; Grafana link is available inside it
+        // Record screen transition before navigating — captures dwell time on payment screen.
+        captureManager.sessionFlowAnalyzer.onScreenTransition()
         startActivity(Intent(this, TrustDashboardActivity::class.java))
     }
 
     private fun logout() {
+        // Record screen exit before clearing state.
+        captureManager.sessionFlowAnalyzer.onScreenTransition()
         BehavioralMonitor.fullReset()
         DiimeApiClient.clearSession()
         startActivity(Intent(this, MainActivity::class.java).apply {
