@@ -15,6 +15,7 @@ import com.payshield.sdk.storage.SecureStorage
 // ATL-2027: Autonomous Trust Layer initialisation
 import com.payshield.sdk.PayShieldEdgeInitializer
 import com.payshield.sdk.SdkEnvironment
+import com.payshield.sdk.enrollment.EnrollmentState
 import com.payshield.sdk.state.SdkState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -73,9 +74,9 @@ class DiimeApp : Application() {
         // ── Step 3: Initialize global HTTP client ─────────────────────────────
         // DiimeApiClient sets up OkHttp with PinningInterceptor + PayShieldAuthInterceptor.
         // Session is injected later (after login) via SessionHolder.setSession().
-        // ATL-2027: pass DPIP_TENANT_SALT so PinningInterceptor includes
-        // X-DPIP-Device-Hash = SHA-256(device_id + salt) on every request.
-        DiimeApiClient.init(applicationContext, keyManager, BuildConfig.DPIP_TENANT_SALT)
+        // ATL-2027: PinningInterceptor reads X-DPIP-Device-Hash salt from SecureStorage
+        // (via EnrollmentState.loadDpipSalt()) at request time — no salt param here.
+        DiimeApiClient.init(applicationContext, keyManager)
 
         // ── Step 3b: Wire behavioral telemetry sender ─────────────────────────
         // BehavioralTelemetrySender POSTs to /api/v1/security/telemetry at each
@@ -155,13 +156,15 @@ class DiimeApp : Application() {
             // talsecConfig: null in demo — FreeRASP integration is optional
             talsecConfig   = null,
             environment    = environment,
-            // ATL-2027: tenant identity for autonomous command receiver + capability reporter
-            tenantId       = "default",
-            tenantSalt     = BuildConfig.DPIP_TENANT_SALT
+            // ATL-2027: tenant identity for autonomous command receiver + capability reporter.
+            // DPIP salt is NOT passed here — it is read from SecureStorage (via
+            // EnrollmentState.loadDpipSalt()) by PinningInterceptor and
+            // AutonomousCommandReceiver at runtime after enrollment issues it.
+            tenantId       = "default"
         )
 
-        Log.i(TAG, "PayShield Edge initialized (env=$environment, " +
-            "atl2027=true, dpipSalt=${if (BuildConfig.DPIP_TENANT_SALT.isNotBlank()) "SET" else "EMPTY"})")
+        Log.i(TAG, "PayShield Edge initialized (env=$environment, atl2027=true, " +
+            "dpipSalt=${if (EnrollmentState.loadDpipSalt().isNotBlank()) "ISSUED" else "PENDING_ENROLLMENT"})")
     }
 
     // -------------------------------------------------------------------------

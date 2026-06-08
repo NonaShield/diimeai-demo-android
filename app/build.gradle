@@ -59,13 +59,16 @@ android {
             "\"${System.getenv('DEMO_API_KEY') ?: ''}\""
 
         // ── ATL-2027: DPIP tenant salt ────────────────────────────────────────
-        // Used for SHA-256(device_id + DPIP_TENANT_SALT) pseudonymised consortium
-        // device hash sent in X-DPIP-Device-Hash header on every API call.
-        // Must match the DPIP_TENANT_SALT environment variable on the backend
-        // (app/services/dpip_client.py + autonomous_decision_enhancer.py).
-        // Set via environment variable or local.properties — never commit the real salt.
-        buildConfigField 'String', 'DPIP_TENANT_SALT',
-            "\"${System.getenv('DPIP_TENANT_SALT') ?: ''}\""
+        // NOTE: The DPIP tenant salt is NOT a BuildConfig field.
+        //
+        // The salt is backend-issued during device enrollment (/api/v1/enroll/register
+        // returns "dpip_tenant_salt") and stored in SecureStorage (EncryptedSharedPreferences
+        // backed by AES-256-GCM + AndroidKeyStore).  PinningInterceptor and
+        // AutonomousCommandReceiver read it from EnrollmentState.loadDpipSalt() at runtime.
+        //
+        // Putting the salt in BuildConfig would bake it into the APK binary where it
+        // can be extracted by decompilation — defeating the DPDP pseudonymisation goal.
+        // The enrollment trust layer is the correct and only source for this value.
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

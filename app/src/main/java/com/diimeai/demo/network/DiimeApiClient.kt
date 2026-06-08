@@ -54,12 +54,8 @@ object DiimeApiClient {
 
     /**
      * Call once from Application.onCreate() BEFORE any network calls.
-     *
-     * @param tenantSalt  ATL-2027: DPIP tenant salt for SHA-256(device_id + salt) header.
-     *                    Pass [BuildConfig.DPIP_TENANT_SALT].  Defaults to empty string
-     *                    for backwards compatibility.
      */
-    fun init(context: Context, keyManager: DeviceKeyManager, tenantSalt: String = "") {
+    fun init(context: Context, keyManager: DeviceKeyManager) {
         this.keyManager  = keyManager
         this.appContext  = context.applicationContext
         val logging = HttpLoggingInterceptor().apply {
@@ -71,12 +67,12 @@ object DiimeApiClient {
 
         // PinningInterceptor — reads session from SessionHolder on every call.
         // SessionHolder.setSession() is called after login (see LoginActivity).
-        // ATL-2027: tenantSalt is forwarded so PinningInterceptor can compute
-        // X-DPIP-Device-Hash = SHA-256(device_id + tenantSalt) on every request.
+        // ATL-2027: X-DPIP-Device-Hash salt is read from EnrollmentState.loadDpipSalt()
+        // (SecureStorage / AES-256-GCM + AndroidKeyStore) on every request — not passed
+        // as a constructor param.  The salt is backend-issued at enrollment time.
         val pinning = PinningInterceptor(
             keyManager = keyManager,
-            act        = "REQUEST",   // default; overridden per-call via action-specific clients
-            tenantSalt = tenantSalt   // ATL-2027 DPIP pseudonymised device hash
+            act        = "REQUEST"    // default; overridden per-call via action-specific clients
         )
 
         // PayShieldAuthInterceptor — wire-level auth observation.
