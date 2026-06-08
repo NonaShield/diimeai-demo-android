@@ -53,8 +53,10 @@ class TrustDashboardActivity : AppCompatActivity() {
         private const val REFRESH_INTERVAL_MS = 3_000L
         private const val GRAFANA_URL = "https://api.diimeai.com/dashboard/"
 
-        // 9 canonical SDK signals (registered in PayShieldEdgeInitializer)
+        // 12 canonical SDK signals (9 original + 3 ATL-2027 deepfake signals)
+        // Registered in PayShieldEdgeInitializer — full set of 41 RASP sensors
         private val SIGNAL_DEFS = listOf(
+            // ── NPCI 2025 SIL — original 9 signals ──────────────────────────
             SignalDef("ADB Install",        "RASP_DEV_001", "App installed via ADB"),
             SignalDef("Root Cloaking",      "RASP_DEV_002", "Magisk hide / root masking"),
             SignalDef("Screen Mirroring",   "RASP_DEV_003", "Mirroring / cast active"),
@@ -64,6 +66,10 @@ class TrustDashboardActivity : AppCompatActivity() {
             SignalDef("Keyguard Insecure",  "DEV_SEC_007",  "No screen lock set"),
             SignalDef("User CA Cert",       "NET_CA_013",   "User-installed CA present"),
             SignalDef("Remote Desktop",     "RASP_DEV_014", "Remote control detected"),
+            // ── RBI/NPCI/ReBIT 2027 ATL — deepfake compound signals ──────────
+            SignalDef("Overlay Attack",        "RASP_DEV_063", "SYSTEM_ALERT_WINDOW redress"),
+            SignalDef("Background Camera",     "RASP_DEV_064", "Deepfake frame acquisition"),
+            SignalDef("Deepfake Precondition", "RASP_DEV_065", "FPS anomaly/MediaPipe/voice"),
         )
 
         // 5 edge pipeline phases

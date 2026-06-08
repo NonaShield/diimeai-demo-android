@@ -58,6 +58,15 @@ android {
         buildConfigField 'String', 'DEMO_API_KEY',
             "\"${System.getenv('DEMO_API_KEY') ?: ''}\""
 
+        // ── ATL-2027: DPIP tenant salt ────────────────────────────────────────
+        // Used for SHA-256(device_id + DPIP_TENANT_SALT) pseudonymised consortium
+        // device hash sent in X-DPIP-Device-Hash header on every API call.
+        // Must match the DPIP_TENANT_SALT environment variable on the backend
+        // (app/services/dpip_client.py + autonomous_decision_enhancer.py).
+        // Set via environment variable or local.properties — never commit the real salt.
+        buildConfigField 'String', 'DPIP_TENANT_SALT',
+            "\"${System.getenv('DPIP_TENANT_SALT') ?: ''}\""
+
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 

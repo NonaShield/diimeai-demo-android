@@ -12,6 +12,10 @@ import com.payshield.sdk.crypto.DeviceKeyManager
 import com.payshield.sdk.signal.EdgeSignal
 import com.payshield.sdk.behavioral.BehavioralTelemetrySender
 import com.payshield.sdk.storage.SecureStorage
+// ATL-2027: Autonomous Trust Layer initialisation
+import com.payshield.sdk.PayShieldEdgeInitializer
+import com.payshield.sdk.SdkEnvironment
+import com.payshield.sdk.state.SdkState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -47,6 +51,10 @@ class DiimeApp : Application() {
             private set
     }
 
+    // ATL-2027: SDK state tracks PayShieldEdgeInitializer lifecycle.
+    // Stored at Application scope so it survives configuration changes.
+    private val sdkState = SdkState()
+
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
@@ -65,7 +73,9 @@ class DiimeApp : Application() {
         // ── Step 3: Initialize global HTTP client ─────────────────────────────
         // DiimeApiClient sets up OkHttp with PinningInterceptor + PayShieldAuthInterceptor.
         // Session is injected later (after login) via SessionHolder.setSession().
-        DiimeApiClient.init(applicationContext, keyManager)
+        // ATL-2027: pass DPIP_TENANT_SALT so PinningInterceptor includes
+        // X-DPIP-Device-Hash = SHA-256(device_id + salt) on every request.
+        DiimeApiClient.init(applicationContext, keyManager, BuildConfig.DPIP_TENANT_SALT)
 
         // ── Step 3b: Wire behavioral telemetry sender ─────────────────────────
         // BehavioralTelemetrySender POSTs to /api/v1/security/telemetry at each
@@ -76,9 +86,82 @@ class DiimeApp : Application() {
         // Routes all RASP signals to backend and triggers BlockedActivity on termination.
         registerSignalSink()
 
+        // ── Step 4b: Initialize PayShield Edge (ATL-2027) ─────────────────────
+        // Registers all 41 RASP signals (including the 3 new ATL-2027 deepfake signals),
+        // starts AutonomousCommandReceiver (polls /api/v1/device/commands every 4.5s),
+        // and fires SdkCapabilityReporter to POST the capability matrix to the backend.
+        //
+        // The SdkSignalSink bridge below routes com.payshield.sdk.signal.SignalSink
+        // (used by SignalOrchestrator) → DiimeApiClient.signalSink (android-sdk layer).
+        // This is the same bridge pattern used in LoginActivity and PaymentActivity.
+        initPayShieldEdge()
+
         // ── Step 5: Enroll device in background ───────────────────────────────
         // Fast-path: EnrollmentState.isEnrolled() returns immediately if already done.
         enrollDevice()
+    }
+
+    override fun onTerminate() {
+        super.onTerminate()
+        // ATL-2027: stop the autonomous command polling loop cleanly.
+        // onTerminate() is only guaranteed in emulators; on real devices the process
+        // is killed without this hook — AutonomousCommandReceiver uses SupervisorJob
+        // so it is cleaned up automatically by the OS.
+        PayShieldEdgeInitializer.stopAutonomousReceiver()
+        sdkState.shutdown()
+    }
+
+    // ── ATL-2027 PayShield Edge Initialisation ────────────────────────────────
+
+    /**
+     * Initialises the full PayShield signal orchestrator with all 41 RASP sensors
+     * including the three new RBI/NPCI/ReBIT 2027 Autonomous Trust Layer deepfake signals.
+     *
+     * Also starts [AutonomousCommandReceiver] which polls the backend every 4.5s for
+     * BLOCK/STEP_UP/MONITOR commands pushed by `autonomous_decision_enhancer.py`.
+     *
+     * The SdkSignalSink bridge delegates from the SDK's internal
+     * `com.payshield.sdk.signal.SignalSink` (used by [SignalOrchestrator]) to the
+     * android-sdk layer `com.payshield.android.sdk.SignalSink` (used by [DiimeApiClient]).
+     *
+     * Environment gating:
+     *   DEBUG build  → DEVELOPMENT (no attestation enforcement, relaxed checks)
+     *   RELEASE build → PRODUCTION (full StrongBox attestation + attestation mandatory)
+     */
+    private fun initPayShieldEdge() {
+        // Bridge: com.payshield.sdk.signal.SignalSink → DiimeApiClient.signalSink
+        val sdkSignalSink = object : com.payshield.sdk.signal.SignalSink {
+            override fun emit(signal: EdgeSignal) {
+                // Route every RASP / ATL-2027 signal to the registered android-sdk sink.
+                DiimeApiClient.signalSink?.onSignalsCollected(listOf(signal))
+                Log.d(TAG, "SDK signal: ${signal.type} [${signal.threatId}] confidence=${signal.confidence}")
+            }
+            override fun onBlock(reason: String) {
+                Log.e(TAG, "SDK block: $reason")
+                DiimeApiClient.signalSink?.onBlock(reason)
+            }
+        }
+
+        val environment = if (BuildConfig.IS_DEBUG)
+            SdkEnvironment.DEVELOPMENT
+        else
+            SdkEnvironment.PRODUCTION
+
+        PayShieldEdgeInitializer.initialize(
+            context        = applicationContext,
+            signalSink     = sdkSignalSink,
+            sdkState       = sdkState,
+            backendBaseUrl = BuildConfig.NONASHIELD_BASE_URL,
+            // talsecConfig: null in demo — FreeRASP integration is optional
+            talsecConfig   = null,
+            environment    = environment,
+            // ATL-2027: tenant identity for autonomous command receiver + capability reporter
+            tenantId       = "default",
+            tenantSalt     = BuildConfig.DPIP_TENANT_SALT
+        )
+
+        Log.i(TAG, "PayShield Edge initialized (env=$environment, " +
+            "atl2027=true, dpipSalt=${if (BuildConfig.DPIP_TENANT_SALT.isNotBlank()) "SET" else "EMPTY"})")
     }
 
     // -------------------------------------------------------------------------

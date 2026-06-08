@@ -131,6 +131,13 @@ class FraudScenarioDemoActivity : AppCompatActivity() {
             "CRITICAL", "OrganizedCrimeCluster", "BOT_APP_011", "organized_crime_cluster",
             "Coordinated device rings stay below per-device thresholds to evade individual fraud rules. Every 15 minutes, an Airflow DAG runs 3 Cypher queries against the Neo4j behaviour graph: Q1=shared-IP cluster (≥10 devices, ≥2 shared IPs), Q2=enrollment rhythm (≥8 devices enrolling in 180s bands), Q3=high-degree peer cluster. Flagged device IDs are cached in Redis (24h TTL). Per-event path: O(1) Redis GET — no Neo4j on the hot path.",
             "UC-16"),
+
+        // ── ATL-2027: RBI/NPCI/ReBIT 2027 Autonomous Trust Layer ─────────────
+        ScenarioCard(17, "🛰", "ATL-2027 Autonomous Trust",
+            "DPIP consortium · autonomous command · deepfake compound",
+            "CRITICAL", "AutonomousCommandReceiver", "ATL_COMMAND_001", "autonomous_decision_enhancer",
+            "RBI/NPCI/ReBIT 2027 Autonomous Trust Layer: (1) SDK polls /api/v1/device/commands every 4.5s — BLOCK/STEP_UP commands from the backend LLM analyst enforced within ≤5s. (2) Every API call carries X-DPIP-Device-Hash = SHA-256(device_id + tenant_salt) for DPDP-compliant DPIP consortium blocklist lookup. (3) Three new deepfake compound signals: OverlayAttackSignal (SYSTEM_ALERT_WINDOW), BackgroundCameraSignal (CameraManager availability), DeepfakePreconditionSignal (frame-rate anomaly + MediaPipe injection + voice changer). Backend deepfake_risk_detector.py fuses all 10 device-layer signals into a single deepfake_score.",
+            "ATL-2027"),
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {

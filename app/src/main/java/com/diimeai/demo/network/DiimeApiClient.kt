@@ -54,8 +54,12 @@ object DiimeApiClient {
 
     /**
      * Call once from Application.onCreate() BEFORE any network calls.
+     *
+     * @param tenantSalt  ATL-2027: DPIP tenant salt for SHA-256(device_id + salt) header.
+     *                    Pass [BuildConfig.DPIP_TENANT_SALT].  Defaults to empty string
+     *                    for backwards compatibility.
      */
-    fun init(context: Context, keyManager: DeviceKeyManager) {
+    fun init(context: Context, keyManager: DeviceKeyManager, tenantSalt: String = "") {
         this.keyManager  = keyManager
         this.appContext  = context.applicationContext
         val logging = HttpLoggingInterceptor().apply {
@@ -67,9 +71,12 @@ object DiimeApiClient {
 
         // PinningInterceptor — reads session from SessionHolder on every call.
         // SessionHolder.setSession() is called after login (see LoginActivity).
+        // ATL-2027: tenantSalt is forwarded so PinningInterceptor can compute
+        // X-DPIP-Device-Hash = SHA-256(device_id + tenantSalt) on every request.
         val pinning = PinningInterceptor(
             keyManager = keyManager,
-            act        = "REQUEST"   // default; overridden per-call via action-specific clients
+            act        = "REQUEST",   // default; overridden per-call via action-specific clients
+            tenantSalt = tenantSalt   // ATL-2027 DPIP pseudonymised device hash
         )
 
         // PayShieldAuthInterceptor — wire-level auth observation.
@@ -484,10 +491,22 @@ object DiimeApiClient {
                    SignalFired("MAL_APK_003", 0.92f, "CRITICAL", "botnet_correlation")),
             "BLOCK", 100, "PAYMENT"),
         13 to ScenarioDef("Deepfake KYC Bypass",      "DEEPFAKE_KYC_SIGNAL",
+            // ATL-2027 enhanced: 8 device-layer signals feed deepfake_risk_detector.py
             mapOf("virtual_camera_detected" to true, "obs_package_present" to true,
-                  "non_physical_camera_id" to true),
-            listOf(SignalFired("APP_RUNTIME_008", 0.94f, "CRITICAL", "synthetic_identity")),
-            "BLOCK", 96, "KYC"),
+                  "non_physical_camera_id" to true,
+                  "overlay_attack"      to true,      // RASP_DEV_063 — SYSTEM_ALERT_WINDOW redress
+                  "background_camera"   to true,      // RASP_DEV_064 — deepfake frame acquisition
+                  "frame_rate_anomaly"  to true,      // RASP_DEV_065 — synthetic camera FPS
+                  "mediapipe_injection" to true,      // RASP_DEV_065 — AR deepfake SDK present
+                  "voice_changer"       to true),     // RASP_DEV_065 — voice spoof for liveness
+            listOf(
+                SignalFired("APP_RUNTIME_008", 0.94f, "CRITICAL", "synthetic_identity"),
+                // ATL-2027 deepfake precondition compound signals
+                SignalFired("RASP_DEV_063",    0.88f, "HIGH",     "deepfake_risk_detector"),  // overlay
+                SignalFired("RASP_DEV_064",    0.92f, "HIGH",     "deepfake_risk_detector"),  // bg camera
+                SignalFired("RASP_DEV_065",    0.85f, "HIGH",     "deepfake_risk_detector"),  // compound
+            ),
+            "BLOCK", 97, "KYC"),
         14 to ScenarioDef("NBFC Insider Burst",        "INSIDER_BURST_SIGNAL",
             mapOf("enrollment_velocity_60s" to 5, "off_hours_enrollment" to true,
                   "device_account_degree" to 5, "device_reuse_count" to 18),
@@ -505,6 +524,29 @@ object DiimeApiClient {
             listOf(SignalFired("BOT_APP_011", 0.91f, "CRITICAL", "organized_crime_cluster"),
                    SignalFired("BOT_APP_011", 0.86f, "CRITICAL", "organized_crime_cluster")),
             "BLOCK", 94, "PAYMENT"),
+
+        // ── ATL-2027: Autonomous Trust Layer — DPIP + autonomous command enforcement ──
+        17 to ScenarioDef("ATL-2027 Autonomous Trust",  "ATL_AUTONOMOUS_SIGNAL",
+            // Compound payload: DPIP consortium blocklist hit + autonomous BLOCK command +
+            // full deepfake precondition cluster (overlay + background camera + compound)
+            mapOf("dpip_blocklist_hit"    to true,
+                  "autonomous_command"    to "BLOCK",
+                  "command_confidence"    to 0.97,
+                  "command_source"        to "autonomous_decision_enhancer",
+                  "overlay_attack"        to true,
+                  "background_camera"     to true,
+                  "frame_rate_anomaly"    to true,
+                  "mediapipe_injection"   to true,
+                  "voice_changer"         to true,
+                  "dpip_device_hash_sent" to true),
+            listOf(
+                SignalFired("ATL_DPIP_001",    0.95f, "CRITICAL", "dpip_client"),
+                SignalFired("ATL_COMMAND_001", 0.97f, "CRITICAL", "autonomous_decision_enhancer"),
+                SignalFired("RASP_DEV_063",    0.88f, "HIGH",     "deepfake_risk_detector"),
+                SignalFired("RASP_DEV_064",    0.92f, "HIGH",     "deepfake_risk_detector"),
+                SignalFired("RASP_DEV_065",    0.85f, "HIGH",     "deepfake_risk_detector"),
+            ),
+            "BLOCK", 99, "KYC"),
     )
 
     // ── Ingest scenario through real pipeline ─────────────────────────────────
