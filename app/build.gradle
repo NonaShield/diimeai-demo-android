@@ -151,10 +151,8 @@ dependencies {
     // Resolved via libs/ fileTree first (settings.gradle flatDir), then mavenLocal().
     implementation(name: 'payshield-android-sdk-1.0.0', ext: 'aar')
 
-    // FreeRASP-KMP — needed at compile time because PayShieldEdgeInitializer.initialize()
-    // exposes freeraspConfig in its public API. Classes are bundled inside the SDK AAR
-    // at runtime, so this is compileOnly (prevents duplicate class errors at link time).
-    compileOnly 'com.aheaditec.talsec.security:freeRASP_KMP:2.0.0'
+    // No freeRASP-KMP dependency needed — the SDK exposes PayShieldRaspConfig (its own type)
+    // at the API boundary. freeRASP-KMP is an internal implementation detail of the SDK AAR.
 
     // ── Android core ─────────────────────────────────────────────────────────
     implementation 'androidx.core:core-ktx:1.13.1'

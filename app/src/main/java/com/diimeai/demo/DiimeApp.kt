@@ -158,7 +158,8 @@ class DiimeApp : Application() {
             signalSink     = sdkSignalSink,
             sdkState       = sdkState,
             backendBaseUrl = BuildConfig.NONASHIELD_BASE_URL,
-            // freeRaspConfig: null in demo — FreeRASP integration is optional
+            // Pass null to skip FreeRASP — demo doesn't need watcher mail / cert hashes.
+            // In production pass PayShieldRaspConfig(watcherMail=..., androidConfig=...).
             freeRaspConfig = null,
             // ATL-2027: Three-way attestation enforcement.
             //   DEVELOPMENT → fail open (emulators / dev devices safe)
