@@ -13,8 +13,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // FreeRASP SDK (TalsecSecurity)
-        maven { url 'https://jitpack.io' }
+        // FreeRASP SDK (TalsecSecurity) — on Google Artifact Registry, not JitPack.
+        // Both repos are required: freerasp = AAR, common = shared types (freeraspConfig etc.)
+        maven { url 'https://europe-west3-maven.pkg.dev/talsec-artifact-repository/freerasp' }
+        maven { url 'https://europe-west3-maven.pkg.dev/talsec-artifact-repository/common' }
         // NonaShield SDK — AAR bundled at app/libs/payshield-android-sdk-1.0.0.aar
         // flatDir lets the name+ext declaration in app/build.gradle resolve to that file.
         flatDir { dirs 'app/libs' }
