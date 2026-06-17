@@ -70,6 +70,10 @@ class DiimeApp : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        // ── Demo crash handler — shows stack trace on-device instead of silent kill ──
+        // Install FIRST so any subsequent crash in onCreate() is caught and displayed.
+        installCrashHandler()
+
         // ── Step 1: Initialize SecureStorage ──────────────────────────────────
         // Must happen before any SecureStorage.put() / get() call.
         // Uses EncryptedSharedPreferences with AES-256-GCM master key in AndroidKeyStore.
@@ -104,7 +108,12 @@ class DiimeApp : Application() {
         // The SdkSignalSink bridge below routes com.payshield.sdk.signal.SignalSink
         // (used by SignalOrchestrator) → DiimeApiClient.signalSink (android-sdk layer).
         // This is the same bridge pattern used in LoginActivity and PaymentActivity.
-        initPayShieldEdge()
+        try {
+            initPayShieldEdge()
+        } catch (t: Throwable) {
+            showCrashScreen("initPayShieldEdge() threw:\n\n${t.stackTraceToString()}")
+            return
+        }
 
         // ── Step 5: Enroll device in background ───────────────────────────────
         // Fast-path: EnrollmentState.isEnrolled() returns immediately if already done.
@@ -216,6 +225,33 @@ class DiimeApp : Application() {
                 }
             }
         }
+    }
+
+    // ── Demo-only crash helpers ───────────────────────────────────────────────
+
+    private fun installCrashHandler() {
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            val sb = buildString {
+                appendLine("Thread: ${thread.name}")
+                appendLine()
+                appendLine(throwable.stackTraceToString())
+            }
+            try {
+                showCrashScreen(sb)
+            } catch (_: Throwable) {
+                // If we can't show the screen, fall back to the system handler
+                defaultHandler?.uncaughtException(thread, throwable)
+            }
+        }
+    }
+
+    private fun showCrashScreen(message: String) {
+        val intent = android.content.Intent(applicationContext, CrashReportActivity::class.java).apply {
+            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            putExtra(CrashReportActivity.EXTRA_CRASH_MESSAGE, message)
+        }
+        startActivity(intent)
     }
 
     private fun registerSignalSink() {
