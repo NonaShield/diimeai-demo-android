@@ -2,9 +2,11 @@
 // DiimeAI Demo App — Root build script
 // ============================================================================
 plugins {
-    // AGP 8.9.0 + Kotlin 2.2.0 required — AAR was compiled with Kotlin 2.2.0
-    // which produces class metadata version 2.2.0. AGP 8.3.x R8 and Kotlin 1.9.x
-    // compilers can only read up to metadata version 2.0.0 → compilation fails.
+    // AGP 8.9.0 kept for R8 compatibility.
+    // Kotlin intentionally downgraded to 1.9.23 to verify that the SDK AAR
+    // (compiled with Kotlin 2.2.0 + -Xmetadata-version=2.0) can be consumed
+    // by a project on Kotlin 1.9.x without a metadata-version compile error.
+    // This simulates the majority of customer apps that haven't yet upgraded to Kotlin 2.x.
     id 'com.android.application' version '8.9.0' apply false
-    id 'org.jetbrains.kotlin.android' version '2.2.0' apply false
+    id 'org.jetbrains.kotlin.android' version '1.9.23' apply false
 }
