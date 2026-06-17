@@ -167,6 +167,12 @@ dependencies {
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
 
+    // ── SDK runtime dependencies ─────────────────────────────────────────────
+    // The SDK AAR bundles its own classes but declares these as `implementation`
+    // (not `api`), so consumers must add them explicitly.
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+    implementation 'com.google.android.play:integrity:1.3.0'
+
     // ── Coroutines ───────────────────────────────────────────────────────────
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0'
 
