@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlin.system.exitProcess
 
 /**
  * DiimeAI Application class.
@@ -70,6 +71,10 @@ class DiimeApp : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        // CrashReportActivity runs in :crash process.  When Android starts that process
+        // it also instantiates DiimeApp, but we must not initialise the SDK there.
+        if (isInCrashProcess()) return
+
         // ── Demo crash handler — shows stack trace on-device instead of silent kill ──
         // Install FIRST so any subsequent crash in onCreate() is caught and displayed.
         installCrashHandler()
@@ -112,7 +117,9 @@ class DiimeApp : Application() {
             initPayShieldEdge()
         } catch (t: Throwable) {
             showCrashScreen("initPayShieldEdge() threw:\n\n${t.stackTraceToString()}")
-            return
+            // Kill the main process — CrashReportActivity in :crash process survives.
+            android.os.Process.killProcess(android.os.Process.myPid())
+            exitProcess(1)
         }
 
         // ── Step 5: Enroll device in background ───────────────────────────────
@@ -230,21 +237,28 @@ class DiimeApp : Application() {
     // ── Demo-only crash helpers ───────────────────────────────────────────────
 
     private fun installCrashHandler() {
-        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             val sb = buildString {
                 appendLine("Thread: ${thread.name}")
                 appendLine()
                 appendLine(throwable.stackTraceToString())
             }
-            try {
-                showCrashScreen(sb)
-            } catch (_: Throwable) {
-                // If we can't show the screen, fall back to the system handler
-                defaultHandler?.uncaughtException(thread, throwable)
-            }
+            try { showCrashScreen(sb) } catch (_: Throwable) {}
+            // Kill the main process so Android doesn't show "isn't responding" (ANR).
+            // CrashReportActivity runs in :crash process and is unaffected by this kill.
+            android.os.Process.killProcess(android.os.Process.myPid())
+            exitProcess(1)
         }
     }
+
+    private fun isInCrashProcess(): Boolean = getCurrentProcessName().endsWith(":crash")
+
+    private fun getCurrentProcessName(): String =
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P)
+            android.app.Application.getProcessName()
+        else try {
+            java.io.File("/proc/self/cmdline").readBytes().takeWhile { it != 0.toByte() }.toByteArray().toString(Charsets.UTF_8)
+        } catch (_: Throwable) { "" }
 
     private fun showCrashScreen(message: String) {
         val intent = android.content.Intent(applicationContext, CrashReportActivity::class.java).apply {

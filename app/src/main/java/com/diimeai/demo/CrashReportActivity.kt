@@ -92,7 +92,10 @@ class CrashReportActivity : Activity() {
         btnRow.addView(Button(this).apply {
             text = "Close App"
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            setOnClickListener { finishAffinity() }
+            setOnClickListener {
+                finishAffinity()
+                android.os.Process.killProcess(android.os.Process.myPid())
+            }
         })
 
         root.addView(btnRow)
