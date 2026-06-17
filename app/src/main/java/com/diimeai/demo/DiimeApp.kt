@@ -158,8 +158,8 @@ class DiimeApp : Application() {
             signalSink     = sdkSignalSink,
             sdkState       = sdkState,
             backendBaseUrl = BuildConfig.NONASHIELD_BASE_URL,
-            // talsecConfig: null in demo — FreeRASP integration is optional
-            talsecConfig   = null,
+            // freeRaspConfig: null in demo — FreeRASP integration is optional
+            freeRaspConfig = null,
             // ATL-2027: Three-way attestation enforcement.
             //   DEVELOPMENT → fail open (emulators / dev devices safe)
             //   STAGING     → full enforcement (QA / pen-test / UAT)
