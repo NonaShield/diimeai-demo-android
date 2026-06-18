@@ -13,8 +13,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // FreeRASP SDK (TalsecSecurity)
-        maven { url 'https://jitpack.io' }
+        // No freeRASP-KMP repo needed here — FreeRASP is bundled inside the
+        // payshield-android-sdk-*.aar and hidden behind PayShieldRaspConfig.
+        // App code passes PayShieldRaspConfig (an SDK type); freeRASP-KMP is
+        // an implementation detail of the SDK, not a consumer dependency.
         // NonaShield SDK — AAR bundled at app/libs/payshield-android-sdk-1.0.0.aar
         // flatDir lets the name+ext declaration in app/build.gradle resolve to that file.
         flatDir { dirs 'app/libs' }

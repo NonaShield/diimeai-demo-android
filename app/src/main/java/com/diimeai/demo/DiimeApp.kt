@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlin.system.exitProcess
 
 /**
  * DiimeAI Application class.
@@ -70,6 +71,14 @@ class DiimeApp : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        // CrashReportActivity runs in :crash process.  When Android starts that process
+        // it also instantiates DiimeApp, but we must not initialise the SDK there.
+        if (isInCrashProcess()) return
+
+        // ── Demo crash handler — shows stack trace on-device instead of silent kill ──
+        // Install FIRST so any subsequent crash in onCreate() is caught and displayed.
+        installCrashHandler()
+
         // ── Step 1: Initialize SecureStorage ──────────────────────────────────
         // Must happen before any SecureStorage.put() / get() call.
         // Uses EncryptedSharedPreferences with AES-256-GCM master key in AndroidKeyStore.
@@ -104,7 +113,14 @@ class DiimeApp : Application() {
         // The SdkSignalSink bridge below routes com.payshield.sdk.signal.SignalSink
         // (used by SignalOrchestrator) → DiimeApiClient.signalSink (android-sdk layer).
         // This is the same bridge pattern used in LoginActivity and PaymentActivity.
-        initPayShieldEdge()
+        try {
+            initPayShieldEdge()
+        } catch (t: Throwable) {
+            showCrashScreen("initPayShieldEdge() threw:\n\n${t.stackTraceToString()}")
+            // Kill the main process — CrashReportActivity in :crash process survives.
+            android.os.Process.killProcess(android.os.Process.myPid())
+            exitProcess(1)
+        }
 
         // ── Step 5: Enroll device in background ───────────────────────────────
         // Fast-path: EnrollmentState.isEnrolled() returns immediately if already done.
@@ -158,8 +174,9 @@ class DiimeApp : Application() {
             signalSink     = sdkSignalSink,
             sdkState       = sdkState,
             backendBaseUrl = BuildConfig.NONASHIELD_BASE_URL,
-            // talsecConfig: null in demo — FreeRASP integration is optional
-            talsecConfig   = null,
+            // Pass null to skip FreeRASP — demo doesn't need watcher mail / cert hashes.
+            // In production pass PayShieldRaspConfig(watcherMail=..., androidConfig=...).
+            freeRaspConfig = null,
             // ATL-2027: Three-way attestation enforcement.
             //   DEVELOPMENT → fail open (emulators / dev devices safe)
             //   STAGING     → full enforcement (QA / pen-test / UAT)
@@ -215,6 +232,40 @@ class DiimeApp : Application() {
                 }
             }
         }
+    }
+
+    // ── Demo-only crash helpers ───────────────────────────────────────────────
+
+    private fun installCrashHandler() {
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            val sb = buildString {
+                appendLine("Thread: ${thread.name}")
+                appendLine()
+                appendLine(throwable.stackTraceToString())
+            }
+            try { showCrashScreen(sb) } catch (_: Throwable) {}
+            // Kill the main process so Android doesn't show "isn't responding" (ANR).
+            // CrashReportActivity runs in :crash process and is unaffected by this kill.
+            android.os.Process.killProcess(android.os.Process.myPid())
+            exitProcess(1)
+        }
+    }
+
+    private fun isInCrashProcess(): Boolean = getCurrentProcessName().endsWith(":crash")
+
+    private fun getCurrentProcessName(): String =
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P)
+            android.app.Application.getProcessName()
+        else try {
+            java.io.File("/proc/self/cmdline").readBytes().takeWhile { it != 0.toByte() }.toByteArray().toString(Charsets.UTF_8)
+        } catch (_: Throwable) { "" }
+
+    private fun showCrashScreen(message: String) {
+        val intent = android.content.Intent(applicationContext, CrashReportActivity::class.java).apply {
+            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            putExtra(CrashReportActivity.EXTRA_CRASH_MESSAGE, message)
+        }
+        startActivity(intent)
     }
 
     private fun registerSignalSink() {
