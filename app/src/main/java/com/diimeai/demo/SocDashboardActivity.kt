@@ -101,7 +101,11 @@ class SocDashboardActivity : AppCompatActivity() {
             val threats   = runCatching { DiimeApiClient.getRecentThreats(8)    }.getOrNull()
 
             handler.post {
-                if (stats != null) applyRealStats(stats) else applySimulatedStats()
+                // Use real stats only when backend confirms live DB data.
+                // dataSource="fallback" means the backend was unreachable or returned
+                // static placeholder values — fall through to the local incrementing
+                // simulation so the dashboard looks live during demos.
+                if (stats != null && stats.isLiveData) applyRealStats(stats) else applySimulatedStats()
                 renderDecisionFeed(decisions)
                 renderThreatLog(threats)
             }
