@@ -3,6 +3,7 @@ package com.diimeai.demo
 import android.app.Application
 import android.content.Intent
 import android.util.Log
+import com.diimeai.demo.enrollment.EnrollmentStatus
 import com.diimeai.demo.network.DiimeApiClient
 import com.payshield.android.sdk.SignalSink
 import com.payshield.sdk.enrollment.EnrollmentManager
@@ -19,6 +20,9 @@ import com.payshield.sdk.state.SdkState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlin.system.exitProcess
 
@@ -50,6 +54,30 @@ class DiimeApp : Application() {
         @Volatile
         var enrollmentState: EnrollmentState.Enrollment? = null
             private set
+
+        /**
+         * Observable enrollment status — collected by MainActivity to gate the
+         * "Get Started" button and show error messages.
+         *
+         * Starts as [EnrollmentStatus.Pending] on every app launch.
+         * Transitions to [EnrollmentStatus.Enrolled] on success or
+         * [EnrollmentStatus.Failed] on error.
+         *
+         * On second launch where EnrollmentState is already stored, transitions
+         * directly to [EnrollmentStatus.Enrolled] without a network call.
+         */
+        private val _enrollmentStatus = MutableStateFlow<EnrollmentStatus>(EnrollmentStatus.Pending)
+        val enrollmentStatus: StateFlow<EnrollmentStatus> = _enrollmentStatus.asStateFlow()
+
+        /**
+         * Called by MainActivity's Retry button.
+         * Resets status to Pending and re-runs the enrollment coroutine.
+         * Safe to call if enrollment is already running — EnrollmentManager is idempotent.
+         */
+        fun retryEnrollment(instance: DiimeApp) {
+            _enrollmentStatus.value = EnrollmentStatus.Pending
+            instance.enrollDevice()
+        }
     }
 
     // ATL-2027: SDK state tracks PayShieldEdgeInitializer lifecycle.
@@ -196,10 +224,14 @@ class DiimeApp : Application() {
 
     // -------------------------------------------------------------------------
 
-    private fun enrollDevice() {
-        // Fast path — already enrolled on a previous launch
+    internal fun enrollDevice() {
+        // Fast path — already enrolled on a previous launch (EnrollmentState persisted)
         EnrollmentState.load()?.also { stored ->
             enrollmentState = stored
+            _enrollmentStatus.value = EnrollmentStatus.Enrolled(
+                deviceId  = stored.deviceId,
+                sessionId = stored.sessionId
+            )
             Log.i(TAG, "Device already enrolled: ${stored.deviceId}")
             return
         }
@@ -214,8 +246,7 @@ class DiimeApp : Application() {
                 keyManager     = keyManager,
                 backendBaseUrl = BuildConfig.NONASHIELD_BASE_URL,
                 // ATL-2027: pass the same environment used by PayShieldEdgeInitializer.
-                // STAGING / PRODUCTION → Play Integrity failure = hard enrollment failure
-                //   (SecurityException; no "PLAY_INTEGRITY_UNAVAILABLE" sentinel bypass).
+                // STAGING / PRODUCTION → Play Integrity failure = hard enrollment failure.
                 // DEVELOPMENT → fail open (emulators / sideloaded APKs allowed).
                 environment    = sdkEnvironment
             )
@@ -223,12 +254,21 @@ class DiimeApp : Application() {
             when (val result = enrollmentMgr.enroll(deviceId)) {
                 is EnrollmentResult.Success -> {
                     enrollmentState = EnrollmentState.load()
+                    _enrollmentStatus.value = EnrollmentStatus.Enrolled(
+                        deviceId  = deviceId,
+                        sessionId = result.sessionId
+                    )
                     Log.i(TAG, "Enrollment succeeded. deviceId=$deviceId session=${result.sessionId}")
                 }
                 is EnrollmentResult.Failure -> {
-                    // Non-fatal on launch — app works in degraded mode; retry on next launch.
-                    // In production: show a "secure setup required" dialog.
-                    Log.e(TAG, "Enrollment failed: ${result.reason}", result.cause)
+                    // Hard failures (integrity violations in STAGING/PRODUCTION) are not
+                    // retryable — user must switch to a legitimate device.
+                    val isRetryable = result.cause !is SecurityException
+                    _enrollmentStatus.value = EnrollmentStatus.Failed(
+                        reason      = result.reason,
+                        isRetryable = isRetryable
+                    )
+                    Log.e(TAG, "Enrollment failed (retryable=$isRetryable): ${result.reason}", result.cause)
                 }
             }
         }

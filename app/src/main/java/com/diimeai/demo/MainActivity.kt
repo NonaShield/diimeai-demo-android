@@ -6,13 +6,16 @@ import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.diimeai.demo.databinding.ActivityMainBinding
+import com.diimeai.demo.enrollment.EnrollmentStatus
+import com.diimeai.demo.enrollment.EnrollmentUiState
 import com.diimeai.demo.network.BindingProof
 import com.diimeai.demo.network.DiimeApiClient
 import com.payshield.sdk.enrollment.EnrollmentState
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -47,6 +50,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // "Get Started" is disabled until enrollment succeeds (observed below)
         binding.btnLogin.setOnClickListener {
             startActivity(Intent(this, LoginActivity::class.java))
         }
@@ -65,43 +69,81 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, SocDashboardActivity::class.java))
         }
 
-        refreshEnrollmentStatus()
+        // Retry button inside the error card
+        binding.btnRetryEnrollment.setOnClickListener {
+            DiimeApp.retryEnrollment(application as DiimeApp)
+        }
+
+        // Observe enrollment status — drives button state + error card
+        observeEnrollmentStatus()
     }
 
     override fun onResume() {
         super.onResume()
-        refreshEnrollmentStatus()
+        // refreshEnrollmentStatus() is now driven by the StateFlow observer
+        // started in onCreate(); no manual polling needed.
+        refreshEnrollmentCard()
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Demo 1: Hardware Possession — Enrollment + Binding Card
+    // Enrollment status observer — gates "Get Started" + shows error card
     // ─────────────────────────────────────────────────────────────────────────
 
-    private fun refreshEnrollmentStatus() {
-        val enrolled = EnrollmentState.isEnrolled()
+    /**
+     * Collects [DiimeApp.enrollmentStatus] for the lifetime of the Activity.
+     * Uses [repeatOnLifecycle] so collection pauses when the app is backgrounded
+     * and resumes when it returns to the foreground — no wasted work.
+     *
+     * The StateFlow is updated by [DiimeApp.enrollDevice] on the IO dispatcher;
+     * [StateFlow.collect] delivers values on the coroutine dispatcher of the
+     * collector which is the Main dispatcher here (via lifecycleScope).
+     */
+    private fun observeEnrollmentStatus() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                DiimeApp.enrollmentStatus.collect { status ->
+                    applyEnrollmentUiState(EnrollmentUiState.from(status))
 
-        if (enrolled) {
-            val state = DiimeApp.enrollmentState ?: EnrollmentState.load()
-            if (state != null) {
-                renderEnrolled(state.deviceId)
-            } else {
-                binding.tvEnrollStatus.text = "✅  Device enrolled with NonaShield"
-                binding.tvEnrollStatus.setTextColor(getColor(android.R.color.holo_green_dark))
-            }
-        } else {
-            binding.tvEnrollStatus.text = "⏳  Enrolling device — please wait…"
-            binding.tvEnrollStatus.setTextColor(getColor(android.R.color.holo_orange_dark))
-
-            // Poll until enrollment completes (kicked off in DiimeApp.onCreate)
-            lifecycleScope.launch {
-                for (i in 1..12) {
-                    delay(5_000)
-                    if (EnrollmentState.isEnrolled()) {
-                        withContext(Dispatchers.Main) { refreshEnrollmentStatus() }
-                        break
+                    // Also update the hardware binding card for Enrolled state
+                    if (status is EnrollmentStatus.Enrolled) {
+                        renderEnrolled(status.deviceId)
                     }
                 }
             }
+        }
+    }
+
+    /** Applies a [EnrollmentUiState] snapshot to the Get Started button and error card. */
+    private fun applyEnrollmentUiState(ui: EnrollmentUiState) {
+        // "Get Started" button
+        binding.btnLogin.isEnabled = ui.buttonEnabled
+        binding.btnLogin.text      = ui.buttonLabel
+        binding.btnLogin.alpha     = if (ui.buttonEnabled) 1f else 0.5f
+
+        // Progress spinner
+        binding.progressEnrollment.visibility =
+            if (ui.showProgress) View.VISIBLE else View.GONE
+
+        // Error card
+        binding.cardEnrollmentError.visibility =
+            if (ui.errorVisible) View.VISIBLE else View.GONE
+        if (ui.errorVisible) {
+            binding.tvEnrollmentError.text = ui.errorMessage
+        }
+
+        // Retry button inside error card
+        binding.btnRetryEnrollment.visibility =
+            if (ui.retryVisible) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * Refreshes the hardware binding card on resume in case the binding-proof
+     * was already loaded and just needs to be re-rendered (e.g. after back-navigation).
+     */
+    private fun refreshEnrollmentCard() {
+        val status = DiimeApp.enrollmentStatus.value
+        if (status is EnrollmentStatus.Enrolled) {
+            renderEnrolled(status.deviceId)
         }
     }
 

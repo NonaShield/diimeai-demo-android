@@ -178,6 +178,9 @@ dependencies {
 
     // ── Tests ────────────────────────────────────────────────────────────────
     testImplementation 'junit:junit:4.13.2'
+    // kotlinx-coroutines-test provides runTest{} and TestScope for testing
+    // StateFlow emissions without needing an Android runtime or emulator.
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 }
