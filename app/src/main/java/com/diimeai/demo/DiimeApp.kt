@@ -428,8 +428,12 @@ class DiimeApp : Application() {
             ?.addAccessibilityStateChangeListener { enabled ->
                 if (enabled) evaluateNow("accessibility_enabled")
                 else {
+                    // Both signals require an active accessibility service as a component.
+                    // Disabling accessibility immediately breaks both conditions — clear both
+                    // now rather than waiting for the next evaluateAll() OS trigger.
                     com.diimeai.demo.security.RaspSignalState.clear("ACCESSIBILITY_ABUSE")
-                    Log.i(TAG, "RASP: accessibility off — cleared ACCESSIBILITY_ABUSE")
+                    com.diimeai.demo.security.RaspSignalState.clear("SMS_INTERCEPT_CAPABLE")
+                    Log.i(TAG, "RASP: accessibility off — cleared ACCESSIBILITY_ABUSE + SMS_INTERCEPT_CAPABLE")
                 }
             }
 
