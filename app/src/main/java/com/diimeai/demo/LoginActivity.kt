@@ -11,6 +11,7 @@ import com.diimeai.demo.network.DiimeApiClient
 import com.diimeai.demo.network.LoginResult
 import com.payshield.sdk.behavioral.BehavioralCaptureManager
 import com.payshield.sdk.behavioral.KeystrokeDynamicsCapture
+import com.payshield.sdk.security.SecureScreenEnforcer
 import com.payshield.sdk.signal.EdgeSignal
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -92,6 +93,7 @@ class LoginActivity : AppCompatActivity() {
     // ─────────────────────────────────────────────────────────────────────────
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        SecureScreenEnforcer.apply(this)
         super.onCreate(savedInstanceState)
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -102,6 +104,7 @@ class LoginActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        SecureScreenEnforcer.apply(this)
         // ── Behavioral: attach keystroke and touch capture ─────────────────────
         // attachToRoot recursively wraps all EditText descendants with timing
         // listeners — captures username and password field typing dynamics.
@@ -113,6 +116,7 @@ class LoginActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        SecureScreenEnforcer.lift(this)
         super.onPause()
         // ── Behavioral: detach to avoid leaking listeners after screen exit ────
         keystrokeDynamics.detachFromRoot()

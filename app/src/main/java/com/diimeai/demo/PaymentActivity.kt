@@ -23,6 +23,8 @@ import com.diimeai.demo.network.EvidenceReceipt
 import com.diimeai.demo.network.PaymentResult
 import com.diimeai.demo.security.DeviceSignalStore
 import com.payshield.android.edge.EdgeRiskEnforcer
+import com.payshield.sdk.security.SecureScreenEnforcer
+import com.diimeai.demo.security.RaspSignalState
 import com.payshield.sdk.behavioral.BehavioralCaptureManager
 import com.payshield.sdk.behavioral.BehavioralTelemetrySender
 import com.payshield.sdk.behavioral.KeystrokeDynamicsCapture
@@ -126,6 +128,9 @@ class PaymentActivity : AppCompatActivity() {
     // ─────────────────────────────────────────────────────────────────────────
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Prevent screenshots and screen recording from capturing payment content.
+        // Must be called before setContentView so the flag is set before first render.
+        SecureScreenEnforcer.apply(this)
         super.onCreate(savedInstanceState)
         binding = ActivityPaymentBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -159,6 +164,7 @@ class PaymentActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        SecureScreenEnforcer.apply(this)  // re-enforce in case an OEM overlay lifted it
         updateRiskBadge()
         updateKycButtonLabel()
         handler.post(bioRefreshRunnable)
@@ -183,6 +189,7 @@ class PaymentActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        SecureScreenEnforcer.lift(this)  // lift flag when backgrounded → cleaner Recents thumbnail
         super.onPause()
         handler.removeCallbacks(bioRefreshRunnable)
         // ── Behavioral: detach listeners to avoid leaking references ───────────
@@ -323,11 +330,17 @@ class PaymentActivity : AppCompatActivity() {
         if (amount == null || amount <= 0) { binding.etAmount.error = "Enter a valid amount"; return }
         if (recipient.isBlank()) { binding.etRecipient.error = "Recipient required"; return }
 
-        // ── Demo 4: Screen mirroring direct check ─────────────────────────────
+        // ── Demo 4: Screen capture check (mirroring + software recording) ────────
         val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         if (dm.displays.size > 1) {
             Log.w(TAG, "[Demo4] Screen mirroring: ${dm.displays.size} displays active")
             showThreatBlockedDialog("RASP_DEV_025")
+            return
+        }
+        // RASP_DEV_051: software screen recording detected by the continuous SDK loop
+        if (RaspSignalState.hasScreenCaptureThreat()) {
+            Log.w(TAG, "[Demo4] Screen capture threat active (RASP_DEV_051)")
+            showThreatBlockedDialog("RASP_DEV_051")
             return
         }
 
@@ -525,10 +538,20 @@ class PaymentActivity : AppCompatActivity() {
                     "NonaShield RASP sensor RASP_DEV_025 detected that your screen is being cast " +
                     "to another device.\n\nFinancial data would be visible to the attacker.\n\n" +
                     "Payment blocked. Disable screen mirroring and retry."
+            threatId?.contains("051") == true || threatId?.contains("SCREEN_RECORDING") == true ->
+                "📱  Screen Recording Detected" to
+                    "NonaShield RASP sensor RASP_DEV_051 detected active screen recording on this device.\n\n" +
+                    "A recording app could capture your account details, OTP, or payment data.\n\n" +
+                    "Payment blocked. Stop screen recording and retry."
             threatId?.contains("ROOT") == true ->
                 "🔓  Root Detected" to "Root access detected. Payments disabled on rooted devices."
             threatId?.contains("HOOK") == true ->
                 "🪝  Runtime Hook Detected" to "A code-injection framework is active. Payment blocked."
+            threatId?.contains("VPN") == true ->
+                "🔒  VPN Conflict Detected" to
+                    "NonaShield RASP sensor NET_VPN_005 detected an active VPN connection.\n\n" +
+                    "VPN traffic may intercept or modify payment data.\n\n" +
+                    "Payment blocked. Disconnect VPN and retry."
             else ->
                 "🚫  Security Check Failed" to
                     "NonaShield detected a security violation. Restart the app after resolving it."

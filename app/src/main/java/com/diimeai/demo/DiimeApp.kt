@@ -187,6 +187,9 @@ class DiimeApp : Application() {
         // Bridge: com.payshield.sdk.signal.SignalSink → DiimeApiClient.signalSink
         val sdkSignalSink = object : com.payshield.sdk.signal.SignalSink {
             override fun emit(signal: EdgeSignal) {
+                // Update shared signal state so PaymentActivity and TrustDashboard
+                // reflect the live RASP result without waiting for a payment click.
+                com.diimeai.demo.security.RaspSignalState.record(signal.type)
                 // Route every RASP / ATL-2027 signal to the registered android-sdk sink.
                 DiimeApiClient.signalSink?.onSignalsCollected(listOf(signal))
                 Log.d(TAG, "SDK signal: ${signal.type} [${signal.threatId}] confidence=${signal.confidence}")
@@ -197,7 +200,7 @@ class DiimeApp : Application() {
             }
         }
 
-        PayShieldEdgeInitializer.initialize(
+        val orchestrator = PayShieldEdgeInitializer.initialize(
             context        = applicationContext,
             signalSink     = sdkSignalSink,
             sdkState       = sdkState,
@@ -217,6 +220,16 @@ class DiimeApp : Application() {
             // AutonomousCommandReceiver at runtime after enrollment issues it.
             tenantId       = "default"
         )
+
+        // RASP is session-wide — evaluate all 41 signals every 10s throughout the
+        // app session, not just at payment time. Signals update RaspSignalState which
+        // is read by PaymentActivity (gate) and TrustDashboardActivity (live display).
+        appScope.launch(Dispatchers.Default) {
+            while (true) {
+                try { orchestrator.evaluateAll() } catch (_: Throwable) {}
+                kotlinx.coroutines.delay(10_000L)
+            }
+        }
 
         Log.i(TAG, "PayShield Edge initialized (env=$sdkEnvironment, atl2027=true, " +
             "dpipSalt=${if (EnrollmentState.loadDpipSalt().isNotBlank()) "ISSUED" else "PENDING_ENROLLMENT"})")

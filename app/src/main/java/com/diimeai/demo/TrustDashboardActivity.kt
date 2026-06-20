@@ -12,6 +12,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.diimeai.demo.databinding.ActivityTrustDashboardBinding
 import com.diimeai.demo.network.DiimeApiClient
+import com.diimeai.demo.security.RaspSignalState
 import com.payshield.sdk.enrollment.EnrollmentState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -54,21 +55,22 @@ class TrustDashboardActivity : AppCompatActivity() {
 
         // 12 canonical SDK signals (9 original + 3 ATL-2027 deepfake signals)
         // Registered in PayShieldEdgeInitializer — full set of 41 RASP sensors
+        // signalTypes = EdgeSignal.type values emitted by the corresponding signal class
         private val SIGNAL_DEFS = listOf(
             // ── NPCI 2025 SIL — original 9 signals ──────────────────────────
-            SignalDef("ADB Install",        "RASP_DEV_001", "App installed via ADB"),
-            SignalDef("Root Cloaking",      "RASP_DEV_002", "Magisk hide / root masking"),
-            SignalDef("Screen Mirroring",   "RASP_DEV_003", "Mirroring / cast active"),
-            SignalDef("SELinux Disabled",   "RASP_DEV_004", "SELinux not enforcing"),
-            SignalDef("VPN Conflict",       "NET_VPN_005",  "Suspicious VPN detected"),
-            SignalDef("Repackaged APK",     "APP_INT_006",  "APK signature mismatch"),
-            SignalDef("Keyguard Insecure",  "DEV_SEC_007",  "No screen lock set"),
-            SignalDef("User CA Cert",       "NET_CA_013",   "User-installed CA present"),
-            SignalDef("Remote Desktop",     "RASP_DEV_014", "Remote control detected"),
+            SignalDef("ADB Install",        "RASP_DEV_001", "App installed via ADB",                  listOf("ADB_INSTALL")),
+            SignalDef("Root Cloaking",      "RASP_DEV_002", "Magisk hide / root masking",             listOf("ROOT_CLOAKING")),
+            SignalDef("Screen Capture",     "RASP_DEV_003", "Mirroring / cast / recording active",    listOf("SCREEN_MIRRORING", "SCREEN_RECORDING_ACTIVE", "SCREENSHOT")),
+            SignalDef("SELinux Disabled",   "RASP_DEV_004", "SELinux not enforcing",                  listOf("SELINUX_DISABLED")),
+            SignalDef("VPN Conflict",       "NET_VPN_005",  "Suspicious VPN detected",                listOf("VPN_CONFLICT")),
+            SignalDef("Repackaged APK",     "APP_INT_006",  "APK signature mismatch",                 listOf("APP_REPACKAGED")),
+            SignalDef("Keyguard Insecure",  "DEV_SEC_007",  "No screen lock set",                     listOf("KEYGUARD_NOT_SECURE")),
+            SignalDef("User CA Cert",       "NET_CA_013",   "User-installed CA present",               listOf("USER_CA_CERT")),
+            SignalDef("Remote Desktop",     "RASP_DEV_014", "Remote control detected",                 listOf("REMOTE_DESKTOP")),
             // ── RBI/NPCI/ReBIT 2027 ATL — deepfake compound signals ──────────
-            SignalDef("Overlay Attack",        "RASP_DEV_063", "SYSTEM_ALERT_WINDOW redress"),
-            SignalDef("Background Camera",     "RASP_DEV_064", "Deepfake frame acquisition"),
-            SignalDef("Deepfake Precondition", "RASP_DEV_065", "FPS anomaly/MediaPipe/voice"),
+            SignalDef("Overlay Attack",        "RASP_DEV_063", "SYSTEM_ALERT_WINDOW redress",         listOf("OVERLAY_ATTACK_DETECTED")),
+            SignalDef("Background Camera",     "RASP_DEV_064", "Deepfake frame acquisition",           listOf("BACKGROUND_CAMERA_ACTIVE")),
+            SignalDef("Deepfake Precondition", "RASP_DEV_065", "FPS anomaly/MediaPipe/voice",         listOf("DEEPFAKE_PRECONDITION_DETECTED")),
         )
 
         // 5 edge pipeline phases
@@ -81,7 +83,7 @@ class TrustDashboardActivity : AppCompatActivity() {
         )
     }
 
-    private data class SignalDef(val name: String, val threatId: String, val description: String)
+    private data class SignalDef(val name: String, val threatId: String, val description: String, val signalTypes: List<String> = emptyList())
 
     // ── state ─────────────────────────────────────────────────────────────────
     private lateinit var binding: ActivityTrustDashboardBinding
@@ -90,9 +92,6 @@ class TrustDashboardActivity : AppCompatActivity() {
     private var chainDepth = 1
     private var lastHash = "GENESIS"
     private var refreshCount = 0
-
-    // Simulated per-signal state (clean until a FreeRASP callback sets detected)
-    private val signalDetected = BooleanArray(SIGNAL_DEFS.size) { false }
 
     // ── lifecycle ─────────────────────────────────────────────────────────────
 
@@ -259,7 +258,7 @@ class TrustDashboardActivity : AppCompatActivity() {
      * Any detected RASP signal bumps the corresponding component.
      */
     private fun simulatedScores(): ScoreBundle {
-        val detectedCount = signalDetected.count { it }
+        val detectedCount = SIGNAL_DEFS.count { def -> def.signalTypes.any { RaspSignalState.isActive(it) } }
         val raspBase  = if (killSwitchActive) 65 else (detectedCount * 15).coerceAtMost(30)
         val bioBase   = if (killSwitchActive) 40 else 5
         val netBase   = if (killSwitchActive) 30 else 3
@@ -312,20 +311,21 @@ class TrustDashboardActivity : AppCompatActivity() {
     }
 
     private fun updateRaspSignals() {
-        val detectedCount = signalDetected.count { it }
-        binding.tvRaspSummary.text = if (detectedCount == 0)
-            "All clean ✅" else "⚠ $detectedCount detected"
+        val activeCount = SIGNAL_DEFS.count { def -> def.signalTypes.any { RaspSignalState.isActive(it) } }
+        binding.tvRaspSummary.text = if (activeCount == 0)
+            "All clean ✅" else "⚠ $activeCount detected"
 
-        binding.llSignalRows.children().forEachIndexed { index, view ->
-            if (view is LinearLayout) {
-                val statusView = view.findViewWithTag<TextView>("signal_status_$index") ?: return@forEachIndexed
-                if (signalDetected[index]) {
-                    statusView.text = "🔴 ${SIGNAL_DEFS[index].threatId}"
-                    statusView.setTextColor(Color.parseColor("#FF3333"))
-                } else {
-                    statusView.text = "✅ Clean"
-                    statusView.setTextColor(Color.parseColor("#00CC55"))
-                }
+        // Use tag-based lookup (avoids index mismatch from interleaved divider views)
+        SIGNAL_DEFS.forEachIndexed { index, def ->
+            val statusView = binding.llSignalRows.findViewWithTag<TextView>("signal_status_$index")
+                ?: return@forEachIndexed
+            val detected = def.signalTypes.any { RaspSignalState.isActive(it) }
+            if (detected) {
+                statusView.text = "🔴 ${def.threatId}"
+                statusView.setTextColor(Color.parseColor("#FF3333"))
+            } else {
+                statusView.text = "✅ Clean"
+                statusView.setTextColor(Color.parseColor("#00CC55"))
             }
         }
     }
