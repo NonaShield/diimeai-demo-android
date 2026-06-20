@@ -5,7 +5,6 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
-import android.view.LayoutInflater
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -130,11 +129,6 @@ class TrustDashboardActivity : AppCompatActivity() {
         container.removeAllViews()
 
         SIGNAL_DEFS.forEachIndexed { index, def ->
-            val row = LayoutInflater.from(this)
-                .inflate(android.R.layout.simple_list_item_2, container, false) as LinearLayout?
-                ?: LinearLayout(this)
-
-            // Build manually for precise control
             val rowLayout = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 setPadding(0, 8, 0, 8)

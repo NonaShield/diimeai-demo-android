@@ -220,17 +220,25 @@ object DiimeApiClient {
         recipientId: String,
         note:        String
     ): PaymentResult {
+        // NonaShield is privacy-preserving — never send raw PII (amount, recipient, VPA).
+        // Compute an opaque SHA-256 commitment from the payment details so the backend
+        // can sign the decision without seeing transaction values.
+        val amountPaise = (amount * 100).toLong()
+        val txCommitment = sha256hex("${amountPaise}|${currency}|${recipientId}")
+
+        val session  = SessionHolder.session
+        val deviceId = session?.deviceId ?: "unknown"
+
         val body = JSONObject().apply {
-            put("amount",       amount)
-            put("currency",     currency)
-            put("recipient_id", recipientId)
-            put("note",         note)
-            put("timestamp",    System.currentTimeMillis() / 1000)
+            put("tx_commitment", txCommitment)
+            put("device_id",    deviceId)
+            session?.sessionId?.let { put("session_id", it) }
         }.toString()
 
         val request = Request.Builder()
             .url("${BuildConfig.DIIMEAI_API_URL}/api/v1/payment/initiate")
             .post(body.toRequestBody(JSON))
+            .header("X-PS-Action",          "PAYMENT")
             // X-PS-Idempotency-Key — idempotent retry support (optional but recommended)
             .header("X-PS-Idempotency-Key", "pay_${System.currentTimeMillis()}")
             .build()
