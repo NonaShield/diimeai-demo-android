@@ -324,7 +324,25 @@ class PaymentActivity : AppCompatActivity() {
         if (amount == null || amount <= 0) { binding.etAmount.error = "Enter a valid amount"; return }
         if (recipient.isBlank()) { binding.etRecipient.error = "Recipient required"; return }
 
-        // ── Demo 4: Screen capture check (mirroring + software recording) ────────
+        // ── Malware gate — session-wide, fired by background OS callbacks ─────────
+        // State is set by DiimeApp's BroadcastReceiver/A11yListener at the moment the
+        // OS reports the threat — not by this Activity, not by any API call.
+        // These are persistent signals: active for the full app session until the OS
+        // confirms the threat is gone (package uninstalled, accessibility disabled).
+        if (RaspSignalState.hasMalwareThreat()) {
+            val threatCode = when {
+                RaspSignalState.isActive("DEVICE_ADMIN_ABUSE")    -> "MAL_APK_002"
+                RaspSignalState.isActive("SMS_INTERCEPT_CAPABLE") -> "MAL_APK_003"
+                RaspSignalState.isActive("HOOKING_FRAMEWORK")     -> "RASP_DEV_037"
+                RaspSignalState.isActive("MALWARE_DETECTED")      -> "DATA_SEC_020"
+                else                                               -> "MAL_APK_001"
+            }
+            Log.w(TAG, "[Malware] session-wide threat active: $threatCode — blocking payment")
+            showThreatBlockedDialog(threatCode)
+            return
+        }
+
+        // ── Screen capture check (mirroring + software recording) ─────────────
         val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         if (dm.displays.size > 1) {
             Log.w(TAG, "[Demo4] Screen mirroring: ${dm.displays.size} displays active")

@@ -447,6 +447,17 @@ class DiimeApp : Application() {
             object : android.content.BroadcastReceiver() {
                 override fun onReceive(ctx: android.content.Context, intent: android.content.Intent) {
                     val pkg = intent.data?.schemeSpecificPart ?: return
+                    if (intent.action == android.content.Intent.ACTION_PACKAGE_REMOVED) {
+                        // Pre-clear persistent malware signals so evaluateAll() below
+                        // re-fires them only if OTHER threats are still present on the device.
+                        // Without this, a persistent SIDELOAD_DETECTED would stay set even
+                        // after the sideloaded app is uninstalled.
+                        com.diimeai.demo.security.RaspSignalState.clear("SIDELOAD_DETECTED")
+                        com.diimeai.demo.security.RaspSignalState.clear("DEVICE_ADMIN_ABUSE")
+                        com.diimeai.demo.security.RaspSignalState.clear("SMS_INTERCEPT_CAPABLE")
+                        com.diimeai.demo.security.RaspSignalState.clear("HOOKING_FRAMEWORK")
+                        Log.i(TAG, "RASP: package removed ($pkg) — cleared malware signals, re-evaluating")
+                    }
                     evaluateNow("pkg_${intent.action?.substringAfterLast('.')} $pkg")
                 }
             },

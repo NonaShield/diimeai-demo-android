@@ -53,9 +53,11 @@ class TrustDashboardActivity : AppCompatActivity() {
         private const val REFRESH_INTERVAL_MS = 3_000L
         private const val GRAFANA_URL = "https://api.diimeai.com/dashboard/"
 
-        // 12 canonical SDK signals (9 original + 3 ATL-2027 deepfake signals)
+        // 17 canonical SDK signals (9 original + 3 ATL-2027 deepfake + 5 UC-MAL-2 malware)
         // Registered in PayShieldEdgeInitializer — full set of 41 RASP sensors
         // signalTypes = EdgeSignal.type values emitted by the corresponding signal class
+        // Malware signals are PERSISTENT (session-wide) — fired by OS callbacks in DiimeApp,
+        // not by any specific Activity or API call.
         private val SIGNAL_DEFS = listOf(
             // ── NPCI 2025 SIL — original 9 signals ──────────────────────────
             SignalDef("ADB Install",        "RASP_DEV_001", "App installed via ADB",                  listOf("ADB_INSTALL")),
@@ -71,6 +73,14 @@ class TrustDashboardActivity : AppCompatActivity() {
             SignalDef("Overlay Attack",        "RASP_DEV_063", "SYSTEM_ALERT_WINDOW redress",         listOf("OVERLAY_ATTACK_DETECTED")),
             SignalDef("Background Camera",     "RASP_DEV_064", "Deepfake frame acquisition",           listOf("BACKGROUND_CAMERA_ACTIVE")),
             SignalDef("Deepfake Precondition", "RASP_DEV_065", "FPS anomaly/MediaPipe/voice",         listOf("DEEPFAKE_PRECONDITION_DETECTED")),
+            // ── UC-MAL-2 Banking Trojan Protection (Chandigarh pattern) ──────
+            // Detected session-wide by OS callbacks — fires immediately on threat,
+            // stays active for the full session (persistent, not transient 30s TTL).
+            SignalDef("Sideloaded APK",      "MAL_APK_001", "App from WhatsApp/unofficial source",    listOf("SIDELOAD_DETECTED")),
+            SignalDef("Device Admin Abuse",  "MAL_APK_002", "Rogue device admin (blocks uninstall)",  listOf("DEVICE_ADMIN_ABUSE")),
+            SignalDef("SMS Intercept",       "MAL_APK_003", "OTP interception — READ_SMS+A11y active",listOf("SMS_INTERCEPT_CAPABLE")),
+            SignalDef("Hooking Framework",   "RASP_DEV_037","Frida/Xposed/LSPosed runtime hooking",   listOf("HOOKING_FRAMEWORK")),
+            SignalDef("Accessibility Abuse", "USR_BEH_003", "Rogue accessibility service active",     listOf("ACCESSIBILITY_ABUSE")),
         )
 
         // 5 edge pipeline phases
