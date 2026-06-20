@@ -84,6 +84,10 @@ class DiimeApp : Application() {
     // Stored at Application scope so it survives configuration changes.
     private val sdkState = SdkState()
 
+    // Held at Application scope so event-driven OS listeners can call evaluateAll()
+    // immediately when a threat condition appears (display added, VPN connected, etc.).
+    @Volatile private var raspOrchestrator: com.payshield.sdk.orchestrator.SignalOrchestrator? = null
+
     // Resolved once in initPayShieldEdge() and reused throughout the Application
     // lifecycle so enrollDevice() and initPayShieldEdge() use the same environment.
     private val sdkEnvironment: SdkEnvironment by lazy {
@@ -106,6 +110,10 @@ class DiimeApp : Application() {
         // ── Demo crash handler — shows stack trace on-device instead of silent kill ──
         // Install FIRST so any subsequent crash in onCreate() is caught and displayed.
         installCrashHandler()
+
+        // Apply FLAG_SECURE to EVERY activity through their lifecycle — not just
+        // payment / login screens.  RASP screen protection is session-wide.
+        applyGlobalSecureScreen()
 
         // ── Step 1: Initialize SecureStorage ──────────────────────────────────
         // Must happen before any SecureStorage.put() / get() call.
@@ -221,15 +229,21 @@ class DiimeApp : Application() {
             tenantId       = "default"
         )
 
-        // RASP is session-wide — evaluate all 41 signals every 10s throughout the
-        // app session, not just at payment time. Signals update RaspSignalState which
-        // is read by PaymentActivity (gate) and TrustDashboardActivity (live display).
+        // Hold reference so event-driven OS listeners can call evaluateAll() immediately.
+        raspOrchestrator = orchestrator
+
+        // Static signals (root, SELinux, keyguard, repackaging) have no OS push event —
+        // re-evaluated every 60 s.  Dynamic signals (display, VPN, package, ADB) fire
+        // immediately via OS callbacks registered in registerEventDrivenRaspListeners().
         appScope.launch(Dispatchers.Default) {
             while (true) {
                 try { orchestrator.evaluateAll() } catch (_: Throwable) {}
-                kotlinx.coroutines.delay(10_000L)
+                kotlinx.coroutines.delay(60_000L)
             }
         }
+
+        // Register event-driven OS listeners AFTER orchestrator is stored.
+        registerEventDrivenRaspListeners()
 
         Log.i(TAG, "PayShield Edge initialized (env=$sdkEnvironment, atl2027=true, " +
             "dpipSalt=${if (EnrollmentState.loadDpipSalt().isNotBlank()) "ISSUED" else "PENDING_ENROLLMENT"})")
@@ -285,6 +299,138 @@ class DiimeApp : Application() {
                 }
             }
         }
+    }
+
+    // ── Global FLAG_SECURE ────────────────────────────────────────────────────
+
+    // Applies FLAG_SECURE across every activity through lifecycle callbacks so
+    // screen capture protection is session-wide — not tied to any one screen.
+    private fun applyGlobalSecureScreen() {
+        registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityCreated(activity: android.app.Activity, savedInstanceState: android.os.Bundle?) {
+                com.payshield.sdk.security.SecureScreenEnforcer.apply(activity)
+            }
+            override fun onActivityResumed(activity: android.app.Activity) {
+                com.payshield.sdk.security.SecureScreenEnforcer.apply(activity)
+            }
+            override fun onActivityPaused(activity: android.app.Activity) {
+                com.payshield.sdk.security.SecureScreenEnforcer.lift(activity)
+            }
+            override fun onActivityStarted(activity: android.app.Activity) {}
+            override fun onActivityStopped(activity: android.app.Activity) {}
+            override fun onActivitySaveInstanceState(activity: android.app.Activity, outState: android.os.Bundle) {}
+            override fun onActivityDestroyed(activity: android.app.Activity) {}
+        })
+    }
+
+    // ── Event-driven RASP listeners ───────────────────────────────────────────
+
+    // Registers OS callbacks that trigger signal evaluation IMMEDIATELY when a
+    // threat condition occurs.  No polling — each listener fires on the OS event:
+    //   • DisplayListener  — screen mirroring / virtual display (screen recording)
+    //   • NetworkCallback  — VPN transport appears / disappears
+    //   • AccessibilityStateChangeListener — accessibility service toggled
+    //   • BroadcastReceiver ACTION_PACKAGE_ADDED — new screen-recorder app installed
+    //   • ContentObserver  — ADB or developer-mode setting changed
+    private fun registerEventDrivenRaspListeners() {
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+
+        fun evaluateNow(label: String) {
+            Log.w(TAG, "RASP event: $label — evaluating immediately")
+            appScope.launch(Dispatchers.Default) {
+                try { raspOrchestrator?.evaluateAll() } catch (_: Throwable) {}
+            }
+        }
+
+        // Screen mirroring / recording: fires when a virtual or external display appears.
+        (getSystemService(android.content.Context.DISPLAY_SERVICE)
+                as? android.hardware.display.DisplayManager)
+            ?.registerDisplayListener(
+                object : android.hardware.display.DisplayManager.DisplayListener {
+                    override fun onDisplayAdded(displayId: Int) {
+                        if (displayId != android.view.Display.DEFAULT_DISPLAY)
+                            evaluateNow("display_added id=$displayId")
+                    }
+                    override fun onDisplayRemoved(displayId: Int) {
+                        if (displayId != android.view.Display.DEFAULT_DISPLAY) {
+                            com.diimeai.demo.security.RaspSignalState.clear("SCREEN_MIRRORING")
+                            com.diimeai.demo.security.RaspSignalState.clear("SCREEN_RECORDING_ACTIVE")
+                            Log.i(TAG, "RASP: external display removed — cleared screen-capture signals")
+                        }
+                    }
+                    override fun onDisplayChanged(displayId: Int) {}
+                },
+                handler
+            )
+
+        // VPN: fires when a VPN transport becomes available or is lost.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            try {
+                val cm = getSystemService(android.content.Context.CONNECTIVITY_SERVICE)
+                        as? android.net.ConnectivityManager
+                val req = android.net.NetworkRequest.Builder()
+                    .addTransportType(android.net.NetworkCapabilities.TRANSPORT_VPN)
+                    .build()
+                cm?.registerNetworkCallback(
+                    req,
+                    object : android.net.ConnectivityManager.NetworkCallback() {
+                        override fun onAvailable(network: android.net.Network) {
+                            evaluateNow("vpn_connected")
+                        }
+                        override fun onLost(network: android.net.Network) {
+                            com.diimeai.demo.security.RaspSignalState.clear("VPN_CONFLICT")
+                            Log.i(TAG, "RASP: VPN disconnected — cleared VPN_CONFLICT")
+                        }
+                    }
+                )
+            } catch (_: Throwable) {}
+        }
+
+        // Accessibility service toggled.
+        (getSystemService(android.content.Context.ACCESSIBILITY_SERVICE)
+                as? android.view.accessibility.AccessibilityManager)
+            ?.addAccessibilityStateChangeListener { enabled ->
+                if (enabled) evaluateNow("accessibility_enabled")
+                else {
+                    com.diimeai.demo.security.RaspSignalState.clear("ACCESSIBILITY_ABUSE")
+                    Log.i(TAG, "RASP: accessibility service disabled — cleared ACCESSIBILITY_ABUSE")
+                }
+            }
+
+        // Package install / update: re-check for known screen-recorder packages.
+        registerReceiver(
+            object : android.content.BroadcastReceiver() {
+                override fun onReceive(ctx: android.content.Context, intent: android.content.Intent) {
+                    val pkg = intent.data?.schemeSpecificPart ?: return
+                    evaluateNow("package_event=${intent.action} pkg=$pkg")
+                }
+            },
+            android.content.IntentFilter().apply {
+                addAction(android.content.Intent.ACTION_PACKAGE_ADDED)
+                addAction(android.content.Intent.ACTION_PACKAGE_REPLACED)
+                addDataScheme("package")
+            }
+        )
+
+        // ADB toggle.
+        contentResolver.registerContentObserver(
+            android.provider.Settings.Global.getUriFor(
+                android.provider.Settings.Global.ADB_ENABLED),
+            false,
+            object : android.database.ContentObserver(handler) {
+                override fun onChange(selfChange: Boolean) { evaluateNow("adb_setting_changed") }
+            }
+        )
+
+        // Developer mode toggle.
+        contentResolver.registerContentObserver(
+            android.provider.Settings.Global.getUriFor(
+                android.provider.Settings.Global.DEVELOPMENT_SETTINGS_ENABLED),
+            false,
+            object : android.database.ContentObserver(handler) {
+                override fun onChange(selfChange: Boolean) { evaluateNow("dev_mode_changed") }
+            }
+        )
     }
 
     // ── Demo-only crash helpers ───────────────────────────────────────────────

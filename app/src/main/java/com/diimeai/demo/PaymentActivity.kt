@@ -23,7 +23,6 @@ import com.diimeai.demo.network.EvidenceReceipt
 import com.diimeai.demo.network.PaymentResult
 import com.diimeai.demo.security.DeviceSignalStore
 import com.payshield.android.edge.EdgeRiskEnforcer
-import com.payshield.sdk.security.SecureScreenEnforcer
 import com.diimeai.demo.security.RaspSignalState
 import com.payshield.sdk.behavioral.BehavioralCaptureManager
 import com.payshield.sdk.behavioral.BehavioralTelemetrySender
@@ -128,9 +127,6 @@ class PaymentActivity : AppCompatActivity() {
     // ─────────────────────────────────────────────────────────────────────────
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Prevent screenshots and screen recording from capturing payment content.
-        // Must be called before setContentView so the flag is set before first render.
-        SecureScreenEnforcer.apply(this)
         super.onCreate(savedInstanceState)
         binding = ActivityPaymentBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -164,7 +160,6 @@ class PaymentActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        SecureScreenEnforcer.apply(this)  // re-enforce in case an OEM overlay lifted it
         updateRiskBadge()
         updateKycButtonLabel()
         handler.post(bioRefreshRunnable)
@@ -189,7 +184,6 @@ class PaymentActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
-        SecureScreenEnforcer.lift(this)  // lift flag when backgrounded → cleaner Recents thumbnail
         super.onPause()
         handler.removeCallbacks(bioRefreshRunnable)
         // ── Behavioral: detach listeners to avoid leaking references ───────────
