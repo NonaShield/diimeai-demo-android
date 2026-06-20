@@ -4,15 +4,13 @@
 #
 # Triggers on push to main when app source files change.
 # Steps:
-#   1. Check out payshield-kmp-sdk (NonaShield/nonashield-sdk)
-#   2. Build SDK and publish to local Maven (~/.m2)
-#   3. Build debug APK with DEMO_API_KEY=ABCDEFGHI
-#   4. Upload APK as a GitHub Actions artifact
+#   1. Check out demo app repo
+#   2. Build debug APK — SDK AAR resolved from app/libs/ (flatDir, no SDK source needed)
+#   3. Upload APK as a GitHub Actions artifact
 #
-# Required GitHub Secrets (Settings → Secrets → Actions):
-#   SDK_REPO_TOKEN  — GitHub PAT with Contents:read on NonaShield/nonashield-sdk
-#                     Create: GitHub → Settings → Developer settings → PATs (classic)
-#                     Scope: repo (or read:contents on the org)
+# The SDK AAR (app/libs/payshield-android-sdk-1.0.0.aar) is committed to this
+# repo. To update the SDK: download the new AAR from the nonashield-sdk CI
+# artifacts and replace the file, then commit.
 #
 # Optional secrets (for Play Store / signed release builds):
 #   DIIMEAI_KEYSTORE_BASE64  — base64-encoded keystore (base64 -w0 diimeai.keystore)
@@ -49,15 +47,6 @@ jobs:
     steps:
       - name: Checkout app repo
         uses: actions/checkout@v4
-        with:
-          path: app-repo
-
-      - name: Checkout SDK repo
-        uses: actions/checkout@v4
-        with:
-          repository: NonaShield/nonashield-sdk
-          path: sdk-repo
-          token: ${{ secrets.SDK_REPO_TOKEN }}
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -71,33 +60,18 @@ jobs:
         with:
           gradle-version: wrapper
 
-      - name: Build SDK and publish to local Maven
-        working-directory: sdk-repo
-        run: |
-          chmod +x gradlew
-          echo "── Building SDK and publishing to ~/.m2..."
-          ./gradlew :android-sdk:publishToMavenLocal \
-            --warning-mode none \
-            --no-daemon
-          echo "── Verifying SDK in local Maven..."
-          ls ~/.m2/repository/com/payshield/android-sdk/1.0.0/ \
-            || (echo "✗ SDK not found in ~/.m2" && exit 1)
-          echo "✓ SDK published to local Maven"
-
       - name: Build debug APK
-        working-directory: app-repo
         env:
           DEMO_API_KEY: "ABCDEFGHI"
         run: |
           chmod +x gradlew
-          echo "── Building APK (DEMO_API_KEY=ABCDEFGHI, API=https://api.diimeai.com)..."
+          echo "── Building APK (SDK AAR from app/libs/, DEMO_API_KEY=ABCDEFGHI)..."
           ./gradlew :app:assembleDebug \
             --warning-mode none \
             --no-daemon
           echo "✓ APK built"
 
       - name: Verify APK exists
-        working-directory: app-repo
         run: |
           APK="app/build/outputs/apk/debug/app-debug.apk"
           if [[ ! -f "$APK" ]]; then
@@ -112,14 +86,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nonashield-demo-apk-${{ github.sha }}
-          path: app-repo/app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
           if-no-files-found: error
 
       # ── Optional: signed release APK (only when keystore secrets are set) ──
       - name: Build signed release APK
         if: ${{ env.DIIMEAI_KEYSTORE_BASE64 != '' }}
-        working-directory: app-repo
         env:
           DEMO_API_KEY: "ABCDEFGHI"
           DIIMEAI_KEYSTORE_BASE64: ${{ secrets.DIIMEAI_KEYSTORE_BASE64 }}
@@ -138,7 +111,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nonashield-release-apk-${{ github.sha }}
-          path: app-repo/app/build/outputs/apk/release/app-release.apk
+          path: app/build/outputs/apk/release/app-release.apk
           retention-days: 30
           if-no-files-found: warn
         env:
