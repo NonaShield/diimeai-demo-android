@@ -352,6 +352,21 @@ class DiimeApp : Application() {
             }
         }
 
+        // Android 14 (API 34) requires RECEIVER_NOT_EXPORTED or RECEIVER_EXPORTED for all
+        // dynamically registered receivers. All receivers here are for system-only broadcasts
+        // so RECEIVER_NOT_EXPORTED is correct — no other app should be able to send these.
+        fun safeRegisterReceiver(
+            receiver: android.content.BroadcastReceiver,
+            filter: android.content.IntentFilter,
+        ) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(receiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("UnspecifiedRegisterReceiverFlag")
+                registerReceiver(receiver, filter)
+            }
+        }
+
         // ── A. App foreground trigger ─────────────────────────────────────────
         // Covers all "static" signals that can only change while the app is backgrounded:
         // root cloaking, SELinux, ptrace debugger, emulator fingerprint, SDK self-tamper,
@@ -447,20 +462,21 @@ class DiimeApp : Application() {
         //         PredatoryLoanAppSignal (37) — predatory loan app installed
         //         RomanceSocialAppSignal (38) — dating app installed
         //         DeepfakePreconditionSignal (41) — voice-changer / MediaPipe app installed
-        registerReceiver(
+        safeRegisterReceiver(
             object : android.content.BroadcastReceiver() {
                 override fun onReceive(ctx: android.content.Context, intent: android.content.Intent) {
                     val pkg = intent.data?.schemeSpecificPart ?: return
-                    if (intent.action == android.content.Intent.ACTION_PACKAGE_REMOVED) {
-                        // Pre-clear persistent malware signals so evaluateAll() below
-                        // re-fires them only if OTHER threats are still present on the device.
-                        // Without this, a persistent SIDELOAD_DETECTED would stay set even
-                        // after the sideloaded app is uninstalled.
+                    val isUpdate = intent.getBooleanExtra(android.content.Intent.EXTRA_REPLACING, false)
+                    if (intent.action == android.content.Intent.ACTION_PACKAGE_REMOVED && !isUpdate) {
+                        // True uninstall (not an app update) — pre-clear persistent malware
+                        // signals so evaluateAll() re-fires them only if other threats remain.
+                        // EXTRA_REPLACING=true means PACKAGE_REMOVED is part of an update
+                        // cycle; PACKAGE_REPLACED fires immediately after, so signals stay valid.
                         com.diimeai.demo.security.RaspSignalState.clear("SIDELOAD_DETECTED")
                         com.diimeai.demo.security.RaspSignalState.clear("DEVICE_ADMIN_ABUSE")
                         com.diimeai.demo.security.RaspSignalState.clear("SMS_INTERCEPT_CAPABLE")
                         com.diimeai.demo.security.RaspSignalState.clear("HOOKING_FRAMEWORK")
-                        Log.i(TAG, "RASP: package removed ($pkg) — cleared malware signals, re-evaluating")
+                        Log.i(TAG, "RASP: package uninstalled ($pkg) — cleared malware signals, re-evaluating")
                     }
                     evaluateNow("pkg_${intent.action?.substringAfterLast('.')} $pkg")
                 }
@@ -516,7 +532,7 @@ class DiimeApp : Application() {
         // Keyguard / device-admin state changed → KeyguardSignal (9), DeviceAdminAbuseSignal (34)
         // DEVICE_POLICY_MANAGER_STATE_CHANGED fires when admin sets/lifts lock requirements
         // or when a new device-admin app is activated/deactivated.
-        registerReceiver(
+        safeRegisterReceiver(
             object : android.content.BroadcastReceiver() {
                 override fun onReceive(ctx: android.content.Context, intent: android.content.Intent) {
                     evaluateNow("policy_or_keyguard_event")
@@ -530,7 +546,7 @@ class DiimeApp : Application() {
         )
 
         // User-installed CA cert added/removed → UserCertificateSignal (10)
-        registerReceiver(
+        safeRegisterReceiver(
             object : android.content.BroadcastReceiver() {
                 override fun onReceive(ctx: android.content.Context, intent: android.content.Intent) {
                     evaluateNow("trust_store_changed")
@@ -540,7 +556,7 @@ class DiimeApp : Application() {
         )
 
         // SIM / carrier change → SimSwapSignal (24)
-        registerReceiver(
+        safeRegisterReceiver(
             object : android.content.BroadcastReceiver() {
                 override fun onReceive(ctx: android.content.Context, intent: android.content.Intent) {
                     evaluateNow("carrier_config_changed")
@@ -550,7 +566,7 @@ class DiimeApp : Application() {
         )
 
         // NFC adapter state changed → NfcPaymentAbuseSignal (36)
-        registerReceiver(
+        safeRegisterReceiver(
             object : android.content.BroadcastReceiver() {
                 override fun onReceive(ctx: android.content.Context, intent: android.content.Intent) {
                     evaluateNow("nfc_adapter_state_changed")
