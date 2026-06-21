@@ -23,7 +23,7 @@ import com.diimeai.demo.network.EvidenceReceipt
 import com.diimeai.demo.network.PaymentResult
 import com.diimeai.demo.security.DeviceSignalStore
 import com.payshield.android.edge.EdgeRiskEnforcer
-import com.diimeai.demo.security.RaspSignalState
+import com.payshield.sdk.PayShieldEdgeInitializer
 import com.payshield.sdk.behavioral.BehavioralCaptureManager
 import com.payshield.sdk.behavioral.BehavioralTelemetrySender
 import com.payshield.sdk.behavioral.KeystrokeDynamicsCapture
@@ -332,7 +332,7 @@ class PaymentActivity : AppCompatActivity() {
             return
         }
         // RASP_DEV_051: software screen recording detected by the continuous SDK loop
-        if (RaspSignalState.hasScreenCaptureThreat()) {
+        if (PayShieldEdgeInitializer.hasScreenCaptureThreat()) {
             Log.w(TAG, "[Demo4] Screen capture threat active (RASP_DEV_051)")
             showThreatBlockedDialog("RASP_DEV_051")
             return

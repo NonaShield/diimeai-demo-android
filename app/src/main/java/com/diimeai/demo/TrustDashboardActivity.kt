@@ -12,7 +12,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.diimeai.demo.databinding.ActivityTrustDashboardBinding
 import com.diimeai.demo.network.DiimeApiClient
-import com.diimeai.demo.security.RaspSignalState
+import com.payshield.sdk.PayShieldEdgeInitializer
 import com.payshield.sdk.enrollment.EnrollmentState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -268,7 +268,7 @@ class TrustDashboardActivity : AppCompatActivity() {
      * Any detected RASP signal bumps the corresponding component.
      */
     private fun simulatedScores(): ScoreBundle {
-        val detectedCount = SIGNAL_DEFS.count { def -> def.signalTypes.any { RaspSignalState.isActive(it) } }
+        val detectedCount = SIGNAL_DEFS.count { def -> def.signalTypes.any { PayShieldEdgeInitializer.isSignalActive(it) } }
         val raspBase  = if (killSwitchActive) 65 else (detectedCount * 15).coerceAtMost(30)
         val bioBase   = if (killSwitchActive) 40 else 5
         val netBase   = if (killSwitchActive) 30 else 3
@@ -321,7 +321,7 @@ class TrustDashboardActivity : AppCompatActivity() {
     }
 
     private fun updateRaspSignals() {
-        val activeCount = SIGNAL_DEFS.count { def -> def.signalTypes.any { RaspSignalState.isActive(it) } }
+        val activeCount = SIGNAL_DEFS.count { def -> def.signalTypes.any { PayShieldEdgeInitializer.isSignalActive(it) } }
         binding.tvRaspSummary.text = if (activeCount == 0)
             "All clean ✅" else "⚠ $activeCount detected"
 
@@ -329,7 +329,7 @@ class TrustDashboardActivity : AppCompatActivity() {
         SIGNAL_DEFS.forEachIndexed { index, def ->
             val statusView = binding.llSignalRows.findViewWithTag<TextView>("signal_status_$index")
                 ?: return@forEachIndexed
-            val detected = def.signalTypes.any { RaspSignalState.isActive(it) }
+            val detected = def.signalTypes.any { PayShieldEdgeInitializer.isSignalActive(it) }
             if (detected) {
                 statusView.text = "🔴 ${def.threatId}"
                 statusView.setTextColor(Color.parseColor("#FF3333"))
