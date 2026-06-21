@@ -739,6 +739,14 @@ class PaymentActivity : AppCompatActivity() {
     }
 
     private fun performKycEnrollment(aadhaar: String, pan: String, deviceId: String) {
+        try {
+            EdgeRiskEnforcer.assertAllowed()
+        } catch (e: SecurityException) {
+            binding.tvResult.text = "⛔ KYC blocked — security risk detected\n${e.message}"
+            binding.tvResult.setTextColor(getColor(android.R.color.holo_red_dark))
+            binding.tvResult.visibility = View.VISIBLE
+            return
+        }
         setLoading(true)
         binding.tvResult.visibility = View.GONE
 

@@ -9,6 +9,7 @@ import androidx.lifecycle.lifecycleScope
 import com.diimeai.demo.databinding.ActivityLoginBinding
 import com.diimeai.demo.network.DiimeApiClient
 import com.diimeai.demo.network.LoginResult
+import com.payshield.android.edge.EdgeRiskEnforcer
 import com.payshield.sdk.behavioral.BehavioralCaptureManager
 import com.payshield.sdk.behavioral.KeystrokeDynamicsCapture
 import com.payshield.sdk.signal.EdgeSignal
@@ -158,6 +159,13 @@ class LoginActivity : AppCompatActivity() {
         }
         if (password.isBlank()) {
             binding.etPassword.error = "Password required"
+            return
+        }
+
+        try {
+            EdgeRiskEnforcer.assertAllowed()
+        } catch (e: SecurityException) {
+            Toast.makeText(this, "⛔ Login blocked — security risk detected", Toast.LENGTH_LONG).show()
             return
         }
 
