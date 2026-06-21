@@ -12,7 +12,6 @@ import com.payshield.sdk.enrollment.EnrollmentState
 import com.payshield.sdk.crypto.DeviceKeyManager
 import com.payshield.sdk.signal.EdgeSignal
 import com.payshield.sdk.behavioral.BehavioralTelemetrySender
-import com.payshield.sdk.storage.SecureStorage
 // ATL-2027: Autonomous Trust Layer initialisation
 import com.payshield.sdk.PayShieldEdgeInitializer
 import com.payshield.sdk.SdkEnvironment
@@ -45,10 +44,6 @@ class DiimeApp : Application() {
 
     companion object {
         private const val TAG = "DiimeApp"
-
-        // Singleton accessors — safe after onCreate()
-        lateinit var keyManager: DeviceKeyManager
-            private set
 
         // Enrollment result (may be null briefly on first launch while async completes)
         @Volatile
@@ -107,22 +102,14 @@ class DiimeApp : Application() {
         // Install FIRST so any subsequent crash in onCreate() is caught and displayed.
         installCrashHandler()
 
-        // ── Step 1: Initialize SecureStorage ──────────────────────────────────
-        // Must happen before any SecureStorage.put() / get() call.
-        // Uses EncryptedSharedPreferences with AES-256-GCM master key in AndroidKeyStore.
-        SecureStorage.init(applicationContext)
-
-        // ── Step 2: Create DeviceKeyManager ───────────────────────────────────
-        // Generates (or loads) an ECDSA P-256 key in AndroidKeyStore.
-        // Private key NEVER leaves the secure element.
-        keyManager = DeviceKeyManager()
-
-        // ── Step 3: Initialize global HTTP client ─────────────────────────────
+        // ── Step 1: Initialize global HTTP client ─────────────────────────────
         // DiimeApiClient sets up OkHttp with PinningInterceptor + PayShieldAuthInterceptor.
+        // PinningInterceptor creates its own DeviceKeyManager internally — the customer
+        // app does not hold a reference to SDK-internal key management classes.
         // Session is injected later (after login) via SessionHolder.setSession().
         // ATL-2027: PinningInterceptor reads X-DPIP-Device-Hash salt from SecureStorage
         // (via EnrollmentState.loadDpipSalt()) at request time — no salt param here.
-        DiimeApiClient.init(applicationContext, keyManager)
+        DiimeApiClient.init(applicationContext)
 
         // ── Step 3b: Wire behavioral telemetry sender ─────────────────────────
         // BehavioralTelemetrySender POSTs to /api/v1/security/telemetry at each
@@ -248,10 +235,10 @@ class DiimeApp : Application() {
         appScope.launch(Dispatchers.IO) {
             Log.i(TAG, "Starting device enrollment...")
 
-            val deviceId = keyManager.getStableDeviceId()
+            val deviceId = DeviceKeyManager().getStableDeviceId()
             val enrollmentMgr = EnrollmentManager(
                 context        = applicationContext,
-                keyManager     = keyManager,
+                keyManager     = DeviceKeyManager(),
                 backendBaseUrl = BuildConfig.NONASHIELD_BASE_URL,
                 // ATL-2027: pass the same environment used by PayShieldEdgeInitializer.
                 // STAGING / PRODUCTION → Play Integrity failure = hard enrollment failure.

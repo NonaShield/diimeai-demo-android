@@ -9,11 +9,11 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
-import com.diimeai.demo.biometrics.BehavioralMonitor
 import com.diimeai.demo.network.DiimeApiClient
 import com.diimeai.demo.network.ScenarioResult
 import com.diimeai.demo.network.SignalFired
-import com.diimeai.demo.security.DeviceSignalStore
+import com.payshield.sdk.PayShieldEdgeInitializer
+import com.payshield.sdk.behavioral.BehavioralSessionManager
 import com.payshield.sdk.enrollment.EnrollmentState
 
 /**
@@ -177,8 +177,8 @@ class FraudScenarioDetailActivity : AppCompatActivity() {
                 6 -> {
                     // UC-06 LIVE: use real device_account_degree from SharedPreferences
                     val deviceId    = EnrollmentState.load()?.deviceId
-                        ?: DiimeApp.keyManager.getStableDeviceId()
-                    val enrollCount = DeviceSignalStore.getEnrollmentCount(this@FraudScenarioDetailActivity)
+                        ?: PayShieldEdgeInitializer.getStableDeviceId()
+                    val enrollCount = PayShieldEdgeInitializer.getEnrollmentCount()
                         .coerceAtLeast(1)  // show at least 1 so demo always fires a signal
                     liveLogLine = "LIVE  device_account_degree=$enrollCount  (on-device store)"
                     DiimeApiClient.ingestLiveMuleAccount(deviceId, enrollCount)
@@ -186,9 +186,9 @@ class FraudScenarioDetailActivity : AppCompatActivity() {
                 8 -> {
                     // UC-08 LIVE: real SIM fingerprint + behavioral biometric deviation
                     val deviceId     = EnrollmentState.load()?.deviceId
-                        ?: DiimeApp.keyManager.getStableDeviceId()
-                    val iccidChanged = DeviceSignalStore.isSimSwapSuspected(this@FraudScenarioDetailActivity) ?: false
-                    val bioDev       = BehavioralMonitor.deviationScore()
+                        ?: PayShieldEdgeInitializer.getStableDeviceId()
+                    val iccidChanged = PayShieldEdgeInitializer.isSimSwapSuspected() ?: false
+                    val bioDev       = BehavioralSessionManager.deviationScore()
                     liveLogLine = "LIVE  iccid_changed=$iccidChanged  bio_dev=${(bioDev*100).toInt()}%  confidence=${if (iccidChanged && bioDev > 0.3f) 100 else if (iccidChanged) 70 else 55}%"
                     DiimeApiClient.ingestLiveSimSwap(deviceId, bioDev, iccidChanged)
                 }

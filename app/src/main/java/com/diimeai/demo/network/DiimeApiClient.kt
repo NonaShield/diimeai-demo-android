@@ -3,11 +3,10 @@ package com.diimeai.demo.network
 import android.content.Context
 import android.util.Log
 import com.diimeai.demo.BuildConfig
-import com.diimeai.demo.security.DeviceSignalStore
 import com.payshield.android.sdk.PinningInterceptor
 import com.payshield.android.sdk.SignalSink
-import com.payshield.sdk.crypto.DeviceKeyManager
 import com.payshield.sdk.integration.PayShieldAuthInterceptor
+import com.payshield.sdk.PayShieldEdgeInitializer
 import com.payshield.sdk.token.SessionHolder
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -46,18 +45,14 @@ object DiimeApiClient {
     // Populated by DiimeApp.registerSignalSink()
     var signalSink: SignalSink? = null
 
-    private lateinit var client:     OkHttpClient
-    private lateinit var keyManager: DeviceKeyManager   // stored for signing IngestEnvelopes
-
-    // Application context — stored at init() for DeviceSignalStore access
-    private var appContext: Context? = null
+    private lateinit var client: OkHttpClient
 
     /**
      * Call once from Application.onCreate() BEFORE any network calls.
+     * Signing of ingest envelopes is done via PayShieldEdgeInitializer.signIngestPayload()
+     * so customer app code never touches DeviceKeyManager directly.
      */
-    fun init(context: Context, keyManager: DeviceKeyManager) {
-        this.keyManager  = keyManager
-        this.appContext  = context.applicationContext
+    fun init(context: Context) {
         val logging = HttpLoggingInterceptor().apply {
             level = if (BuildConfig.IS_DEBUG)
                 HttpLoggingInterceptor.Level.BODY
@@ -67,12 +62,13 @@ object DiimeApiClient {
 
         // PinningInterceptor — reads session from SessionHolder on every call.
         // SessionHolder.setSession() is called after login (see LoginActivity).
+        // keyManager is created internally by PinningInterceptor — customer app does not
+        // hold a DeviceKeyManager reference.
         // ATL-2027: X-DPIP-Device-Hash salt is read from EnrollmentState.loadDpipSalt()
         // (SecureStorage / AES-256-GCM + AndroidKeyStore) on every request — not passed
         // as a constructor param.  The salt is backend-issued at enrollment time.
         val pinning = PinningInterceptor(
-            keyManager = keyManager,
-            act        = "REQUEST"    // default; overridden per-call via action-specific clients
+            act = "REQUEST"    // default; overridden per-call via action-specific clients
         )
 
         // PayShieldAuthInterceptor — wire-level auth observation.
@@ -595,13 +591,10 @@ object DiimeApiClient {
         val payloadJson = JSONObject(scenario.signals as Map<*, *>)
 
         // HMAC-SHA256 signature of the payload — CryptoGate validates this.
-        // DeviceKeyManager uses the AndroidKeyStore-backed key (never leaves the device).
-        val sig = try {
-            val payloadBytes = payloadJson.toString().toByteArray()
-            val hmacBytes    = keyManager.sign(payloadBytes)
-            android.util.Base64.encodeToString(hmacBytes, android.util.Base64.NO_WRAP)
-        } catch (e: Exception) {
-            Log.w(TAG, "keyManager.sign failed — cannot build signed envelope: ${e.message}")
+        // Signing is delegated to the SDK — customer app never touches DeviceKeyManager.
+        val sig = PayShieldEdgeInitializer.signIngestPayload(payloadJson.toString().toByteArray())
+        if (sig.isEmpty()) {
+            Log.w(TAG, "signIngestPayload returned empty — cannot build signed envelope")
             return simulatedScenarioResult(scenarioId)
         }
 
@@ -1006,23 +999,15 @@ object DiimeApiClient {
         val aadhaarHash = sha256hex(aadhaar)
         val panHash     = sha256hex(pan)
 
-        val ctx = appContext
+        // ── UC-06: Read current enrollment count from SDK ─────────────────────
+        val enrollmentCount = PayShieldEdgeInitializer.getEnrollmentCount()
+        val accountDegree   = enrollmentCount + 1  // this KYC makes it degree N+1
+        val velocitySecs    = PayShieldEdgeInitializer.getEnrollmentVelocitySecs()
+        val windowSecs      = PayShieldEdgeInitializer.getEnrollmentWindowSecs()
 
-        // ── UC-06: Read current enrollment count ─────────────────────────────
-        val enrollmentCount   = ctx?.let { DeviceSignalStore.getEnrollmentCount(it) } ?: 0
-        val accountDegree     = enrollmentCount + 1  // this KYC makes it degree N+1
-        val velocitySecs      = ctx?.let { DeviceSignalStore.secondsSinceLastEnrollment(it) } ?: Long.MAX_VALUE
-        val windowSecs        = ctx?.let { DeviceSignalStore.secondsSinceWindowStart(it) } ?: Long.MAX_VALUE
-
-        // ── UC-08: Capture SIM fingerprint at first enrollment ────────────────
-        val currentSimFp = ctx?.let { DeviceSignalStore.readSimFingerprint(it) }
-        if (ctx != null && enrollmentCount == 0 && currentSimFp != null) {
-            DeviceSignalStore.storeEnrolledSimFingerprint(ctx, currentSimFp)
-            Log.i(TAG, "UC-08: SIM fingerprint stored at first enrollment: $currentSimFp")
-        }
-        // Check for SIM change on subsequent enrollments
-        val simSwapSuspected = if (enrollmentCount > 0 && ctx != null) {
-            DeviceSignalStore.isSimSwapSuspected(ctx) == true
+        // ── UC-08: SIM swap check (baseline fingerprint stored by recordEnrollment on first enrollment)
+        val simSwapSuspected = if (enrollmentCount > 0) {
+            PayShieldEdgeInitializer.isSimSwapSuspected() == true
         } else false
 
         Log.i(TAG, "submitKyc: device_account_degree=$accountDegree velocity=${velocitySecs}s simSwap=$simSwapSuspected")
@@ -1078,9 +1063,10 @@ object DiimeApiClient {
                     )
                 }
 
-                // ── Post-success: increment device enrollment count ────────────
-                if (result.status in listOf("APPROVED", "PENDING") && ctx != null) {
-                    val newCount = DeviceSignalStore.incrementEnrollmentCount(ctx)
+                // ── Post-success: record enrollment via SDK ───────────────────
+                if (result.status in listOf("APPROVED", "PENDING")) {
+                    PayShieldEdgeInitializer.recordEnrollment()
+                    val newCount = PayShieldEdgeInitializer.getEnrollmentCount()
                     Log.i(TAG, "UC-06: Device enrollment count now $newCount after KYC success")
 
                     // Fire mule account ingest signal when threshold is reached
@@ -1097,14 +1083,13 @@ object DiimeApiClient {
             }
         } catch (e: Exception) {
             // Demo fallback — simulate approved KYC and still increment count
-            if (ctx != null) {
-                val newCount = DeviceSignalStore.incrementEnrollmentCount(ctx)
-                Log.i(TAG, "UC-06: Demo fallback — enrollment count now $newCount")
-                if (newCount >= 2) {
-                    Thread {
-                        runCatching { ingestLiveMuleAccount(deviceId, newCount) }
-                    }.start()
-                }
+            PayShieldEdgeInitializer.recordEnrollment()
+            val newCount = PayShieldEdgeInitializer.getEnrollmentCount()
+            Log.i(TAG, "UC-06: Demo fallback — enrollment count now $newCount")
+            if (newCount >= 2) {
+                Thread {
+                    runCatching { ingestLiveMuleAccount(deviceId, newCount) }
+                }.start()
             }
             KycResult(
                 status           = "APPROVED",
@@ -1131,9 +1116,8 @@ object DiimeApiClient {
      *   degree >= 3 → BLOCK    (probable mule node — NBFC policy)
      */
     fun ingestLiveMuleAccount(deviceId: String, enrollmentCount: Int): ScenarioResult {
-        val ctx           = appContext
-        val windowSecs    = ctx?.let { DeviceSignalStore.secondsSinceWindowStart(it) } ?: 9999L
-        val velocitySecs  = ctx?.let { DeviceSignalStore.secondsSinceLastEnrollment(it) } ?: 9999L
+        val windowSecs   = PayShieldEdgeInitializer.getEnrollmentWindowSecs()
+        val velocitySecs = PayShieldEdgeInitializer.getEnrollmentVelocitySecs()
 
         // Override scenario 6 signals with REAL values
         val livePayload = mapOf(
@@ -1150,14 +1134,8 @@ object DiimeApiClient {
         val timestamp = System.currentTimeMillis()
         val payloadJson = JSONObject(livePayload as Map<*, *>)
 
-        val sig = try {
-            android.util.Base64.encodeToString(
-                keyManager.sign(payloadJson.toString().toByteArray()),
-                android.util.Base64.NO_WRAP
-            )
-        } catch (e: Exception) {
-            return simulatedScenarioResult(6)
-        }
+        val sig = PayShieldEdgeInitializer.signIngestPayload(payloadJson.toString().toByteArray())
+            .ifEmpty { return simulatedScenarioResult(6) }
 
         val envelope = JSONObject().apply {
             put("device_id",   deviceId)
@@ -1270,14 +1248,8 @@ object DiimeApiClient {
         val timestamp = System.currentTimeMillis()
         val payloadJson = JSONObject(livePayload as Map<*, *>)
 
-        val sig = try {
-            android.util.Base64.encodeToString(
-                keyManager.sign(payloadJson.toString().toByteArray()),
-                android.util.Base64.NO_WRAP
-            )
-        } catch (e: Exception) {
-            return simulatedScenarioResult(8)
-        }
+        val sig = PayShieldEdgeInitializer.signIngestPayload(payloadJson.toString().toByteArray())
+            .ifEmpty { return simulatedScenarioResult(8) }
 
         val envelope = JSONObject().apply {
             put("device_id",   deviceId)

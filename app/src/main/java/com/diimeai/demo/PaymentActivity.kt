@@ -15,16 +15,16 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.diimeai.demo.biometrics.BehavioralMonitor
-import com.diimeai.demo.biometrics.DeviationSummary
 import com.diimeai.demo.databinding.ActivityPaymentBinding
 import com.diimeai.demo.network.DiimeApiClient
 import com.diimeai.demo.network.EvidenceReceipt
 import com.diimeai.demo.network.PaymentResult
-import com.diimeai.demo.security.DeviceSignalStore
 import com.payshield.android.edge.EdgeRiskEnforcer
 import com.payshield.sdk.PayShieldEdgeInitializer
 import com.payshield.sdk.behavioral.BehavioralCaptureManager
+import com.payshield.sdk.behavioral.BehavioralSessionManager
+import com.payshield.sdk.behavioral.BiometricChannelStatus
+import com.payshield.sdk.behavioral.BiometricDeviationSummary
 import com.payshield.sdk.behavioral.BehavioralTelemetrySender
 import com.payshield.sdk.behavioral.KeystrokeDynamicsCapture
 import com.payshield.sdk.enrollment.EnrollmentState
@@ -141,12 +141,12 @@ class PaymentActivity : AppCompatActivity() {
         // ── Demo 5: Start behavioral biometrics session ───────────────────────
         if (previousUserId != null) {
             // This is Session B — comparison against Session A baseline
-            BehavioralMonitor.enterComparisonMode()
+            BehavioralSessionManager.enterComparisonMode()
             showSocialEngineeringWarning(previousUserId!!)
             binding.rowDeviationBar.visibility = View.VISIBLE
         } else {
             // Session A — build the user baseline
-            BehavioralMonitor.start(this)
+            BehavioralSessionManager.start(this)
         }
 
         // Button wiring
@@ -174,7 +174,7 @@ class PaymentActivity : AppCompatActivity() {
     }
 
     private fun updateKycButtonLabel() {
-        val count = DeviceSignalStore.getEnrollmentCount(this)
+        val count = PayShieldEdgeInitializer.getEnrollmentCount()
         val nextAction = when {
             count == 0 -> "baseline"
             count == 1 -> "STEP_UP"
@@ -195,7 +195,7 @@ class PaymentActivity : AppCompatActivity() {
         super.onDestroy()
         if (previousUserId == null) {
             // Only stop sensors if this is session A (session B borrows them)
-            BehavioralMonitor.stop()
+            BehavioralSessionManager.stop()
         }
     }
 
@@ -230,7 +230,7 @@ class PaymentActivity : AppCompatActivity() {
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         // Feed every touch event to the behavioral engine (passive — no UX impact)
-        BehavioralMonitor.record(event)
+        BehavioralSessionManager.record(event)
         // Refresh panel immediately on UP events (gesture completed)
         if (event.actionMasked == MotionEvent.ACTION_UP) {
             handler.post { refreshBiometricPanel() }
@@ -243,7 +243,7 @@ class PaymentActivity : AppCompatActivity() {
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun refreshBiometricPanel() {
-        val summary = BehavioralMonitor.buildDeviationSummary()
+        val summary = BehavioralSessionManager.buildDeviationSummary()
 
         // Calibration row
         if (summary.isCalibrated) {
@@ -255,7 +255,7 @@ class PaymentActivity : AppCompatActivity() {
         }
 
         // Risk badge on the biometrics card
-        if (BehavioralMonitor.isComparisonMode && summary.isCalibrated) {
+        if (BehavioralSessionManager.isComparisonMode && summary.isCalibrated) {
             binding.tvBioRiskBadge.text = "${summary.riskLabel}  ${summary.compositePct}%"
             binding.tvBioRiskBadge.setBackgroundColor(summary.riskColor)
         } else if (summary.isCalibrated) {
@@ -271,15 +271,15 @@ class PaymentActivity : AppCompatActivity() {
         binding.tvBioFingerSize.text= formatChannel(summary.fingerSize,  "px")
         binding.tvBioSwipe.text     = formatChannel(summary.swipe, "px/ms")
         binding.tvBioHesitation.text= "${summary.hesitation.statusIcon} ${summary.hesitation.value.toLong()}ms" +
-            if (BehavioralMonitor.isComparisonMode && summary.hesitation.deviation > 0)
+            if (BehavioralSessionManager.isComparisonMode && summary.hesitation.deviation > 0)
                 " Δ${summary.hesitation.deviationPct}%" else ""
         binding.tvBioPosture.text   = "${summary.posture.statusIcon} ${"%.1f".format(summary.posture.value)}°" +
-            if (BehavioralMonitor.isComparisonMode && summary.posture.deviation > 0)
+            if (BehavioralSessionManager.isComparisonMode && summary.posture.deviation > 0)
                 " Δ${summary.posture.deviationPct}%" else ""
         binding.tvBioGrip.text      = formatChannel(summary.grip)
 
         // Deviation bar (comparison mode only)
-        if (BehavioralMonitor.isComparisonMode) {
+        if (BehavioralSessionManager.isComparisonMode) {
             binding.rowDeviationBar.visibility = View.VISIBLE
             binding.progressDeviation.progress = summary.compositePct
             binding.progressDeviation.progressTintList =
@@ -305,9 +305,9 @@ class PaymentActivity : AppCompatActivity() {
 
     private var socialEngAlertShown = false
 
-    private fun formatChannel(ch: com.diimeai.demo.biometrics.ChannelStatus, unit: String = ""): String {
+    private fun formatChannel(ch: BiometricChannelStatus, unit: String = ""): String {
         val value = "${"%.2f".format(ch.value)}$unit"
-        return if (BehavioralMonitor.isComparisonMode && ch.deviation > 0)
+        return if (BehavioralSessionManager.isComparisonMode && ch.deviation > 0)
             "${ch.statusIcon} $value  Δ${ch.deviationPct}%"
         else
             "${ch.statusIcon} $value"
@@ -341,14 +341,14 @@ class PaymentActivity : AppCompatActivity() {
         // ── UC-08 LIVE: SIM swap check ────────────────────────────────────────
         // Compare current SIM fingerprint against the one stored at KYC enrollment.
         // Combines with behavioral biometric deviation for dual-signal confidence.
-        val simSwapSuspected = DeviceSignalStore.isSimSwapSuspected(this) == true
-        val bioDev = BehavioralMonitor.deviationScore()
+        val simSwapSuspected = PayShieldEdgeInitializer.isSimSwapSuspected() == true
+        val bioDev = BehavioralSessionManager.deviationScore()
         if (simSwapSuspected) {
             Log.w(TAG, "[UC-08] SIM swap suspected — bioDev=${(bioDev * 100).toInt()}%")
             showSimSwapDialog(iccidChanged = true, biometricDeviation = bioDev)
             // Fire live signal to backend asynchronously (don't block UI)
             val deviceId = DiimeApp.enrollmentState?.deviceId
-                ?: DiimeApp.keyManager.getStableDeviceId()
+                ?: PayShieldEdgeInitializer.getStableDeviceId()
             lifecycleScope.launch(Dispatchers.IO) {
                 runCatching { DiimeApiClient.ingestLiveSimSwap(deviceId, bioDev, iccidChanged = true) }
                     .also { Log.i(TAG, "[UC-08] live ingest result: ${it.getOrNull()?.decision}") }
@@ -357,8 +357,8 @@ class PaymentActivity : AppCompatActivity() {
         }
 
         // ── Demo 5: Behavioral mismatch gate ─────────────────────────────────
-        if (BehavioralMonitor.isComparisonMode) {
-            val dev = BehavioralMonitor.deviationScore()
+        if (BehavioralSessionManager.isComparisonMode) {
+            val dev = BehavioralSessionManager.deviationScore()
             if (dev > 0.55f) {
                 showBiometricPaymentBlockedDialog(dev)
                 return
@@ -431,8 +431,8 @@ class PaymentActivity : AppCompatActivity() {
                         if (result.decisionId.isNotBlank())
                             append("Decision :  ${result.decisionId.take(18)}…\n")
                         append("\nNonaShield 5-phase pipeline: PASSED\n")
-                        if (BehavioralMonitor.isComparisonMode) {
-                            val dev = BehavioralMonitor.deviationScore()
+                        if (BehavioralSessionManager.isComparisonMode) {
+                            val dev = BehavioralSessionManager.deviationScore()
                             append("Behavioral deviation: ${"%.0f".format(dev * 100)}%")
                         }
                     }
@@ -631,7 +631,7 @@ class PaymentActivity : AppCompatActivity() {
         binding.tvRiskTier.setBackgroundColor(getColor(android.R.color.holo_red_dark))
     }
 
-    private fun showBiometricSocialEngAlert(summary: DeviationSummary) {
+    private fun showBiometricSocialEngAlert(summary: BiometricDeviationSummary) {
         val channels = summary.deviatingChannels
             .joinToString("\n") { "  ${it.statusIcon} ${it.name}: +${it.deviationPct}% deviation" }
 
@@ -657,7 +657,7 @@ class PaymentActivity : AppCompatActivity() {
     }
 
     private fun showBiometricPaymentBlockedDialog(deviation: Float) {
-        val summary = BehavioralMonitor.buildDeviationSummary()
+        val summary = BehavioralSessionManager.buildDeviationSummary()
         AlertDialog.Builder(this)
             .setTitle("🧬  Identity Mismatch — Payment Blocked")
             .setMessage(buildString {
@@ -682,7 +682,7 @@ class PaymentActivity : AppCompatActivity() {
     /**
      * Prompt a KYC enrollment dialog for the mule account demo.
      *
-     * Each enrollment increments [DeviceSignalStore.getEnrollmentCount] and sends
+     * Each enrollment increments [PayShieldEdgeInitializer.getEnrollmentCount] and sends
      * the real device_account_degree to the backend via [DiimeApiClient.submitKyc].
      *
      * Investor flow:
@@ -694,8 +694,8 @@ class PaymentActivity : AppCompatActivity() {
      * Actual hashes of Aadhaar/PAN are sent (never raw values).
      */
     private fun promptKycEnrollment() {
-        val currentCount = DeviceSignalStore.getEnrollmentCount(this)
-        val deviceId = DiimeApp.enrollmentState?.deviceId ?: DiimeApp.keyManager.getStableDeviceId()
+        val currentCount = PayShieldEdgeInitializer.getEnrollmentCount()
+        val deviceId = DiimeApp.enrollmentState?.deviceId ?: PayShieldEdgeInitializer.getStableDeviceId()
 
         // Pre-fill demo KYC values that change with enrollment count for realism
         val demoAadhaar = when (currentCount) {
@@ -792,7 +792,7 @@ class PaymentActivity : AppCompatActivity() {
         }
 
         // Update KYC button label to show current enrollment count
-        val newCount = DeviceSignalStore.getEnrollmentCount(this)
+        val newCount = PayShieldEdgeInitializer.getEnrollmentCount()
         binding.btnEnrollKyc.text = "🪪  Enroll KYC (degree=$newCount, next →${if (newCount >= 2) " BLOCK" else if (newCount == 1) " STEP_UP" else " baseline"})"
     }
 
@@ -822,10 +822,10 @@ class PaymentActivity : AppCompatActivity() {
 
     private fun switchToUser(newUser: String) {
         val deviceId = DiimeApp.enrollmentState?.deviceId
-            ?: DiimeApp.keyManager.getStableDeviceId()
+            ?: PayShieldEdgeInitializer.getStableDeviceId()
 
         // Save the first user's behavioral baseline before the switch
-        BehavioralMonitor.saveBaseline()
+        BehavioralSessionManager.saveBaseline()
 
         // Record screen transition — captures Session A dwell time before the switch.
         captureManager.sessionFlowAnalyzer.onScreenTransition()
@@ -870,16 +870,16 @@ class PaymentActivity : AppCompatActivity() {
     private fun updateRiskBadge() {
         val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         val isMirroring = dm.displays.size > 1
-        val simSwap     = DeviceSignalStore.isSimSwapSuspected(this) == true
+        val simSwap     = PayShieldEdgeInitializer.isSimSwapSuspected() == true
         val tier = if (isMirroring || simSwap ||
-            (BehavioralMonitor.isComparisonMode && BehavioralMonitor.deviationScore() > 0.55f))
+            (BehavioralSessionManager.isComparisonMode && BehavioralSessionManager.deviationScore() > 0.55f))
             "HIGH"
         else
             EdgeRiskEnforcer.currentRiskTier()
         val label = when {
             isMirroring -> "Risk: HIGH ⚠️ Mirror"
             simSwap     -> "Risk: HIGH 📱 SIM Swap"
-            BehavioralMonitor.isComparisonMode && tier == "HIGH" -> "Risk: HIGH 🧬 Bio"
+            BehavioralSessionManager.isComparisonMode && tier == "HIGH" -> "Risk: HIGH 🧬 Bio"
             else -> "Risk: $tier"
         }
         binding.tvRiskTier.apply {
@@ -901,7 +901,7 @@ class PaymentActivity : AppCompatActivity() {
     private fun logout() {
         // Record screen exit before clearing state.
         captureManager.sessionFlowAnalyzer.onScreenTransition()
-        BehavioralMonitor.fullReset()
+        BehavioralSessionManager.fullReset()
         DiimeApiClient.clearSession()
         startActivity(Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)

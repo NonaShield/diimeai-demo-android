@@ -10,6 +10,7 @@ import com.diimeai.demo.databinding.ActivityLoginBinding
 import com.diimeai.demo.network.DiimeApiClient
 import com.diimeai.demo.network.LoginResult
 import com.payshield.android.edge.EdgeRiskEnforcer
+import com.payshield.sdk.PayShieldEdgeInitializer
 import com.payshield.sdk.behavioral.BehavioralCaptureManager
 import com.payshield.sdk.behavioral.KeystrokeDynamicsCapture
 import com.payshield.sdk.signal.EdgeSignal
@@ -195,7 +196,7 @@ class LoginActivity : AppCompatActivity() {
 
     private fun onLoginSuccess(result: LoginResult.Success) {
         val deviceId = DiimeApp.enrollmentState?.deviceId
-            ?: DiimeApp.keyManager.getStableDeviceId()
+            ?: PayShieldEdgeInitializer.getStableDeviceId()
 
         // Inject session into NonaShield — PinningInterceptor picks it up immediately.
         DiimeApiClient.setSession(
