@@ -249,12 +249,16 @@ object DiimeApiClient {
             session?.sessionId?.let { put("session_id", it) }
         }.toString()
 
+        // MISMATCH 6b fix: backend /api/v1/payment/initiate requires a valid JWT Bearer
+        // token (Depends(require_jwt)) to identify the caller's session. Without it the
+        // backend returns 401 → app shows "Payment failed: HTTP 401".
+        // Pattern matches verifyWithGateway() (MISMATCH 6a) and submitKyc().
         val request = Request.Builder()
             .url("${BuildConfig.DIIMEAI_API_URL}/api/v1/payment/initiate")
             .post(body.toRequestBody(JSON))
             .header("X-PS-Action",          "PAYMENT")
-            // X-PS-Idempotency-Key — idempotent retry support (optional but recommended)
             .header("X-PS-Idempotency-Key", "pay_${System.currentTimeMillis()}")
+            .apply { session?.jwt?.let { header("Authorization", "Bearer $it") } }
             .build()
 
         return try {
