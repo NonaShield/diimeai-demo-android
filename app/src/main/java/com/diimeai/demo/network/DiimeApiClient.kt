@@ -47,6 +47,24 @@ object DiimeApiClient {
 
     private lateinit var client: OkHttpClient
 
+    // Minimal client for read-only SOC dashboard calls.
+    // Dashboard stats/decisions/threats only need X-Api-Key — they must NOT go
+    // through PinningInterceptor because:
+    //   1. PinningInterceptor adds X-Edge-Risk-Level; if the test device's RASP tier
+    //      is HIGH (emulator, rooted phone, USB-debugging device) NGINX blocks with 403.
+    //   2. EdgeRiskEnforcer.assertAllowed() is called on every intercept — unnecessary
+    //      overhead for read-only observability endpoints.
+    //   3. RuntimeIntegrityGate.assertClean() runs before every signing — debug APK
+    //      checks add latency and may throw on certain debug configurations.
+    // Login and enrollment also skip PinningInterceptor for the same reason.
+    private val statsClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(15, TimeUnit.SECONDS)
+            .build()
+    }
+
     /**
      * Call once from Application.onCreate() BEFORE any network calls.
      * Signing of ingest envelopes is done via PayShieldEdgeInitializer.signIngestPayload()
@@ -760,7 +778,7 @@ object DiimeApiClient {
             .apply { if (BuildConfig.DEMO_API_KEY.isNotBlank()) header("X-Api-Key", BuildConfig.DEMO_API_KEY) }
             .build()
         return try {
-            client.newCall(request).execute().use { response ->
+            statsClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return simulatedDashboardStats()
                 val j = JSONObject(response.body?.string() ?: return simulatedDashboardStats())
                 DashboardStats(
@@ -813,7 +831,7 @@ object DiimeApiClient {
             .apply { if (BuildConfig.DEMO_API_KEY.isNotBlank()) header("X-Api-Key", BuildConfig.DEMO_API_KEY) }
             .build()
         return try {
-            client.newCall(request).execute().use { response ->
+            statsClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return simulatedDecisions(limit)
                 val arr = JSONObject(response.body?.string() ?: "{}").optJSONArray("decisions")
                     ?: return simulatedDecisions(limit)
@@ -868,7 +886,7 @@ object DiimeApiClient {
             .apply { if (BuildConfig.DEMO_API_KEY.isNotBlank()) header("X-Api-Key", BuildConfig.DEMO_API_KEY) }
             .build()
         return try {
-            client.newCall(request).execute().use { response ->
+            statsClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return simulatedThreats(limit)
                 val arr = JSONObject(response.body?.string() ?: "{}").optJSONArray("threats")
                     ?: return simulatedThreats(limit)
