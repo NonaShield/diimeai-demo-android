@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">DiimeAI</string>
+    <string name="app_name">NonaShield</string>
     <string name="trust_dashboard_title">Trust Dashboard</string>
-    <string name="nonashield_badge">Secured by NonaShield</string>
+    <string name="nonashield_badge">Powered by DIMEAI IT SOLUTION PVT LIMITED</string>
     <string name="kill_switch_hint">Toggle to simulate operator push of force_block policy</string>
     <string name="grafana_url">https://api.diimeai.com/dashboard/</string>
 </resources>

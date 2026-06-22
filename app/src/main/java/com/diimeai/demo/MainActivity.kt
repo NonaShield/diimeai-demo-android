@@ -193,13 +193,20 @@ class MainActivity : AppCompatActivity() {
         )
         binding.rowHardwareBacking.visibility = View.VISIBLE
 
-        // Key fingerprint
+        // Key fingerprint (SHA-256 of public key DER)
         if (proof.pubkeyFingerprint.isNotBlank()) {
             val fp = proof.pubkeyFingerprint
             // Format as groups of 8 for readability
             val formatted = fp.chunked(8).joinToString(" ")
             binding.tvKeyFingerprint.text = formatted
             binding.rowFingerprint.visibility = View.VISIBLE
+        }
+
+        // Public key DER hex — demo-only display (first 48 hex chars + "…")
+        if (proof.pubkeyHex.isNotBlank()) {
+            val preview = proof.pubkeyHex.take(48).chunked(8).joinToString(" ") + "…"
+            binding.tvPubkeyHex.text = preview
+            binding.rowPubkeyHex.visibility = View.VISIBLE
         }
 
         // Enrolled since
@@ -236,7 +243,7 @@ class MainActivity : AppCompatActivity() {
 
         val message = if (proof != null) buildString {
             append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-            append("🔐  HARDWARE POSSESSION PROOF\n")
+            append("🔐  HARDWARE ATTESTATION PROOF\n")
             append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
             append("Proof ID:\n  ${proof.proofId.take(24)}…\n\n")
             append("Device ID:\n  ${proof.deviceId.take(24)}…\n\n")
@@ -244,14 +251,18 @@ class MainActivity : AppCompatActivity() {
             append("Hardware Backed:\n  ${if (proof.hardwareBacked) "YES — AndroidKeyStore (StrongBox/TEE)" else "NO — Software key"}\n\n")
             val fp = proof.pubkeyFingerprint
             if (fp.isNotBlank()) {
-                append("Public Key Fingerprint (SHA-256):\n  ${fp.chunked(16).joinToString("\n  ")}\n\n")
+                append("Key Fingerprint (SHA-256):\n  ${fp.chunked(16).joinToString("\n  ")}\n\n")
+            }
+            val hex = proof.pubkeyHex
+            if (hex.isNotBlank()) {
+                // Show full DER hex, wrapped at 32 chars per line
+                append("Public Key (DER):\n  ${hex.chunked(32).joinToString("\n  ")}\n\n")
             }
             append("Enrolled Since:\n  ${proof.enrolledAtIso}\n\n")
             append("Signing Algorithm:\n  ECDSA P-256 (AndroidKeyStore)\n\n")
             append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-            append("This proof is issued by the NonaShield\n")
-            append("backend after verifying Play Integrity\n")
-            append("attestation. The private key cannot be\n")
+            append("Powered by DIMEAI IT SOLUTION PVT LIMITED\n")
+            append("(NonaShield) — The private key cannot be\n")
             append("exported from this device's secure element.")
         } else buildString {
             append("🔐  HARDWARE POSSESSION PROOF\n\n")
@@ -263,7 +274,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("Hardware Binding Proof")
+            .setTitle("Hardware Attestation Proof")
             .setMessage(message)
             .setPositiveButton("OK", null)
             .show()
