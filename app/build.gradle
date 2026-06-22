@@ -52,11 +52,12 @@ android {
         // ── Demo API key (C4 fix) ────────────────────────────────────────────
         // Required by /api/v1/device/{id}/binding-proof and
         // /api/v1/evidence/{id}/receipt (both now protected by api_key_required).
-        // Set the DEMO_API_KEY environment variable at build time, or add
-        // DEMO_API_KEY=<key> to local.properties.  In production this would be a
-        // scoped read-only key separate from the admin API key.
+        // This demo key matches the SHA-256 hash registered in the api_keys table
+        // (hash: 2cdf6e152315e807562e3265bea43b48fe82511242d002fc45a35d190067a3d0).
+        // In production: issue a scoped read-only key via the admin API and supply
+        // it as the DEMO_API_KEY env var at build time — never bake prod keys here.
         buildConfigField 'String', 'DEMO_API_KEY',
-            "\"${System.getenv('DEMO_API_KEY') ?: ''}\""
+            "\"${System.getenv('DEMO_API_KEY') ?: 'ABCDEFGHI'}\""
 
         // ── ATL-2027: DPIP tenant salt ────────────────────────────────────────
         // NOTE: The DPIP tenant salt is NOT a BuildConfig field.

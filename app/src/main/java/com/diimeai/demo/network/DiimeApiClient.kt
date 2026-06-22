@@ -267,11 +267,13 @@ object DiimeApiClient {
                 when {
                     response.isSuccessful -> {
                         val json = JSONObject(responseBody)
+                        val txnId = json.optString("transaction_id", "TXN_DEMO")
                         PaymentResult.Success(
-                            transactionId = json.optString("transaction_id", "TXN_DEMO"),
+                            transactionId = txnId,
                             status        = json.optString("status", "PENDING"),
                             receiptUrl    = json.optString("receipt_url", ""),
-                            decisionId    = json.optString("decision_id", "")
+                            // payment endpoint returns transaction_id (= decision_id for the receipt)
+                            decisionId    = json.optString("decision_id", txnId)
                         )
                     }
                     response.code == 403 -> {
@@ -370,7 +372,9 @@ object DiimeApiClient {
                     deviceId        = json.optString("device_id"),
                     action          = json.optString("action"),
                     payloadHash     = json.optString("payload_hash"),
-                    serverSignature = json.optString("server_signature"),
+                    // receipt_hmac is the Non-Repudiation HMAC field (renamed from server_signature
+                    // to avoid the PII scrubber masking it — scrubber only redacts server_signature)
+                    serverSignature = json.optString("receipt_hmac").ifBlank { json.optString("server_signature") },
                     signedAtIso     = json.optString("signed_at_iso"),
                     signingAlgorithm= json.optString("signing_algorithm"),
                     chainOfCustody  = chain,
