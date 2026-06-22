@@ -624,10 +624,7 @@ object DiimeApiClient {
         val envelope = JSONObject().apply {
             put("device_id",   deviceId)
             put("event_type",  scenario.eventType)
-            // action = the sensitive operation being guarded (PAYMENT | KYC | OTP | LOGIN | SESSION_CREATE).
-            // EIP reads this from verified_payload.telemetry["action"] for compliance rule lookup,
-            // policy evaluation (DefaultPolicyEvaluator.evaluate), and signal context gating.
-            put("action",      scenario.action)
+            // action is sent as X-PS-Action header — IngestEnvelope (extra="forbid") has no "action" field
             put("timestamp",   timestamp)
             put("signature",   sig)
             put("tenant_id",   tenantId)
@@ -1163,7 +1160,6 @@ object DiimeApiClient {
         val envelope = JSONObject().apply {
             put("device_id",   deviceId)
             put("event_type",  "MULE_ACCOUNT_SIGNAL")
-            put("action",      "KYC")
             put("timestamp",   timestamp)
             put("signature",   sig)
             put("tenant_id",   "demo_tenant")
@@ -1277,7 +1273,6 @@ object DiimeApiClient {
         val envelope = JSONObject().apply {
             put("device_id",   deviceId)
             put("event_type",  "SIM_SWAP_SIGNAL")
-            put("action",      "OTP")
             put("timestamp",   timestamp)
             put("signature",   sig)
             put("tenant_id",   "demo_tenant")
