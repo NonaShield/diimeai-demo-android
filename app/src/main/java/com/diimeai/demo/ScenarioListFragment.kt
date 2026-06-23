@@ -123,11 +123,17 @@ class ScenarioListFragment : Fragment() {
                 "ATL_AUTONOMOUS_SIGNAL",
                 "Composite Decision Token — all 5 trust layers scored simultaneously",
                 0, "ALLOW", "SESSION_CREATE"),
+
+            18 to ScenarioMeta(18, "🔍", "Device Fingerprinting / ATO",
+                "DEVICE_FINGERPRINT_RISK",
+                "Composite risk: emulator HW, new-device ATO, outdated OS (API 26), VPN — " +
+                "Attestation enforced in STAGING/PRODUCTION (Play Integrity + iOS App Attest)",
+                88, "BLOCK", "LOGIN"),
         )
 
         // Tab → scenario IDs mapping
         val TAB_SCENARIOS: List<List<Int>> = listOf(
-            listOf(5, 3, 7, 12),           // 0: Device / Runtime Integrity (RASP)
+            listOf(5, 3, 7, 12, 18),       // 0: Device / Runtime Integrity (RASP)
             listOf(8, 13, 15),             // 1: Identity & Account Fraud
             listOf(4, 9, 10),              // 2: Behavioral & Biometric Fraud
             listOf(6, 11, 14, 16),         // 3: Network / Transaction Fraud

@@ -592,6 +592,49 @@ object DiimeApiClient {
                 SignalFired("RASP_DEV_065",    0.85f, "HIGH",     "deepfake_risk_detector"),
             ),
             "BLOCK", 99, "KYC"),
+
+        // ── UC-NEWDEV / UC-FP: Device Fingerprinting ─────────────────────────
+        // Composite risk signal built from hardware attributes, OS version,
+        // network characteristics (VPN, ASN), and app-version integrity.
+        //
+        // Detects:
+        //   - New-device ATO: known credentials used from an unrecognised device
+        //   - Device cloning: same hardware fingerprint under a different device_id
+        //   - Outdated OS: Android <7 / API<24 = critically EOL, no security patches
+        //   - Emulator/VM: goldfish hardware, unknown serial, generic build fingerprint
+        //   - VPN/proxy: IP ASN risk elevation
+        //
+        // Attestation gating:
+        //   DEVELOPMENT builds — Play Integrity failure is LOW (fail-open, emulators ok)
+        //   STAGING / PRODUCTION — Play Integrity failure is CRITICAL (hard block)
+        //   iOS companion: DeviceCheck + App Attest (RASP_IOS_003) follow the same gating.
+        18 to ScenarioDef("Device Fingerprinting / ATO",  "DEVICE_FINGERPRINT_RISK",
+            mapOf(
+                // Emulator hardware + build fingerprint signatures
+                "hardware_id"         to "goldfish",
+                "build_fingerprint"   to "generic/sdk/generic",
+                "serial"              to "unknown",
+                "android_id"          to "emu_android_test_12345",
+                // New device for existing user → UC-NEWDEV STEP_UP
+                "new_device_for_user" to true,
+                // Outdated OS (Android 8 / API 26 = EOL, 25 pts)
+                "os_api_level"        to 26,
+                "os_version"          to "8.0",
+                // Screen resolution (included in canonical fingerprint hash)
+                "screen_resolution"   to "1080x1920",
+                // Network risk
+                "vpn_detected"        to true,
+                "ip_asn_risk"         to "HIGH",
+                // Composite device trust score
+                "device_trust_score"  to 18,
+            ),
+            listOf(
+                SignalFired("RASP_DEV_036",   0.85f, "HIGH",     "device_fingerprint"),
+                SignalFired("OS_OUTDATED",     0.80f, "MEDIUM",   "device_fingerprint"),
+                SignalFired("FP_SPOOF_001",   0.92f, "HIGH",     "device_fingerprint"),
+                SignalFired("NET_VPN_001",    0.78f, "MEDIUM",   "device_fingerprint"),
+            ),
+            "BLOCK", 88, "LOGIN"),
     )
 
     // ── Ingest scenario through real pipeline ─────────────────────────────────
@@ -618,7 +661,7 @@ object DiimeApiClient {
      * Falls back to offline simulation when the backend is unreachable, so the
      * demo always shows something — fromSimulation=true is clearly labelled.
      *
-     * @param scenarioId  1–16 (maps to the 16 NonaShield use cases)
+     * @param scenarioId  1–18 (maps to the 18 NonaShield use cases)
      * @param tenantId    demo tenant identifier
      */
     fun ingestScenario(
