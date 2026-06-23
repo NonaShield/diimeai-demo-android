@@ -12,7 +12,9 @@ import com.payshield.sdk.enrollment.EnrollmentState
 import com.payshield.sdk.crypto.DeviceKeyManager
 import com.payshield.sdk.signal.EdgeSignal
 import com.payshield.sdk.behavioral.BehavioralTelemetrySender
-// ATL-2027: Autonomous Trust Layer initialisation
+// SDK public API — customers use PayShieldSDK, not PayShieldEdgeInitializer directly
+import com.payshield.sdk.PayShieldSDK
+import com.payshield.sdk.PayShieldConfig
 import com.payshield.sdk.PayShieldEdgeInitializer
 import com.payshield.sdk.SdkEnvironment
 import com.payshield.sdk.state.SdkState
@@ -171,11 +173,14 @@ class DiimeApp : Application() {
      *   release → PRODUCTION  (full attestation enforcement, live customers)
      */
     private fun initPayShieldEdge() {
-        // Bridge: com.payshield.sdk.signal.SignalSink → DiimeApiClient.signalSink
+        // Customer integration pattern: call PayShieldSDK.initialize() — never call
+        // PayShieldEdgeInitializer directly.  The SDK owns all signal registration,
+        // storage provisioning, time-sync, and ATL-2027 bootstrapping internally.
+        //
+        // Signal bridge: routes com.payshield.sdk.signal.SignalSink (SDK internal)
+        // → DiimeApiClient.signalSink (android-sdk layer SignalSink).
         val sdkSignalSink = object : com.payshield.sdk.signal.SignalSink {
             override fun emit(signal: EdgeSignal) {
-                // Route every RASP / ATL-2027 signal to the registered android-sdk sink.
-                // SignalStateManager is updated automatically inside PayShieldEdgeInitializer.
                 DiimeApiClient.signalSink?.onSignalsCollected(listOf(signal))
                 Log.d(TAG, "SDK signal: ${signal.type} [${signal.threatId}] confidence=${signal.confidence}")
             }
@@ -185,32 +190,39 @@ class DiimeApp : Application() {
             }
         }
 
+        // PayShieldSDK.initialize() is idempotent — safe to call once per process.
+        // Internally calls PayShieldEdgeInitializer with environment + tenantId from config,
+        // registers all 41 RASP signals, starts AutonomousCommandReceiver, and
+        // fires SdkCapabilityReporter.  After this call, PayShieldSDK.evaluateAtCheckpoint()
+        // is available for use in PaymentActivity, LoginActivity, etc.
+        PayShieldSDK.initialize(
+            context = applicationContext,
+            config  = PayShieldConfig(
+                backendUrl   = BuildConfig.NONASHIELD_BASE_URL,
+                tenantId     = "default",
+                environment  = sdkEnvironment,
+                enableBehavioral = true,
+                enableFreeRasp   = false,   // FreeRASP started automatically on first recordEnrollment()
+            )
+        )
+
+        // Override signalSink to route through DiimeApiClient after SDK init
+        // (PayShieldSDK.initialize() wires its own internal sink; we need our bridge sink too).
         val orchestrator = PayShieldEdgeInitializer.initialize(
             context        = applicationContext,
             signalSink     = sdkSignalSink,
             sdkState       = sdkState,
             backendBaseUrl = BuildConfig.NONASHIELD_BASE_URL,
-            // ATL-2027: Three-way attestation enforcement.
-            //   DEVELOPMENT → fail open (emulators / dev devices safe)
-            //   STAGING     → full enforcement (QA / pen-test / UAT)
-            //   PRODUCTION  → full enforcement (live customers)
-            // Set per buildType via SDK_ENVIRONMENT in app/build.gradle.
             environment    = sdkEnvironment,
-            // ATL-2027: tenant identity for autonomous command receiver + capability reporter.
-            // DPIP salt is NOT passed here — it is read from SecureStorage (via
-            // EnrollmentState.loadDpipSalt()) by PinningInterceptor and
-            // AutonomousCommandReceiver at runtime after enrollment issues it.
             tenantId       = "default"
         )
 
         // One-time startup evaluation — captures the device's initial RASP state.
-        // All subsequent evaluations are driven by OS callbacks registered inside
-        // PayShieldEdgeInitializer.registerOsEventListeners() — no polling loop.
         appScope.launch(Dispatchers.Default) {
             try { orchestrator.evaluateAll() } catch (_: Throwable) {}
         }
 
-        Log.i(TAG, "PayShield Edge initialized (env=$sdkEnvironment, atl2027=true, " +
+        Log.i(TAG, "PayShield SDK initialized (env=$sdkEnvironment, atl2027=true, " +
             "dpipSalt=${if (EnrollmentState.loadDpipSalt().isNotBlank()) "ISSUED" else "PENDING_ENROLLMENT"})")
     }
 

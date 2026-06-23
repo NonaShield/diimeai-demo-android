@@ -21,6 +21,8 @@ import com.diimeai.demo.network.EvidenceReceipt
 import com.diimeai.demo.network.PaymentResult
 import com.payshield.android.edge.EdgeRiskEnforcer
 import com.payshield.sdk.PayShieldEdgeInitializer
+import com.payshield.sdk.PayShieldSDK
+import com.payshield.sdk.policy.PolicyDecision
 import com.payshield.sdk.behavioral.BehavioralCaptureManager
 import com.payshield.sdk.behavioral.BehavioralSessionManager
 import com.payshield.sdk.behavioral.BiometricChannelStatus
@@ -386,6 +388,38 @@ class PaymentActivity : AppCompatActivity() {
                 }
             }
 
+            // ── SDK checkpoint gate (UC-PAYMENT-RISK) ────────────────────────
+            // Customer integration: call evaluateAtCheckpoint BEFORE sending the
+            // payment to the backend.  The SDK evaluates:
+            //   1. RASP signal set (all 41 sensors synchronously)
+            //   2. On-device behavioral biometrics (BehavioralAnomalySignal)
+            //   3. Default policy (DefaultPolicyEvaluator)
+            //   4. Backend behavioral confirmation (async, Dispatchers.IO)
+            // STEP_UP → show OTP challenge; DENY → block; ALLOW → proceed.
+            val checkpoint = runCatching {
+                PayShieldSDK.evaluateAtCheckpoint(
+                    context  = this@PaymentActivity,
+                    action   = "PAYMENT",
+                    features = behavioralFeatures
+                )
+            }.getOrNull()
+
+            if (checkpoint != null && checkpoint.decision == PolicyDecision.DENY) {
+                withContext(Dispatchers.Main) {
+                    setLoading(false)
+                    showThreatBlockedDialog(checkpoint.reason ?: "PAYMENT_RISK_BLOCK")
+                }
+                return@launch
+            }
+
+            if (checkpoint != null && checkpoint.decision == PolicyDecision.STEP_UP) {
+                withContext(Dispatchers.Main) {
+                    setLoading(false)
+                    showPaymentRiskStepUpDialog(amount, checkpoint.reason)
+                }
+                return@launch
+            }
+
             val result = DiimeApiClient.initiatePayment(
                 amount      = amount,
                 currency    = "INR",
@@ -748,6 +782,44 @@ class PaymentActivity : AppCompatActivity() {
             )
             .setPositiveButton("Simulate Verify") { _, _ ->
                 Toast.makeText(this, "Step-up verification — demo mode", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * STEP_UP triggered by [PayShieldSDK.evaluateAtCheckpoint] (UC-PAYMENT-RISK).
+     *
+     * Fires when geo-velocity anomaly, high-amount + low device trust, or
+     * transaction velocity exceeds the policy threshold.  In production the
+     * customer's auth layer enforces an OTP/biometric challenge here.
+     */
+    private fun showPaymentRiskStepUpDialog(amount: Double, reason: String?) {
+        val amountStr = "₹${String.format("%,.0f", amount)}"
+        AlertDialog.Builder(this)
+            .setTitle("⚠️  Transaction Risk — Step-Up Required")
+            .setMessage(
+                "NonaShield has flagged this ₹$amountStr payment for elevated risk.\n\n" +
+                "Reason: ${reason ?: "PAYMENT_RISK_STEP_UP"}\n\n" +
+                "Risk factors evaluated by SDK:\n" +
+                "  • Transaction amount tier (HIGH ≥ ₹1L)\n" +
+                "  • Geo-velocity anomaly (impossible/high-velocity travel)\n" +
+                "  • Device trust score\n" +
+                "  • New beneficiary + payment velocity\n\n" +
+                "In production: OTP or biometric challenge issued before proceeding.\n" +
+                "RBI guideline: automatic hold on anomalous UPI/NEFT transactions."
+            )
+            .setPositiveButton("Simulate OTP Verify") { _, _ ->
+                // Demo: proceed after simulated step-up (customer app would launch OTP screen)
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val result = DiimeApiClient.initiatePayment(
+                        amount      = amount,
+                        currency    = "INR",
+                        recipientId = binding.etRecipient.text.toString().trim(),
+                        note        = binding.etNote.text.toString().trim()
+                    )
+                    withContext(Dispatchers.Main) { handlePaymentResult(result) }
+                }
             }
             .setNegativeButton("Cancel", null)
             .show()

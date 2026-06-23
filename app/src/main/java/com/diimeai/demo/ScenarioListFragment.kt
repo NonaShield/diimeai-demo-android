@@ -129,6 +129,13 @@ class ScenarioListFragment : Fragment() {
                 "Composite risk: emulator HW, new-device ATO, outdated OS (API 26), VPN — " +
                 "Attestation enforced in STAGING/PRODUCTION (Play Integrity + iOS App Attest)",
                 88, "BLOCK", "LOGIN"),
+
+            19 to ScenarioMeta(19, "💸", "Real-time Payment Risk Scoring",
+                "PAYMENT_RISK_SIGNAL",
+                "₹5L UPI to new beneficiary + geo-velocity 609 km/h (Mumbai→Delhi) + " +
+                "device trust 42 + 8 payments/7d — SDK calls evaluateAtCheckpoint(PAYMENT) " +
+                "automatically; no risk logic in customer app. RBI: 4h hold on first high-value UPI.",
+                72, "STEP_UP", "PAYMENT"),
         )
 
         // Tab → scenario IDs mapping
@@ -136,7 +143,7 @@ class ScenarioListFragment : Fragment() {
             listOf(5, 3, 7, 12, 18),       // 0: Device / Runtime Integrity (RASP)
             listOf(8, 13, 15),             // 1: Identity & Account Fraud
             listOf(4, 9, 10),              // 2: Behavioral & Biometric Fraud
-            listOf(6, 11, 14, 16),         // 3: Network / Transaction Fraud
+            listOf(6, 11, 14, 16, 19),     // 3: Network / Transaction Fraud
             listOf(1, 2, 17),              // 4: Platform Verification
         )
     }

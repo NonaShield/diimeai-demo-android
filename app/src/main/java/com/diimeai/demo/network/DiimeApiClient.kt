@@ -593,6 +593,51 @@ object DiimeApiClient {
             ),
             "BLOCK", 99, "KYC"),
 
+        // ── UC-PAY-RISK: Real-time Payment Risk Scoring ───────────────────────
+        // Composite signal from amount tier + geo velocity + device trust + velocity.
+        // Demonstrates the backend's UC-PAYMENT-RISK path (commit a5ae22d):
+        //   A. Geo velocity: Mumbai → Delhi in 2.3h = 609 km/h (HIGH_VELOCITY → STEP_UP)
+        //   B. Amount tier: ₹5,00,000 (HIGH tier, ≥₹1L + device_trust 42 ≥ 40 → STEP_UP)
+        //   C. Device trust score gate: 42 (approaching 60 threshold)
+        //   D. New beneficiary: 4th new payee in 14 days
+        //   E. Payment velocity: 8 payments in 7 days (elevated pattern)
+        //
+        // In the demo app, PayShieldSDK.evaluateAtCheckpoint(action="PAYMENT") fires
+        // this check automatically from PaymentActivity before every real payment.
+        // Customer apps call the SDK — no custom risk logic in the app.
+        //
+        // UPI cooling period: backend enforces 4-hour hold on first high-value
+        // UPI payment to a new payee (RBI guideline compliance).
+        19 to ScenarioDef("Real-time Payment Risk Scoring", "PAYMENT_RISK_SIGNAL",
+            mapOf(
+                // Amount tier: HIGH (₹5L, threshold ≥ ₹1L)
+                "amount_inr"            to 500_000,
+                "currency"              to "INR",
+                "payment_method"        to "UPI",
+                // New beneficiary (first payment to this payee)
+                "is_new_beneficiary"    to true,
+                "new_bene_14d"          to 4,
+                "is_first_high_value"   to true,
+                // Payment velocity (8 payments in 7 days)
+                "payment_count_7d"      to 8,
+                "payment_count_30d"     to 14,
+                // Geo velocity: Mumbai → Delhi in 2.3h = 609 km/h → HIGH_VELOCITY
+                "geo_velocity_kmh"      to 609,
+                "distance_km"           to 1400,
+                "travel_time_hours"     to 2.3,
+                "geo_risk_level"        to "HIGH",
+                // Device trust
+                "device_trust_score"    to 42,
+                "vpn_detected"          to false,
+            ),
+            listOf(
+                SignalFired("PAY_VEL_001",  0.78f, "HIGH",   "payment_velocity_tracker"),
+                SignalFired("GEO_VEL_001",  0.82f, "HIGH",   "geo_velocity"),
+                SignalFired("AMT_TIER_001", 0.75f, "MEDIUM", "amount_tier"),
+                SignalFired("NEW_BENE_001", 0.70f, "MEDIUM", "payment_velocity_tracker"),
+            ),
+            "STEP_UP", 72, "PAYMENT"),
+
         // ── UC-NEWDEV / UC-FP: Device Fingerprinting ─────────────────────────
         // Composite risk signal built from hardware attributes, OS version,
         // network characteristics (VPN, ASN), and app-version integrity.
@@ -661,7 +706,7 @@ object DiimeApiClient {
      * Falls back to offline simulation when the backend is unreachable, so the
      * demo always shows something — fromSimulation=true is clearly labelled.
      *
-     * @param scenarioId  1–18 (maps to the 18 NonaShield use cases)
+     * @param scenarioId  1–19 (maps to the 19 NonaShield use cases)
      * @param tenantId    demo tenant identifier
      */
     fun ingestScenario(
