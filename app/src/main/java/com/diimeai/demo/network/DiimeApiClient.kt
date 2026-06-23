@@ -9,6 +9,7 @@ import com.payshield.sdk.integration.PayShieldAuthInterceptor
 import com.payshield.sdk.PayShieldEdgeInitializer
 import com.payshield.sdk.token.SessionHolder
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.CertificatePinner
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -42,6 +43,16 @@ object DiimeApiClient {
     private const val TAG = "DiimeApiClient"
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
+    // ── TLS Certificate Pinning for api.diimeai.com ───────────────────────────
+    // Public Key (SPKI) SHA-256 from the diimeai.com TLS certificate.
+    // Certificate SHA-256: 6c0426731889faaac5984ad853f1c77f70b8b09f00786abc5df7f214399742e3
+    // Public Key SHA-256:  4969921eff752c806c00ee74e0b9061ccf2f99d75fc2da5378350d72d1eee045
+    // Pins ALL subdomains (api.diimeai.com, diimeai.com) to the same key pair.
+    private val BACKEND_CERT_PINNER = CertificatePinner.Builder()
+        .add("api.diimeai.com", "sha256/SWmSHv91LIBsAO504LkGHM8vmddfwtpTeDUNctHu4EU=")
+        .add("diimeai.com",     "sha256/SWmSHv91LIBsAO504LkGHM8vmddfwtpTeDUNctHu4EU=")
+        .build()
+
     // Populated by DiimeApp.registerSignalSink()
     var signalSink: SignalSink? = null
 
@@ -62,6 +73,7 @@ object DiimeApiClient {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
+            .certificatePinner(BACKEND_CERT_PINNER)
             .build()
     }
 
@@ -103,6 +115,7 @@ object DiimeApiClient {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
+            .certificatePinner(BACKEND_CERT_PINNER)
             .addInterceptor(authMonitor)    // outermost — observe before signing
             .addInterceptor(pinning)        // sign + attach all PayShield headers
             .addInterceptor(logging)        // innermost — log final signed request
@@ -173,6 +186,7 @@ object DiimeApiClient {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
+            .certificatePinner(BACKEND_CERT_PINNER)
             .build()
 
         val request = Request.Builder()
