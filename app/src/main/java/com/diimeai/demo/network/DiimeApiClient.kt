@@ -47,11 +47,16 @@ object DiimeApiClient {
     // Public Key (SPKI) SHA-256 from the diimeai.com TLS certificate.
     // Certificate SHA-256: 6c0426731889faaac5984ad853f1c77f70b8b09f00786abc5df7f214399742e3
     // Public Key SHA-256:  4969921eff752c806c00ee74e0b9061ccf2f99d75fc2da5378350d72d1eee045
-    // Pins ALL subdomains (api.diimeai.com, diimeai.com) to the same key pair.
-    private val BACKEND_CERT_PINNER = CertificatePinner.Builder()
-        .add("api.diimeai.com", "sha256/SWmSHv91LIBsAO504LkGHM8vmddfwtpTeDUNctHu4EU=")
-        .add("diimeai.com",     "sha256/SWmSHv91LIBsAO504LkGHM8vmddfwtpTeDUNctHu4EU=")
-        .build()
+    //
+    // Pinning is ONLY active in STAGING and PRODUCTION builds.
+    // DEVELOPMENT (IS_DEBUG=true) skips pinning so debug APKs on dev/test
+    // devices are never blocked by a mismatched cert during development.
+    private val BACKEND_CERT_PINNER: CertificatePinner? =
+        if (BuildConfig.IS_DEBUG) null
+        else CertificatePinner.Builder()
+            .add("api.diimeai.com", "sha256/SWmSHv91LIBsAO504LkGHM8vmddfwtpTeDUNctHu4EU=")
+            .add("diimeai.com",     "sha256/SWmSHv91LIBsAO504LkGHM8vmddfwtpTeDUNctHu4EU=")
+            .build()
 
     // Populated by DiimeApp.registerSignalSink()
     var signalSink: SignalSink? = null
@@ -73,7 +78,7 @@ object DiimeApiClient {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
-            .certificatePinner(BACKEND_CERT_PINNER)
+            .apply { BACKEND_CERT_PINNER?.let { certificatePinner(it) } }
             .build()
     }
 
@@ -115,7 +120,7 @@ object DiimeApiClient {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
-            .certificatePinner(BACKEND_CERT_PINNER)
+            .apply { BACKEND_CERT_PINNER?.let { certificatePinner(it) } }
             .addInterceptor(authMonitor)    // outermost — observe before signing
             .addInterceptor(pinning)        // sign + attach all PayShield headers
             .addInterceptor(logging)        // innermost — log final signed request
@@ -186,7 +191,7 @@ object DiimeApiClient {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
-            .certificatePinner(BACKEND_CERT_PINNER)
+            .apply { BACKEND_CERT_PINNER?.let { certificatePinner(it) } }
             .build()
 
         val request = Request.Builder()
