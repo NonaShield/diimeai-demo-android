@@ -1,20 +1,11 @@
 package com.diimeai.demo
 
-import android.app.Activity
-import android.app.AlertDialog
 import android.app.Application
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.content.Intent
-import android.os.Build
 import android.util.Log
-import androidx.core.app.NotificationCompat
-import com.google.android.material.snackbar.Snackbar
 import com.diimeai.demo.enrollment.EnrollmentStatus
 import com.diimeai.demo.network.DiimeApiClient
 import com.payshield.android.sdk.SignalSink
-import com.payshield.android.sdk.ThreatBuffer
-import com.payshield.sdk.threat.ThreatSeverity
 import com.payshield.sdk.enrollment.EnrollmentManager
 import com.payshield.sdk.enrollment.EnrollmentResult
 import com.payshield.sdk.enrollment.EnrollmentState
@@ -53,8 +44,6 @@ class DiimeApp : Application() {
 
     companion object {
         private const val TAG = "DiimeApp"
-        private const val RASP_CHANNEL_ID       = "payshield_rasp_alerts"
-        private const val RASP_NOTIF_ID_BASE    = 7000
 
         // Enrollment result (may be null briefly on first launch while async completes)
         @Volatile
@@ -121,19 +110,6 @@ class DiimeApp : Application() {
         // ATL-2027: PinningInterceptor reads X-DPIP-Device-Hash salt from SecureStorage
         // (via EnrollmentState.loadDpipSalt()) at request time — no salt param here.
         DiimeApiClient.init(applicationContext)
-
-        // ── Step 2b: Track foreground activity for in-app RASP alerts ────────
-        // Minimal lifecycle tracker — only onActivityResumed/Paused needed.
-        // SDK registers its own ActivityLifecycleCallbacks separately; both coexist.
-        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
-            override fun onActivityResumed(a: Activity)  { currentForegroundActivity = a }
-            override fun onActivityPaused(a: Activity)   { if (currentForegroundActivity == a) currentForegroundActivity = null }
-            override fun onActivityCreated(a: Activity, b: android.os.Bundle?) {}
-            override fun onActivityStarted(a: Activity)  {}
-            override fun onActivityStopped(a: Activity)  {}
-            override fun onActivitySaveInstanceState(a: Activity, b: android.os.Bundle) {}
-            override fun onActivityDestroyed(a: Activity) {}
-        })
 
         // ── Step 3b: Wire behavioral telemetry sender ─────────────────────────
         // BehavioralTelemetrySender POSTs to /api/v1/security/telemetry at each
@@ -324,35 +300,13 @@ class DiimeApp : Application() {
         startActivity(intent)
     }
 
-    /** Signal types already notified this session — prevents duplicate alerts per session. */
-    private val notifiedSignals = mutableSetOf<String>()
-
-    /** The activity currently in the foreground — used for in-app alert display. */
-    @Volatile private var currentForegroundActivity: Activity? = null
-
     private fun registerSignalSink() {
-        createRaspNotificationChannel()
+        // SDK handles ThreatBuffer upload, system notifications, and in-app alerts internally.
+        // Customer app only needs to handle the block event — show the blocked screen.
         DiimeApiClient.signalSink = object : SignalSink {
             override fun onSignalsCollected(signals: List<EdgeSignal>) {
                 for (signal in signals) {
                     Log.w(TAG, "RASP: ${signal.type} [${signal.threatId}] sev=${signal.severity} conf=${signal.confidence}")
-
-                    // ── 1. Forward to ThreatBuffer → /api/v1/threats/batch → SOC dashboard ──
-                    // This is the authoritative path for all build types (debug, staging, prod).
-                    ThreatBuffer.add(
-                        signal.threatId,
-                        mapOf(
-                            "type"       to signal.type,
-                            "severity"   to signal.severity.name,
-                            "confidence" to signal.confidence.toString(),
-                            "source"     to "rasp_signal"
-                        )
-                    )
-
-                    // ── 2. Show user-facing alert (once per signal type per session) ──────────
-                    if (notifiedSignals.add(signal.type)) {
-                        showRaspAlert(signal)
-                    }
                 }
             }
 
@@ -364,117 +318,6 @@ class DiimeApp : Application() {
                 }
                 startActivity(intent)
             }
-        }
-    }
-
-    /**
-     * Shows a user-facing notification when a RASP signal fires.
-     *
-     * DEVELOPMENT: Full technical detail — helps developers see every detection live.
-     * STAGING / PRODUCTION:
-     *   CRITICAL / HIGH  → "Security Alert" — user-friendly, non-technical.
-     *   MEDIUM           → "Security Notice" — advisory only.
-     *   LOW / INFO       → Silent — not shown to end user.
-     *
-     * onBlock() (permanent device block) launches BlockedActivity instead — handled separately.
-     */
-    private fun showRaspAlert(signal: EdgeSignal) {
-        val isDev = BuildConfig.SDK_ENVIRONMENT == "DEVELOPMENT"
-        val title: String
-        val body: String
-        when {
-            isDev -> {
-                title = "[RASP ${signal.severity.name}] ${signal.type}"
-                body  = "${signal.threatId} · conf ${(signal.confidence * 100).toInt()}% · forwarded to SOC"
-            }
-            signal.severity == ThreatSeverity.CRITICAL || signal.severity == ThreatSeverity.HIGH -> {
-                title = "Security Alert"
-                body  = "A security risk was detected on your device. For your protection, access may be restricted."
-            }
-            signal.severity == ThreatSeverity.MEDIUM -> {
-                title = "Security Notice"
-                body  = "A potential security concern was detected. Please make sure your device is secure."
-            }
-            else -> return  // LOW / INFO — silent for end users in staging/production
-        }
-
-        val priority = if (signal.severity == ThreatSeverity.CRITICAL)
-            NotificationCompat.PRIORITY_MAX else NotificationCompat.PRIORITY_HIGH
-
-        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        val notification = NotificationCompat.Builder(this, RASP_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_alert)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setPriority(priority)
-            .setAutoCancel(true)
-            .build()
-        nm.notify(RASP_NOTIF_ID_BASE + signal.type.hashCode(), notification)
-
-        // In-app overlay: show immediately if an activity is in the foreground
-        showInAppRaspAlert(signal, title, body)
-    }
-
-    /**
-     * Shows a Snackbar or AlertDialog on the currently visible activity.
-     * Runs on the UI thread; safe to call from any thread.
-     * Skipped when no activity is in foreground (background detection, lock screen).
-     *
-     *  DEVELOPMENT      → Snackbar with full technical detail (all severities)
-     *  STAGING/PROD CRITICAL → Non-cancelable AlertDialog (blocks interaction until dismissed)
-     *  STAGING/PROD HIGH     → Snackbar — persistent until dismissed
-     *  STAGING/PROD MEDIUM   → Snackbar — auto-dismisses after 4 s
-     *  LOW / INFO in PROD    → No in-app message
-     */
-    private fun showInAppRaspAlert(signal: EdgeSignal, title: String, body: String) {
-        val activity = currentForegroundActivity ?: return
-        if (activity is BlockedActivity || activity is CrashReportActivity) return
-
-        val isDev = BuildConfig.SDK_ENVIRONMENT == "DEVELOPMENT"
-        activity.runOnUiThread {
-            try {
-                val rootView = activity.window.decorView.rootView
-                when {
-                    isDev -> {
-                        Snackbar.make(rootView, "$title\n$body", Snackbar.LENGTH_LONG)
-                            .setAction("OK") {}
-                            .show()
-                    }
-                    signal.severity == ThreatSeverity.CRITICAL -> {
-                        AlertDialog.Builder(activity)
-                            .setTitle(title)
-                            .setMessage(body)
-                            .setPositiveButton("Close") { _, _ -> }
-                            .setCancelable(false)
-                            .show()
-                    }
-                    signal.severity == ThreatSeverity.HIGH -> {
-                        Snackbar.make(rootView, "⚠ $body", Snackbar.LENGTH_INDEFINITE)
-                            .setAction("OK") {}
-                            .show()
-                    }
-                    signal.severity == ThreatSeverity.MEDIUM -> {
-                        Snackbar.make(rootView, body, Snackbar.LENGTH_LONG).show()
-                    }
-                    // LOW / INFO: no in-app message in prod/staging
-                }
-            } catch (_: Throwable) {}
-        }
-    }
-
-    private fun createRaspNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            nm.createNotificationChannel(
-                NotificationChannel(
-                    RASP_CHANNEL_ID,
-                    "Security Alerts",
-                    NotificationManager.IMPORTANCE_HIGH
-                ).apply {
-                    description = "Notifies when a RASP security risk is detected on this device"
-                }
-            )
         }
     }
 }
