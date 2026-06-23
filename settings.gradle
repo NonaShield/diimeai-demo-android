@@ -13,12 +13,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // FreeRASP (TalsecSecurity) — required because the SDK AAR references
-        // com.freeraspkmp.** classes from TalsecSecurity-Community at runtime.
-        // Android library `implementation` deps are NOT bundled into the AAR,
-        // so the consumer app must declare them explicitly when using flatDir.
-        maven { url 'https://europe-west3-maven.pkg.dev/talsec-artifact-repository/freerasp' }
-        maven { url 'https://europe-west3-maven.pkg.dev/talsec-artifact-repository/common' }
+        // No freeRASP-KMP repo needed here — FreeRASP is bundled inside the
+        // payshield-android-sdk-*.aar and hidden behind PayShieldRaspConfig.
+        // App code passes PayShieldRaspConfig (an SDK type); freeRASP-KMP is
+        // an implementation detail of the SDK, not a consumer dependency.
         // NonaShield SDK — AAR bundled at app/libs/payshield-android-sdk-1.0.0.aar
         // flatDir lets the name+ext declaration in app/build.gradle resolve to that file.
         flatDir { dirs 'app/libs' }
