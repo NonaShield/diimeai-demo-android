@@ -35,33 +35,22 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Payment screen — integrates all 4 investor demo scenarios.
+ * Banking home screen — real-time RASP protection active throughout.
  *
- *  Demo 2: Non-Repudiation   — "View Receipt" after ALLOW
- *  Demo 4: Screen Mirroring  — DisplayManager check → threat-specific dialog
- *  Demo 5: Social Engineering — live behavioral biometrics panel + user switch
- *
- *  Behavioral Biometrics (6 channels, passive, zero UX friction):
- *    1. Touch Pressure   — grip force / stress indicator
- *    2. Finger Geometry  — contact area (major/minor axis) — unique per user
- *    3. Swipe Velocity   — habitual motion speed pattern
- *    4. Hesitation       — DOWN→MOVE latency — cognitive load / uncertainty
- *    5. Phone Posture    — accelerometer pitch/roll — holding style
- *    6. Grip Stability   — gyroscope variance — fine-motor steadiness
- *
- *  On "Switch User" the baseline from Session A is saved.  Session B data is
- *  scored against it in real-time.  Investors watch the deviation bar climb as
- *  the new "user" interacts — USR_BEH_012 (SOCIAL_ENGINEERING_BIOMETRIC) fires
- *  when ≥ 3 channels deviate beyond threshold.
+ * Passive protection layers (zero UX friction):
+ *   - Behavioral biometrics: 6-channel passive capture on every touch
+ *   - Screen capture / mirroring: DisplayManager + SDK continuous scan
+ *   - SIM swap: SIM fingerprint vs. KYC-enrolled fingerprint
+ *   - RASP gate: EdgeRiskEnforcer.assertAllowed() before every payment
+ *   - Behavioral telemetry: sent to backend before payment decision
  */
 class PaymentActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "PaymentActivity"
-        private const val DASHBOARD_URL = "https://api.diimeai.com/dashboard/"
 
         const val EXTRA_USER_ID   = "USER_ID"
-        const val EXTRA_PREV_USER = "PREV_USER_ID"   // Demo 5: set on switch
+        const val EXTRA_PREV_USER = "PREV_USER_ID"   // set by SDK on biometric mismatch detection
 
         /** Refresh the behavioral panel every 500 ms even without touch events. */
         private const val BIO_REFRESH_MS = 500L
@@ -150,12 +139,10 @@ class PaymentActivity : AppCompatActivity() {
         }
 
         // Button wiring
-        binding.btnSendPayment.setOnClickListener   { initiatePayment() }
-        binding.btnViewDashboard.setOnClickListener { openDashboard() }
-        binding.btnViewProof.setOnClickListener     { openReceipt() }
-        binding.btnEnrollKyc.setOnClickListener     { promptKycEnrollment() }
-        binding.btnSwitchUser.setOnClickListener    { promptSwitchUser() }
-        binding.btnLogout.setOnClickListener        { logout() }
+        binding.btnSendPayment.setOnClickListener { initiatePayment() }
+        binding.btnViewProof.setOnClickListener   { openReceipt() }
+        binding.btnEnrollKyc.setOnClickListener   { promptKycEnrollment() }
+        binding.btnLogout.setOnClickListener      { logout() }
     }
 
     override fun onResume() {
@@ -174,13 +161,7 @@ class PaymentActivity : AppCompatActivity() {
     }
 
     private fun updateKycButtonLabel() {
-        val count = PayShieldEdgeInitializer.getEnrollmentCount()
-        val nextAction = when {
-            count == 0 -> "baseline"
-            count == 1 -> "STEP_UP"
-            else       -> "BLOCK"
-        }
-        binding.btnEnrollKyc.text = "🪪  Enroll KYC  (degree=$count → next: $nextAction)"
+        binding.btnEnrollKyc.text = "🪪  Verify Identity"
     }
 
     override fun onPause() {
@@ -553,7 +534,9 @@ class PaymentActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle(title)
             .setMessage(message)
-            .setPositiveButton("View SOC Dashboard") { _, _ -> openDashboard() }
+            .setPositiveButton("Contact Support") { _, _ ->
+                Toast.makeText(this, "Contact your bank's fraud helpline", Toast.LENGTH_LONG).show()
+            }
             .setNegativeButton("OK", null)
             .show()
     }
@@ -610,23 +593,23 @@ class PaymentActivity : AppCompatActivity() {
                 append("In production: payment blocked, account flagged for\n")
                 append("manual review. Step-up re-enrollment required.")
             })
-            .setPositiveButton("View SOC Dashboard") { _, _ -> openDashboard() }
+            .setPositiveButton("Contact Support") { _, _ ->
+                Toast.makeText(this, "Contact your bank's fraud helpline", Toast.LENGTH_LONG).show()
+            }
             .setNegativeButton("Close", null)
             .setCancelable(false)
             .show()
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Demo 5: Social Engineering + Behavioral Biometrics
+    // Behavioral Identity Mismatch / Social Engineering detection
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun showSocialEngineeringWarning(previousUser: String) {
         binding.cardSocialEngWarning.visibility = View.VISIBLE
         binding.tvSocialEngDetail.text =
-            "Device ${DiimeApp.enrollmentState?.deviceId?.take(12) ?: ""}… previously registered " +
-            "to a different account. Behavioral biometrics are being compared against the " +
-            "original user's baseline in real-time."
-        binding.tvSocialEngPreviousUser.text = "Previous account: $previousUser"
+            "Behavioral patterns do not match your enrolled profile. " +
+            "Risk elevated — additional verification may be required."
         binding.tvRiskTier.text = "Risk: HIGH"
         binding.tvRiskTier.setBackgroundColor(getColor(android.R.color.holo_red_dark))
     }
@@ -670,69 +653,31 @@ class PaymentActivity : AppCompatActivity() {
                 append("\nNonaShield has blocked this payment and flagged this session ")
                 append("for fraud review.")
             })
-            .setPositiveButton("View Dashboard") { _, _ -> openDashboard() }
+            .setPositiveButton("Contact Support") { _, _ ->
+                Toast.makeText(this, "Contact your bank's fraud helpline", Toast.LENGTH_LONG).show()
+            }
             .setNegativeButton("OK", null)
             .show()
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // UC-06: Mule Account — KYC Enrollment
+    // UC-06: Identity Verification / KYC Enrollment
     // ─────────────────────────────────────────────────────────────────────────
 
-    /**
-     * Prompt a KYC enrollment dialog for the mule account demo.
-     *
-     * Each enrollment increments [PayShieldEdgeInitializer.getEnrollmentCount] and sends
-     * the real device_account_degree to the backend via [DiimeApiClient.submitKyc].
-     *
-     * Investor flow:
-     *   Tap 1st time (as User A) → APPROVED, degree=1, baseline established
-     *   Switch User → tap 2nd time (as User B) → STEP_UP alert, degree=2, mule signal fired
-     *   Tap 3rd time (another switch) → BLOCK, degree=3, mule confirmed
-     *
-     * The demo values shown in the dialog are realistic but fabricated — DPDP compliant.
-     * Actual hashes of Aadhaar/PAN are sent (never raw values).
-     */
     private fun promptKycEnrollment() {
-        val currentCount = PayShieldEdgeInitializer.getEnrollmentCount()
         val deviceId = DiimeApp.enrollmentState?.deviceId ?: PayShieldEdgeInitializer.getStableDeviceId()
 
-        // Pre-fill demo KYC values that change with enrollment count for realism
-        val demoAadhaar = when (currentCount) {
-            0    -> "1234 5678 9012"
-            1    -> "9876 5432 1098"
-            else -> "1111 2222 3333"
-        }
-        val demoPan = when (currentCount) {
-            0    -> "ABCDE1234F"
-            1    -> "FGHIJ5678K"
-            else -> "LMNOP9012Q"
-        }
-        val demoName = when (currentCount) {
-            0    -> currentUserId
-            1    -> "Priya Sharma"
-            else -> "Ravi Kumar"
-        }
-
-        val muleWarning = when {
-            currentCount == 0 -> ""
-            currentCount == 1 -> "\n\n⚠️ 2nd enrollment on this device → STEP_UP expected"
-            else              -> "\n\n🔴 ${currentCount + 1}th enrollment on this device → BLOCK expected"
-        }
-
         AlertDialog.Builder(this)
-            .setTitle("🪪  KYC Enrollment — UC-06 Mule Demo")
+            .setTitle("🪪  Identity Verification")
             .setMessage(buildString {
-                append("Device enrollment count: $currentCount (this will be #${currentCount + 1})\n\n")
-                append("Demo identity:\n")
-                append("  Name:    $demoName\n")
-                append("  Aadhaar: $demoAadhaar (hashed before sending)\n")
-                append("  PAN:     $demoPan (hashed before sending)\n")
-                append(muleWarning)
-                append("\n\nDevice ID: ${deviceId.take(16)}…")
+                append("Submit your identity documents for KYC verification.\n\n")
+                append("  Document: Aadhaar + PAN (hashed, never stored as plaintext)\n")
+                append("  Device ID: ${deviceId.take(16)}…\n\n")
+                append("Your biometric profile and SIM fingerprint will be captured " +
+                    "at enrollment to protect against account takeover.")
             })
-            .setPositiveButton("Submit KYC") { _, _ ->
-                performKycEnrollment(demoAadhaar.replace(" ", ""), demoPan, deviceId)
+            .setPositiveButton("Verify Now") { _, _ ->
+                performKycEnrollment("123456789012", "ABCDE1234F", deviceId)
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -769,19 +714,17 @@ class PaymentActivity : AppCompatActivity() {
             else       -> "⚠️" to 0xFFFF6600.toInt()
         }
 
-        val muleSignal = when {
-            degree >= 3 -> "\n\n🔴 MULE ACCOUNT — BLOCK\ndevice_account_degree=$degree\nUSR_BEH_002 · CRITICAL — mule_account module\nLive SCAM signal sent to backend ✓"
-            degree == 2 -> "\n\n⚠️ MULE RISK — STEP_UP\ndevice_account_degree=$degree\nUSR_BEH_002 · HIGH — mule_account module\nLive STEP_UP signal sent to backend ✓"
-            else        -> "\n\n✅ First enrollment — baseline established\ndevice_account_degree=$degree\nSIM fingerprint captured ✓"
-        }
-
         binding.tvResult.apply {
             text = buildString {
-                append("$statusIcon  KYC ${result.status}\n\n")
+                append("$statusIcon  Identity Verification ${result.status}\n\n")
                 append("KYC ID:  ${result.kycId.take(24)}…\n")
-                append("Risk:    ${result.riskScore}\n")
-                append("Reason:  ${result.reason}")
-                append(muleSignal)
+                if (result.riskScore.isNotBlank()) append("Risk:    ${result.riskScore}\n")
+                if (result.reason.isNotBlank()) append("Reason:  ${result.reason}\n")
+                when {
+                    degree >= 3 -> append("\n\nAccount flagged for additional review by NonaShield fraud engine.")
+                    degree == 2 -> append("\n\nAdditional verification required. Please contact your branch.")
+                    else        -> append("\n\nIdentity verified. Your account is now protected.")
+                }
             }
             setTextColor(when (result.status) {
                 "APPROVED" -> getColor(android.R.color.holo_green_dark)
@@ -790,59 +733,6 @@ class PaymentActivity : AppCompatActivity() {
             })
             visibility = View.VISIBLE
         }
-
-        // Update KYC button label to show current enrollment count
-        val newCount = PayShieldEdgeInitializer.getEnrollmentCount()
-        binding.btnEnrollKyc.text = "🪪  Enroll KYC (degree=$newCount, next →${if (newCount >= 2) " BLOCK" else if (newCount == 1) " STEP_UP" else " baseline"})"
-    }
-
-    private fun promptSwitchUser() {
-        val input = android.widget.EditText(this).apply {
-            hint = "New username"
-            setPadding(48, 32, 48, 32)
-            setText("attacker_${System.currentTimeMillis() % 1000}")
-        }
-        AlertDialog.Builder(this)
-            .setTitle("🔀  Switch User — Demo 5")
-            .setMessage(
-                "Simulate a social engineering attack:\n" +
-                "same device, different account.\n\n" +
-                "The behavioral biometrics baseline from the current session " +
-                "will be saved. The new user's patterns will be compared " +
-                "against it in real-time, deviations shown live."
-            )
-            .setView(input)
-            .setPositiveButton("Switch") { _, _ ->
-                val newUser = input.text.toString().trim().ifBlank { "attacker_user" }
-                switchToUser(newUser)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun switchToUser(newUser: String) {
-        val deviceId = DiimeApp.enrollmentState?.deviceId
-            ?: PayShieldEdgeInitializer.getStableDeviceId()
-
-        // Save the first user's behavioral baseline before the switch
-        BehavioralSessionManager.saveBaseline()
-
-        // Record screen transition — captures Session A dwell time before the switch.
-        captureManager.sessionFlowAnalyzer.onScreenTransition()
-
-        DiimeApiClient.setSession(
-            userId    = newUser,
-            deviceId  = deviceId,
-            sessionId = "sess_switch_${System.currentTimeMillis()}",
-            jwt       = "eyJhbGciOiJFUzI1NiJ9.switched_user.demo"
-        )
-
-        startActivity(Intent(this, PaymentActivity::class.java).apply {
-            putExtra(EXTRA_USER_ID,   newUser)
-            putExtra(EXTRA_PREV_USER, currentUserId)
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        })
-        finish()
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -890,12 +780,6 @@ class PaymentActivity : AppCompatActivity() {
                 else     -> android.R.color.holo_green_dark
             }))
         }
-    }
-
-    private fun openDashboard() {
-        // Record screen transition before navigating — captures dwell time on payment screen.
-        captureManager.sessionFlowAnalyzer.onScreenTransition()
-        startActivity(Intent(this, TrustDashboardActivity::class.java))
     }
 
     private fun logout() {

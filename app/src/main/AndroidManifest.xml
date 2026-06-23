@@ -97,26 +97,8 @@
             android:screenOrientation="portrait"
             android:label="Trust Dashboard" />
 
-        <!-- 16 Fraud Use Case Demo Hub — investor walkthrough -->
-        <activity
-            android:name=".FraudScenarioDemoActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"
-            android:label="Fraud Demo Hub" />
-
-        <!-- Per-scenario signal trace + pipeline animation -->
-        <activity
-            android:name=".FraudScenarioDetailActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"
-            android:label="Fraud Scenario" />
-
-        <!-- SOC Security Operations Centre dashboard -->
-        <activity
-            android:name=".SocDashboardActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"
-            android:label="SOC Dashboard" />
+        <!-- SOC dashboard is a backend admin web UI — not a customer-facing screen -->
+        <!-- SocDashboardActivity retained for internal/admin reference only -->
 
         <!--
           Demo-only crash reporter — runs in :crash process so it survives when the
