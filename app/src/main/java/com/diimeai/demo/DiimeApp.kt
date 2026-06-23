@@ -1,5 +1,7 @@
 package com.diimeai.demo
 
+import android.app.Activity
+import android.app.AlertDialog
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,6 +9,7 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.google.android.material.snackbar.Snackbar
 import com.diimeai.demo.enrollment.EnrollmentStatus
 import com.diimeai.demo.network.DiimeApiClient
 import com.payshield.android.sdk.SignalSink
@@ -118,6 +121,19 @@ class DiimeApp : Application() {
         // ATL-2027: PinningInterceptor reads X-DPIP-Device-Hash salt from SecureStorage
         // (via EnrollmentState.loadDpipSalt()) at request time — no salt param here.
         DiimeApiClient.init(applicationContext)
+
+        // ── Step 2b: Track foreground activity for in-app RASP alerts ────────
+        // Minimal lifecycle tracker — only onActivityResumed/Paused needed.
+        // SDK registers its own ActivityLifecycleCallbacks separately; both coexist.
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityResumed(a: Activity)  { currentForegroundActivity = a }
+            override fun onActivityPaused(a: Activity)   { if (currentForegroundActivity == a) currentForegroundActivity = null }
+            override fun onActivityCreated(a: Activity, b: android.os.Bundle?) {}
+            override fun onActivityStarted(a: Activity)  {}
+            override fun onActivityStopped(a: Activity)  {}
+            override fun onActivitySaveInstanceState(a: Activity, b: android.os.Bundle) {}
+            override fun onActivityDestroyed(a: Activity) {}
+        })
 
         // ── Step 3b: Wire behavioral telemetry sender ─────────────────────────
         // BehavioralTelemetrySender POSTs to /api/v1/security/telemetry at each
@@ -311,6 +327,9 @@ class DiimeApp : Application() {
     /** Signal types already notified this session — prevents duplicate alerts per session. */
     private val notifiedSignals = mutableSetOf<String>()
 
+    /** The activity currently in the foreground — used for in-app alert display. */
+    @Volatile private var currentForegroundActivity: Activity? = null
+
     private fun registerSignalSink() {
         createRaspNotificationChannel()
         DiimeApiClient.signalSink = object : SignalSink {
@@ -392,6 +411,56 @@ class DiimeApp : Application() {
             .setAutoCancel(true)
             .build()
         nm.notify(RASP_NOTIF_ID_BASE + signal.type.hashCode(), notification)
+
+        // In-app overlay: show immediately if an activity is in the foreground
+        showInAppRaspAlert(signal, title, body)
+    }
+
+    /**
+     * Shows a Snackbar or AlertDialog on the currently visible activity.
+     * Runs on the UI thread; safe to call from any thread.
+     * Skipped when no activity is in foreground (background detection, lock screen).
+     *
+     *  DEVELOPMENT      → Snackbar with full technical detail (all severities)
+     *  STAGING/PROD CRITICAL → Non-cancelable AlertDialog (blocks interaction until dismissed)
+     *  STAGING/PROD HIGH     → Snackbar — persistent until dismissed
+     *  STAGING/PROD MEDIUM   → Snackbar — auto-dismisses after 4 s
+     *  LOW / INFO in PROD    → No in-app message
+     */
+    private fun showInAppRaspAlert(signal: EdgeSignal, title: String, body: String) {
+        val activity = currentForegroundActivity ?: return
+        if (activity is BlockedActivity || activity is CrashReportActivity) return
+
+        val isDev = BuildConfig.SDK_ENVIRONMENT == "DEVELOPMENT"
+        activity.runOnUiThread {
+            try {
+                val rootView = activity.window.decorView.rootView
+                when {
+                    isDev -> {
+                        Snackbar.make(rootView, "$title\n$body", Snackbar.LENGTH_LONG)
+                            .setAction("OK") {}
+                            .show()
+                    }
+                    signal.severity == ThreatSeverity.CRITICAL -> {
+                        AlertDialog.Builder(activity)
+                            .setTitle(title)
+                            .setMessage(body)
+                            .setPositiveButton("Close") { _, _ -> }
+                            .setCancelable(false)
+                            .show()
+                    }
+                    signal.severity == ThreatSeverity.HIGH -> {
+                        Snackbar.make(rootView, "⚠ $body", Snackbar.LENGTH_INDEFINITE)
+                            .setAction("OK") {}
+                            .show()
+                    }
+                    signal.severity == ThreatSeverity.MEDIUM -> {
+                        Snackbar.make(rootView, body, Snackbar.LENGTH_LONG).show()
+                    }
+                    // LOW / INFO: no in-app message in prod/staging
+                }
+            } catch (_: Throwable) {}
+        }
     }
 
     private fun createRaspNotificationChannel() {
