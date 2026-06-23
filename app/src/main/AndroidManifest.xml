@@ -15,6 +15,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Required on Android 13+ to show RASP security alert notifications -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!--
       Required on Android 11+ for NonaShield VpnConflictSignal + UserCertificateSignal.
       Note: QUERY_ALL_PACKAGES requires justification in Google Play Console.

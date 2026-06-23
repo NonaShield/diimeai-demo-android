@@ -1,11 +1,17 @@
 package com.diimeai.demo
 
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Intent
+import android.os.Build
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import com.diimeai.demo.enrollment.EnrollmentStatus
 import com.diimeai.demo.network.DiimeApiClient
 import com.payshield.android.sdk.SignalSink
+import com.payshield.android.sdk.ThreatBuffer
+import com.payshield.sdk.threat.ThreatSeverity
 import com.payshield.sdk.enrollment.EnrollmentManager
 import com.payshield.sdk.enrollment.EnrollmentResult
 import com.payshield.sdk.enrollment.EnrollmentState
@@ -44,6 +50,8 @@ class DiimeApp : Application() {
 
     companion object {
         private const val TAG = "DiimeApp"
+        private const val RASP_CHANNEL_ID       = "payshield_rasp_alerts"
+        private const val RASP_NOTIF_ID_BASE    = 7000
 
         // Enrollment result (may be null briefly on first launch while async completes)
         @Volatile
@@ -300,23 +308,104 @@ class DiimeApp : Application() {
         startActivity(intent)
     }
 
+    /** Signal types already notified this session — prevents duplicate alerts per session. */
+    private val notifiedSignals = mutableSetOf<String>()
+
     private fun registerSignalSink() {
+        createRaspNotificationChannel()
         DiimeApiClient.signalSink = object : SignalSink {
             override fun onSignalsCollected(signals: List<EdgeSignal>) {
-                Log.w(TAG, "RASP signals collected: ${signals.map { it.type }}")
-                // Signals are batched and uploaded to /api/v1/threats/batch
-                // by the SDK's ThreatBuffer automatically.
+                for (signal in signals) {
+                    Log.w(TAG, "RASP: ${signal.type} [${signal.threatId}] sev=${signal.severity} conf=${signal.confidence}")
+
+                    // ── 1. Forward to ThreatBuffer → /api/v1/threats/batch → SOC dashboard ──
+                    // This is the authoritative path for all build types (debug, staging, prod).
+                    ThreatBuffer.add(
+                        signal.threatId,
+                        mapOf(
+                            "type"       to signal.type,
+                            "severity"   to signal.severity.name,
+                            "confidence" to signal.confidence.toString(),
+                            "source"     to "rasp_signal"
+                        )
+                    )
+
+                    // ── 2. Show user-facing alert (once per signal type per session) ──────────
+                    if (notifiedSignals.add(signal.type)) {
+                        showRaspAlert(signal)
+                    }
+                }
             }
 
             override fun onBlock(reason: String) {
                 Log.e(TAG, "Device BLOCKED by NonaShield: $reason")
-                // Launch BlockedActivity on the main thread
                 val intent = Intent(applicationContext, BlockedActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
                     putExtra(BlockedActivity.EXTRA_REASON, reason)
                 }
                 startActivity(intent)
             }
+        }
+    }
+
+    /**
+     * Shows a user-facing notification when a RASP signal fires.
+     *
+     * DEVELOPMENT: Full technical detail — helps developers see every detection live.
+     * STAGING / PRODUCTION:
+     *   CRITICAL / HIGH  → "Security Alert" — user-friendly, non-technical.
+     *   MEDIUM           → "Security Notice" — advisory only.
+     *   LOW / INFO       → Silent — not shown to end user.
+     *
+     * onBlock() (permanent device block) launches BlockedActivity instead — handled separately.
+     */
+    private fun showRaspAlert(signal: EdgeSignal) {
+        val isDev = BuildConfig.SDK_ENVIRONMENT == "DEVELOPMENT"
+        val title: String
+        val body: String
+        when {
+            isDev -> {
+                title = "[RASP ${signal.severity.name}] ${signal.type}"
+                body  = "${signal.threatId} · conf ${(signal.confidence * 100).toInt()}% · forwarded to SOC"
+            }
+            signal.severity == ThreatSeverity.CRITICAL || signal.severity == ThreatSeverity.HIGH -> {
+                title = "Security Alert"
+                body  = "A security risk was detected on your device. For your protection, access may be restricted."
+            }
+            signal.severity == ThreatSeverity.MEDIUM -> {
+                title = "Security Notice"
+                body  = "A potential security concern was detected. Please make sure your device is secure."
+            }
+            else -> return  // LOW / INFO — silent for end users in staging/production
+        }
+
+        val priority = if (signal.severity == ThreatSeverity.CRITICAL)
+            NotificationCompat.PRIORITY_MAX else NotificationCompat.PRIORITY_HIGH
+
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        val notification = NotificationCompat.Builder(this, RASP_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(priority)
+            .setAutoCancel(true)
+            .build()
+        nm.notify(RASP_NOTIF_ID_BASE + signal.type.hashCode(), notification)
+    }
+
+    private fun createRaspNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            nm.createNotificationChannel(
+                NotificationChannel(
+                    RASP_CHANNEL_ID,
+                    "Security Alerts",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Notifies when a RASP security risk is detected on this device"
+                }
+            )
         }
     }
 }
