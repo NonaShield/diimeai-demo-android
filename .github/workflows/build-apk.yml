@@ -64,7 +64,20 @@ jobs:
         env:
           DEMO_API_KEY: ${{ secrets.DEMO_API_KEY }}
 
-      # ── Release build ─────────────────────────────────────────────────────────
+      # ── Release build — generate a debug keystore when real creds are absent ───
+      - name: Prepare release keystore
+        if: github.event.inputs.build_type == 'release'
+        run: |
+          if [ -z "${{ secrets.DIIMEAI_KEYSTORE_PATH }}" ]; then
+            keytool -genkeypair -v \
+              -keystore app/debug.keystore \
+              -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass android -keypass android \
+              -dname "CN=DiimeAI Demo, OU=Demo, O=DiimeAI, L=Mumbai, S=MH, C=IN"
+            echo "Generated ephemeral debug keystore for CI release build"
+          fi
+
       - name: Build release APK
         if: github.event.inputs.build_type == 'release'
         run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
