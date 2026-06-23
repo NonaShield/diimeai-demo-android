@@ -212,7 +212,7 @@ class LoginActivity : AppCompatActivity() {
         // Records the dwell time on the login screen in SessionFlowAnalyzer.
         captureManager.sessionFlowAnalyzer.onScreenTransition()
 
-        startActivity(Intent(this, PaymentActivity::class.java).apply {
+        startActivity(Intent(this, ScenarioHubActivity::class.java).apply {
             putExtra("USER_ID", result.userId)
         })
         finish()

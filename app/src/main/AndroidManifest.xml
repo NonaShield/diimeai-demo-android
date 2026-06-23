@@ -76,6 +76,13 @@
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- 5-tab fraud scenario hub — shown after login -->
+        <activity
+            android:name=".ScenarioHubActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:label="NonaShield Demo" />
+
         <!-- Payment screen — NonaShield checkpoint evaluated here -->
         <!--
           configChanges: same as LoginActivity — orientation changes are recorded by

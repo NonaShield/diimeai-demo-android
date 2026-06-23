@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    app:cardBackgroundColor="#0D1117"
+    app:cardCornerRadius="14dp"
+    app:cardElevation="6dp"
+    android:layout_marginBottom="14dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <!-- Top row: emoji + title + decision badge -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="6dp">
+
+            <TextView
+                android:id="@+id/tvScenarioEmoji"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:textSize="22sp"
+                android:gravity="center"
+                android:text="🛡" />
+
+            <TextView
+                android:id="@+id/tvScenarioName"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="#FFFFFF"
+                android:layout_marginStart="8dp"
+                android:text="Scenario Name" />
+
+            <!-- Decision badge -->
+            <TextView
+                android:id="@+id/tvDecisionBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="BLOCK"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:textColor="#000000"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp"
+                android:background="#FF4444" />
+
+        </LinearLayout>
+
+        <!-- Signal type (monospace) -->
+        <TextView
+            android:id="@+id/tvSignalType"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="RASP_THREAT_DETECTED"
+            android:textSize="10sp"
+            android:textColor="#00D4FF"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="6dp" />
+
+        <!-- Description -->
+        <TextView
+            android:id="@+id/tvScenarioDesc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Description of what this scenario detects"
+            android:textSize="12sp"
+            android:textColor="#AAAAAA"
+            android:layout_marginBottom="10dp" />
+
+        <!-- Risk score row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="14dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Risk Score"
+                android:textSize="11sp"
+                android:textColor="#666666" />
+
+            <TextView
+                android:id="@+id/tvRiskScore"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="100"
+                android:textSize="11sp"
+                android:textColor="#FF4444"
+                android:fontFamily="monospace"
+                android:textStyle="bold"
+                android:layout_marginStart="8dp" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/tvActionContext"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="PAYMENT"
+                android:textSize="10sp"
+                android:textColor="#555555"
+                android:fontFamily="monospace" />
+
+        </LinearLayout>
+
+        <!-- Simulate button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSimulate"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:text="⚡  Simulate Attack"
+            android:textSize="12sp"
+            android:textColor="#00D4FF"
+            app:backgroundTint="#0A1A2A"
+            app:strokeColor="#00D4FF"
+            app:strokeWidth="1dp"
+            app:cornerRadius="8dp" />
+
+    </LinearLayout>
+
+</androidx.cardview.widget.CardView>

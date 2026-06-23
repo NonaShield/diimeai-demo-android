@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/tab_device_rasp"
+        android:icon="@drawable/ic_tab_device"
+        android:title="Device / RASP" />
+
+    <item
+        android:id="@+id/tab_identity"
+        android:icon="@drawable/ic_tab_identity"
+        android:title="Identity" />
+
+    <item
+        android:id="@+id/tab_behavioral"
+        android:icon="@drawable/ic_tab_behavioral"
+        android:title="Behavioral" />
+
+    <item
+        android:id="@+id/tab_network"
+        android:icon="@drawable/ic_tab_network"
+        android:title="Network" />
+
+    <item
+        android:id="@+id/tab_platform"
+        android:icon="@drawable/ic_tab_trust"
+        android:title="Platform" />
+
+</menu>
