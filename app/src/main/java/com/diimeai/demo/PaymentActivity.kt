@@ -718,7 +718,7 @@ class PaymentActivity : AppCompatActivity() {
             text = buildString {
                 append("$statusIcon  Identity Verification ${result.status}\n\n")
                 append("KYC ID:  ${result.kycId.take(24)}…\n")
-                if (result.riskScore.isNotBlank()) append("Risk:    ${result.riskScore}\n")
+                if (result.riskScore > 0) append("Risk:    ${result.riskScore}\n")
                 if (result.reason.isNotBlank()) append("Reason:  ${result.reason}\n")
                 when {
                     degree >= 3 -> append("\n\nAccount flagged for additional review by NonaShield fraud engine.")
