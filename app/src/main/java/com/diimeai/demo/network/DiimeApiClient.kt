@@ -152,16 +152,28 @@ object DiimeApiClient {
     // -------------------------------------------------------------------------
 
     /**
-     * Authenticate against the real NonaShield auth endpoint.
+     * DEMO ONLY — authenticate using the NonaShield demo login stub.
      *
-     * Calls POST /api/v1/auth/login and receives a signed RS256 JWT.
-     * The JWT is stored in SessionHolder and automatically attached by
-     * PinningInterceptor to all subsequent protected API calls as
-     * "Authorization: Bearer <token>".
+     * Calls POST /api/v1/auth/login — a demo endpoint that simulates the
+     * customer bank's IdP and issues a NonaShield-signed RS256 JWT directly.
+     * That endpoint returns 503 in live (non-demo) environments.
      *
-     * Production note: replace the credential validation logic in the backend's
-     * /api/v1/auth/login handler with your real identity provider
-     * (LDAP, OAuth2, internal user service, etc.). The SDK layer is unchanged.
+     * ─────────────────────────────────────────────────────────────
+     * PRODUCTION INTEGRATION (do NOT call this method):
+     *
+     *   1. Customer app calls the bank's own IdP → receives bank JWT.
+     *   2. App calls POST /api/v1/auth/session  (NonaShield production endpoint):
+     *        Authorization: Bearer <bank-jwt>
+     *        X-Tenant-Id:   <tenant-id>
+     *        X-Device-Id:   <device-id>
+     *        Body: { "user_id": "...", "session_id": "..." }
+     *      NonaShield validates the bank JWT against the tenant's configured
+     *      public key (TENANT_<ID>_JWT_PUBLIC_KEY_PEM) and returns a
+     *      short-lived NonaShield session JWT.
+     *   3. App calls PayShieldSDK.setSession(userId, sessionId, jwt=nonashieldJwt).
+     *
+     * See DiimeApiClient.establishSession() for a reference implementation.
+     * ─────────────────────────────────────────────────────────────
      *
      * A raw OkHttpClient is used here (no PinningInterceptor) because
      * PinningInterceptor requires an active session — which does not exist
@@ -232,6 +244,81 @@ object DiimeApiClient {
         } catch (e: Exception) {
             Log.e(TAG, "Login network error: ${e.message}", e)
             LoginResult.Failure("Network error: ${e.message}")
+        }
+    }
+
+    /**
+     * PRODUCTION — exchange a bank-issued JWT for a NonaShield session JWT.
+     *
+     * In a real customer integration, call this after the bank IdP login completes:
+     *
+     * ```kotlin
+     * val bankJwt = bankIdp.login(username, password)   // customer's own auth
+     * val result  = DiimeApiClient.establishSession(
+     *     customerJwt = bankJwt,
+     *     userId      = authenticatedUser.id,
+     *     deviceId    = DeviceKeyManager().getStableDeviceId().toString(),
+     *     tenantId    = "your-tenant-id",
+     * )
+     * if (result is SessionResult.Success) {
+     *     PayShieldSDK.setSession(
+     *         userId    = result.userId,
+     *         sessionId = result.sessionId,
+     *         jwt       = result.jwt,   // NonaShield session JWT, NOT the bank JWT
+     *     )
+     * }
+     * ```
+     *
+     * This method is a no-op in the demo app (demo uses [login] instead).
+     */
+    fun establishSession(
+        customerJwt: String,
+        userId:      String,
+        deviceId:    String,
+        tenantId:    String    = "default",
+        sessionId:   String?   = null,
+    ): SessionResult {
+        val bodyJson = JSONObject().apply {
+            put("user_id",    userId)
+            sessionId?.let { put("session_id", it) }
+        }.toString()
+
+        val sessionClient = OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(15, TimeUnit.SECONDS)
+            .certificatePinner(BACKEND_CERT_PINNER)
+            .build()
+
+        val request = Request.Builder()
+            .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/auth/session")
+            .post(bodyJson.toRequestBody(JSON))
+            .header("Authorization", "Bearer $customerJwt")
+            .header("X-Tenant-Id",   tenantId)
+            .header("X-Device-Id",   deviceId)
+            .build()
+
+        return try {
+            sessionClient.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string() ?: ""
+                if (response.isSuccessful) {
+                    val json       = JSONObject(responseBody)
+                    val nsJwt      = json.getString("jwt")
+                    val sid        = json.getString("session_id")
+                    SessionHolder.setSession(uid = userId, did = deviceId, sid = sid, jwt = nsJwt)
+                    Log.i(TAG, "[session] established: userId=$userId sessionId=$sid")
+                    SessionResult.Success(userId = userId, sessionId = sid, jwt = nsJwt)
+                } else {
+                    val detail = runCatching {
+                        JSONObject(responseBody).optString("detail", "Session establishment failed")
+                    }.getOrDefault("Session establishment failed (HTTP ${response.code})")
+                    Log.w(TAG, "[session] failed HTTP ${response.code}: $detail")
+                    SessionResult.Failure(detail)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "[session] network error: ${e.message}", e)
+            SessionResult.Failure("Network error: ${e.message}")
         }
     }
 
@@ -1472,6 +1559,12 @@ object DiimeApiClient {
 sealed class LoginResult {
     data class Success(val userId: String, val sessionId: String, val jwt: String) : LoginResult()
     data class Failure(val reason: String) : LoginResult()
+}
+
+/** Result of [DiimeApiClient.establishSession] — production session exchange. */
+sealed class SessionResult {
+    data class Success(val userId: String, val sessionId: String, val jwt: String) : SessionResult()
+    data class Failure(val reason: String) : SessionResult()
 }
 
 sealed class PaymentResult {
