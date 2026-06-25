@@ -44,17 +44,22 @@ object DiimeApiClient {
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
     // ── TLS Certificate Pinning for api.diimeai.com ───────────────────────────
-    // Public Key (SPKI) SHA-256 from the diimeai.com TLS certificate.
-    // Certificate SHA-256: 6c0426731889faaac5984ad853f1c77f70b8b09f00786abc5df7f214399742e3
-    // Public Key SHA-256:  4969921eff752c806c00ee74e0b9061ccf2f99d75fc2da5378350d72d1eee045
+    // Pins are SPKI SHA-256 hashes (public key, not full cert) so they survive
+    // Let's Encrypt leaf renewals as long as the key pair is reused.
     //
-    // Active on ALL build types (debug, staging, release) so the demo app
-    // behaves identically to a production customer app.
-    // If this blocks connections in dev, verify the server cert hasn't rotated
-    // and update the pin via PayShieldEdgeInitializer.getApkCertificateHashes().
+    // Leaf cert:    issued 2026-05-28, expires 2026-08-26 (Let's Encrypt YE2)
+    // Intermediate: Let's Encrypt YE2 — backup pin; survives leaf rotation
+    //
+    // To refresh after a key rotation:
+    //   openssl s_client -connect api.diimeai.com:443 -servername api.diimeai.com \
+    //     </dev/null 2>/dev/null | openssl x509 -pubkey -noout \
+    //     | openssl pkey -pubin -outform DER | openssl dgst -sha256 -binary \
+    //     | openssl enc -base64
     private val BACKEND_CERT_PINNER: CertificatePinner = CertificatePinner.Builder()
-        .add("api.diimeai.com", "sha256/SWmSHv91LIBsAO504LkGHM8vmddfwtpTeDUNctHu4EU=")
-        .add("diimeai.com",     "sha256/SWmSHv91LIBsAO504LkGHM8vmddfwtpTeDUNctHu4EU=")
+        .add("api.diimeai.com", "sha256/1kxomJM4WNmZfPDERIy86e7hsmxV9fCaGgEexIUyZ3w=")  // leaf
+        .add("api.diimeai.com", "sha256/s/tdAOmUzd8syaTuqfgGvFcn6DzA5Cmb+Vby1ST+U3Y=")  // Let's Encrypt YE2 intermediate
+        .add("diimeai.com",     "sha256/1kxomJM4WNmZfPDERIy86e7hsmxV9fCaGgEexIUyZ3w=")
+        .add("diimeai.com",     "sha256/s/tdAOmUzd8syaTuqfgGvFcn6DzA5Cmb+Vby1ST+U3Y=")
         .build()
 
     // Populated by DiimeApp.registerSignalSink()
