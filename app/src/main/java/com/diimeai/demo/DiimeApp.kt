@@ -12,6 +12,7 @@ import com.payshield.sdk.enrollment.EnrollmentState
 import com.payshield.sdk.crypto.DeviceKeyManager
 import com.payshield.sdk.signal.EdgeSignal
 import com.payshield.sdk.behavioral.BehavioralTelemetrySender
+import com.payshield.sdk.PayShieldConfig
 import com.payshield.sdk.PayShieldEdgeInitializer
 import com.payshield.sdk.PayShieldSDK
 import com.payshield.sdk.SdkEnvironment
@@ -178,15 +179,10 @@ class DiimeApp : Application() {
      *   release → PRODUCTION  (full attestation enforcement, live customers)
      */
     private fun initPayShieldEdge() {
-        // Composed signal sink: routes every EdgeSignal through TWO paths simultaneously.
+        // Bridge sink: routes OS-event signals through two paths simultaneously:
         //   1. PayShieldSDK.signalSink  — ThreatBuffer upload to /api/v1/threats/batch
-        //   2. DiimeApiClient.signalSink — in-app alert display + local logging
-        //
-        // Previously the app called PayShieldSDK.initialize() AND PayShieldEdgeInitializer
-        // .initialize() separately, which caused: duplicate signal registration, doubled OS
-        // event listeners, and three evaluateAll() calls on every startup.  Single init
-        // with this composed sink eliminates all three redundancy issues.
-        val sdkSignalSink = object : com.payshield.sdk.signal.SignalSink {
+        //   2. DiimeApiClient.signalSink — in-app alert display + live threat ticker
+        val bridgeSink = object : com.payshield.sdk.signal.SignalSink {
             override fun emit(signal: EdgeSignal) {
                 PayShieldSDK.signalSink.emit(signal)                           // ThreatBuffer path
                 DiimeApiClient.signalSink?.onSignalsCollected(listOf(signal))  // in-app alert path
@@ -198,29 +194,29 @@ class DiimeApp : Application() {
             }
         }
 
-        // Single initialize() call — registers all 47 RASP signals once, starts
-        // AutonomousCommandReceiver, fires SdkCapabilityReporter, runs startup
-        // evaluateAll(), registers the 10 OS event listener categories, and starts
-        // a 60-second periodic sweep for mid-session threat detection.
-        // FreeRASP auto-starts here if enrollment count > 0 (subsequent launches);
-        // otherwise it starts on the first recordEnrollment() call (first KYC flow).
+        // Step 1: Initialize via PayShieldSDK — marks _initialized=true and wires
+        // _orchestrator so PayShieldSDK.evaluateAtCheckpoint() works in PaymentActivity.
+        PayShieldSDK.initialize(
+            context = applicationContext,
+            config  = PayShieldConfig(
+                backendUrl       = BuildConfig.NONASHIELD_BASE_URL,
+                tenantId         = "default",
+                environment      = sdkEnvironment,
+                enableBehavioral = true,
+            )
+        )
+
+        // Step 2: Re-initialize with bridge sink so OS-event listeners also route
+        // through DiimeApiClient for in-app alerts and the live threat ticker.
+        // _orchestrator from step 1 is preserved for evaluateAtCheckpoint(); only
+        // internalOrchestrator (OS event path) is overwritten to the bridge instance.
         PayShieldEdgeInitializer.initialize(
             context        = applicationContext,
-            signalSink     = sdkSignalSink,
+            signalSink     = bridgeSink,
             sdkState       = sdkState,
             backendBaseUrl = BuildConfig.NONASHIELD_BASE_URL,
             environment    = sdkEnvironment,
-            tenantId       = "default"
-        )
-
-        // Mark PayShieldSDK as initialized so PayShieldSDK.evaluateAtCheckpoint()
-        // works in PaymentActivity / LoginActivity.  requireOrchestrator() resolves
-        // via PayShieldEdgeInitializer.internalOrchestrator (set by the call above).
-        PayShieldSDK.configure(
-            backendUrl       = BuildConfig.NONASHIELD_BASE_URL,
-            tenantId         = "default",
-            environment      = sdkEnvironment,
-            enableBehavioral = true,
+            tenantId       = "default",
         )
 
         Log.i(TAG, "PayShield SDK initialized (env=$sdkEnvironment, atl2027=true, " +
