@@ -12,7 +12,6 @@ import com.payshield.sdk.enrollment.EnrollmentState
 import com.payshield.sdk.crypto.DeviceKeyManager
 import com.payshield.sdk.signal.EdgeSignal
 import com.payshield.sdk.behavioral.BehavioralTelemetrySender
-import com.payshield.sdk.PayShieldConfig
 import com.payshield.sdk.PayShieldEdgeInitializer
 import com.payshield.sdk.PayShieldSDK
 import com.payshield.sdk.SdkEnvironment
@@ -179,10 +178,10 @@ class DiimeApp : Application() {
      *   release → PRODUCTION  (full attestation enforcement, live customers)
      */
     private fun initPayShieldEdge() {
-        // Bridge sink: routes OS-event signals through two paths simultaneously:
+        // Composed signal sink: routes every EdgeSignal through TWO paths simultaneously.
         //   1. PayShieldSDK.signalSink  — ThreatBuffer upload to /api/v1/threats/batch
-        //   2. DiimeApiClient.signalSink — in-app alert display + live threat ticker
-        val bridgeSink = object : com.payshield.sdk.signal.SignalSink {
+        //   2. DiimeApiClient.signalSink — in-app alert display + live RASP ticker
+        val sdkSignalSink = object : com.payshield.sdk.signal.SignalSink {
             override fun emit(signal: EdgeSignal) {
                 PayShieldSDK.signalSink.emit(signal)                           // ThreatBuffer path
                 DiimeApiClient.signalSink?.onSignalsCollected(listOf(signal))  // in-app alert path
@@ -194,29 +193,28 @@ class DiimeApp : Application() {
             }
         }
 
-        // Step 1: Initialize via PayShieldSDK — marks _initialized=true and wires
-        // _orchestrator so PayShieldSDK.evaluateAtCheckpoint() works in PaymentActivity.
-        PayShieldSDK.initialize(
-            context = applicationContext,
-            config  = PayShieldConfig(
-                backendUrl       = BuildConfig.NONASHIELD_BASE_URL,
-                tenantId         = "default",
-                environment      = sdkEnvironment,
-                enableBehavioral = true,
-            )
-        )
-
-        // Step 2: Re-initialize with bridge sink so OS-event listeners also route
-        // through DiimeApiClient for in-app alerts and the live threat ticker.
-        // _orchestrator from step 1 is preserved for evaluateAtCheckpoint(); only
-        // internalOrchestrator (OS event path) is overwritten to the bridge instance.
+        // Single initialize() — registers all 47 RASP signals once, starts
+        // AutonomousCommandReceiver, runs startup evaluateAll(), registers the 10 OS
+        // event listener categories, and starts the 60-second periodic sweep.
+        // FreeRASP auto-starts here if already enrolled; otherwise starts on first
+        // recordEnrollment() call.
         PayShieldEdgeInitializer.initialize(
             context        = applicationContext,
-            signalSink     = bridgeSink,
+            signalSink     = sdkSignalSink,
             sdkState       = sdkState,
             backendBaseUrl = BuildConfig.NONASHIELD_BASE_URL,
             environment    = sdkEnvironment,
             tenantId       = "default",
+        )
+
+        // Mark PayShieldSDK as initialized so evaluateAtCheckpoint() works in
+        // PaymentActivity. requireOrchestrator() resolves via internalOrchestrator
+        // (set by the call above) — no second init, no duplicate OS listeners.
+        PayShieldSDK.configure(
+            backendUrl       = BuildConfig.NONASHIELD_BASE_URL,
+            tenantId         = "default",
+            environment      = sdkEnvironment,
+            enableBehavioral = true,
         )
 
         Log.i(TAG, "PayShield SDK initialized (env=$sdkEnvironment, atl2027=true, " +
