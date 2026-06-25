@@ -9,7 +9,6 @@ import com.payshield.sdk.integration.PayShieldAuthInterceptor
 import com.payshield.sdk.PayShieldEdgeInitializer
 import com.payshield.sdk.token.SessionHolder
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.CertificatePinner
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -43,25 +42,6 @@ object DiimeApiClient {
     private const val TAG = "DiimeApiClient"
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
-    // ── TLS Certificate Pinning for api.diimeai.com ───────────────────────────
-    // Pins are SPKI SHA-256 hashes (public key, not full cert) so they survive
-    // Let's Encrypt leaf renewals as long as the key pair is reused.
-    //
-    // Leaf cert:    issued 2026-05-28, expires 2026-08-26 (Let's Encrypt YE2)
-    // Intermediate: Let's Encrypt YE2 — backup pin; survives leaf rotation
-    //
-    // To refresh after a key rotation:
-    //   openssl s_client -connect api.diimeai.com:443 -servername api.diimeai.com \
-    //     </dev/null 2>/dev/null | openssl x509 -pubkey -noout \
-    //     | openssl pkey -pubin -outform DER | openssl dgst -sha256 -binary \
-    //     | openssl enc -base64
-    private val BACKEND_CERT_PINNER: CertificatePinner = CertificatePinner.Builder()
-        .add("api.diimeai.com", "sha256/1kxomJM4WNmZfPDERIy86e7hsmxV9fCaGgEexIUyZ3w=")  // leaf
-        .add("api.diimeai.com", "sha256/s/tdAOmUzd8syaTuqfgGvFcn6DzA5Cmb+Vby1ST+U3Y=")  // Let's Encrypt YE2 intermediate
-        .add("diimeai.com",     "sha256/1kxomJM4WNmZfPDERIy86e7hsmxV9fCaGgEexIUyZ3w=")
-        .add("diimeai.com",     "sha256/s/tdAOmUzd8syaTuqfgGvFcn6DzA5Cmb+Vby1ST+U3Y=")
-        .build()
-
     // Populated by DiimeApp.registerSignalSink()
     var signalSink: SignalSink? = null
 
@@ -82,7 +62,6 @@ object DiimeApiClient {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
-            .certificatePinner(BACKEND_CERT_PINNER)
             .build()
     }
 
@@ -124,7 +103,6 @@ object DiimeApiClient {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
-            .certificatePinner(BACKEND_CERT_PINNER)
             .addInterceptor(authMonitor)    // outermost — observe before signing
             .addInterceptor(pinning)        // sign + attach all PayShield headers
             .addInterceptor(logging)        // innermost — log final signed request
@@ -207,7 +185,6 @@ object DiimeApiClient {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
-            .certificatePinner(BACKEND_CERT_PINNER)
             .build()
 
         val request = Request.Builder()
@@ -292,7 +269,6 @@ object DiimeApiClient {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
-            .certificatePinner(BACKEND_CERT_PINNER)
             .build()
 
         val request = Request.Builder()
