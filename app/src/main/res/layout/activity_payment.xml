@@ -257,7 +257,7 @@
 
                 </LinearLayout>
 
-                <!-- 6-channel readings (compact grid) -->
+                <!-- 8-channel biometric grid (4 per row) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -291,6 +291,16 @@
                         <TextView android:id="@+id/tvBioSwipe"
                             android:layout_width="wrap_content" android:layout_height="wrap_content"
                             android:text="🟢 0.0" android:textSize="11sp" android:textColor="#CCCCCC"
+                            android:fontFamily="monospace" />
+                    </LinearLayout>
+
+                    <LinearLayout android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="Micro-Jitter" android:textSize="10sp" android:textColor="#888888" />
+                        <TextView android:id="@+id/tvBioJitter"
+                            android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="🔵 –" android:textSize="11sp" android:textColor="#CCCCCC"
                             android:fontFamily="monospace" />
                     </LinearLayout>
 
@@ -330,6 +340,61 @@
                             android:layout_width="wrap_content" android:layout_height="wrap_content"
                             android:text="🟢 0.00" android:textSize="11sp" android:textColor="#CCCCCC"
                             android:fontFamily="monospace" />
+                    </LinearLayout>
+
+                    <LinearLayout android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="Path Entropy" android:textSize="10sp" android:textColor="#888888" />
+                        <TextView android:id="@+id/tvBioCurvature"
+                            android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="🔵 –" android:textSize="11sp" android:textColor="#CCCCCC"
+                            android:fontFamily="monospace" />
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <!-- Different-user alarm banner — shown when biometric deviation ≥ 65% -->
+                <LinearLayout
+                    android:id="@+id/rowUserMismatchAlarm"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="#3DE02020"
+                    android:padding="8dp"
+                    android:layout_marginBottom="8dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="⚠️"
+                        android:textSize="18sp" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:layout_marginStart="8dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="DIFFERENT USER DETECTED"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:textColor="#FF4444" />
+
+                        <TextView
+                            android:id="@+id/tvUserMismatchDetail"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Biometric deviation: –%"
+                            android:textSize="10sp"
+                            android:textColor="#FF8888" />
+
                     </LinearLayout>
 
                 </LinearLayout>

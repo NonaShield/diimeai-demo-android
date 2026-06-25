@@ -249,7 +249,7 @@ class PaymentActivity : AppCompatActivity() {
             binding.tvBioRiskBadge.setBackgroundColor(0xFF444444.toInt())
         }
 
-        // 6-channel rows
+        // 6-channel sensor rows (pressure / size / speed / hesitation / posture / grip)
         binding.tvBioPressure.text  = formatChannel(summary.pressure)
         binding.tvBioFingerSize.text= formatChannel(summary.fingerSize,  "px")
         binding.tvBioSwipe.text     = formatChannel(summary.swipe, "px/ms")
@@ -260,6 +260,25 @@ class PaymentActivity : AppCompatActivity() {
             if (BehavioralSessionManager.isComparisonMode && summary.posture.deviation > 0)
                 " Δ${summary.posture.deviationPct}%" else ""
         binding.tvBioGrip.text      = formatChannel(summary.grip)
+
+        // 2 ML-derived channels from BehavioralCaptureManager (jitter + path entropy)
+        // These come from the feature extractor that runs per-gesture, not per-sensor.
+        val mlFeatures = captureManager.getLatestFeatures()
+        if (mlFeatures != null) {
+            val jitterIcon = when {
+                mlFeatures.jitterScore < 0.001f -> "🔴"   // near-zero = bot/injected touch
+                mlFeatures.jitterScore < 0.01f  -> "🟡"
+                else                            -> "🟢"
+            }
+            binding.tvBioJitter.text = "$jitterIcon ${"%.4f".format(mlFeatures.jitterScore)}"
+
+            val entropyIcon = when {
+                mlFeatures.curvatureEntropy < 0.3f -> "🔴"  // perfectly straight = bot
+                mlFeatures.curvatureEntropy < 1.0f -> "🟡"
+                else                               -> "🟢"
+            }
+            binding.tvBioCurvature.text = "$entropyIcon ${"%.2f".format(mlFeatures.curvatureEntropy)}"
+        }
 
         // Deviation bar (comparison mode only)
         if (BehavioralSessionManager.isComparisonMode) {
@@ -278,11 +297,23 @@ class PaymentActivity : AppCompatActivity() {
                 if (deviatingNames.isNotBlank()) deviatingNames
                 else "  All channels within normal range"
 
-            // Auto-show alert when ≥3 channels deviate (once)
+            // Prominent "DIFFERENT USER" alarm: show banner when ≥ 65% deviation
+            val isHighDeviation = summary.composite >= 0.65f
+            binding.rowUserMismatchAlarm.visibility =
+                if (isHighDeviation) View.VISIBLE else View.GONE
+            if (isHighDeviation) {
+                binding.tvUserMismatchDetail.text =
+                    "Biometric deviation: ${summary.compositePct}%  •  " +
+                    "${summary.deviatingChannels.size}/8 channels flagged"
+            }
+
+            // Auto-show full alert dialog when ≥3 channels deviate (once per session)
             if (summary.deviatingChannels.size >= 3 && !socialEngAlertShown) {
                 socialEngAlertShown = true
                 showBiometricSocialEngAlert(summary)
             }
+        } else {
+            binding.rowUserMismatchAlarm.visibility = View.GONE
         }
     }
 
