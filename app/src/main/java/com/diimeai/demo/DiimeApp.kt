@@ -12,10 +12,8 @@ import com.payshield.sdk.enrollment.EnrollmentState
 import com.payshield.sdk.crypto.DeviceKeyManager
 import com.payshield.sdk.signal.EdgeSignal
 import com.payshield.sdk.behavioral.BehavioralTelemetrySender
-// SDK public API — customers use PayShieldSDK, not PayShieldEdgeInitializer directly
-import com.payshield.sdk.PayShieldSDK
-import com.payshield.sdk.PayShieldConfig
 import com.payshield.sdk.PayShieldEdgeInitializer
+import com.payshield.sdk.PayShieldSDK
 import com.payshield.sdk.SdkEnvironment
 import com.payshield.sdk.state.SdkState
 import kotlinx.coroutines.CoroutineScope
@@ -173,15 +171,18 @@ class DiimeApp : Application() {
      *   release → PRODUCTION  (full attestation enforcement, live customers)
      */
     private fun initPayShieldEdge() {
-        // Customer integration pattern: call PayShieldSDK.initialize() — never call
-        // PayShieldEdgeInitializer directly.  The SDK owns all signal registration,
-        // storage provisioning, time-sync, and ATL-2027 bootstrapping internally.
+        // Composed signal sink: routes every EdgeSignal through TWO paths simultaneously.
+        //   1. PayShieldSDK.signalSink  — ThreatBuffer upload to /api/v1/threats/batch
+        //   2. DiimeApiClient.signalSink — in-app alert display + local logging
         //
-        // Signal bridge: routes com.payshield.sdk.signal.SignalSink (SDK internal)
-        // → DiimeApiClient.signalSink (android-sdk layer SignalSink).
+        // Previously the app called PayShieldSDK.initialize() AND PayShieldEdgeInitializer
+        // .initialize() separately, which caused: duplicate signal registration, doubled OS
+        // event listeners, and three evaluateAll() calls on every startup.  Single init
+        // with this composed sink eliminates all three redundancy issues.
         val sdkSignalSink = object : com.payshield.sdk.signal.SignalSink {
             override fun emit(signal: EdgeSignal) {
-                DiimeApiClient.signalSink?.onSignalsCollected(listOf(signal))
+                PayShieldSDK.signalSink.emit(signal)                           // ThreatBuffer path
+                DiimeApiClient.signalSink?.onSignalsCollected(listOf(signal))  // in-app alert path
                 Log.d(TAG, "SDK signal: ${signal.type} [${signal.threatId}] confidence=${signal.confidence}")
             }
             override fun onBlock(reason: String) {
@@ -190,25 +191,13 @@ class DiimeApp : Application() {
             }
         }
 
-        // PayShieldSDK.initialize() is idempotent — safe to call once per process.
-        // Internally calls PayShieldEdgeInitializer with environment + tenantId from config,
-        // registers all 41 RASP signals, starts AutonomousCommandReceiver, and
-        // fires SdkCapabilityReporter.  After this call, PayShieldSDK.evaluateAtCheckpoint()
-        // is available for use in PaymentActivity, LoginActivity, etc.
-        PayShieldSDK.initialize(
-            context = applicationContext,
-            config  = PayShieldConfig(
-                backendUrl   = BuildConfig.NONASHIELD_BASE_URL,
-                tenantId     = "default",
-                environment  = sdkEnvironment,
-                enableBehavioral = true,
-                enableFreeRasp   = false,   // FreeRASP started automatically on first recordEnrollment()
-            )
-        )
-
-        // Override signalSink to route through DiimeApiClient after SDK init
-        // (PayShieldSDK.initialize() wires its own internal sink; we need our bridge sink too).
-        val orchestrator = PayShieldEdgeInitializer.initialize(
+        // Single initialize() call — registers all 47 RASP signals once, starts
+        // AutonomousCommandReceiver, fires SdkCapabilityReporter, runs startup
+        // evaluateAll(), registers the 10 OS event listener categories, and starts
+        // a 60-second periodic sweep for mid-session threat detection.
+        // FreeRASP auto-starts here if enrollment count > 0 (subsequent launches);
+        // otherwise it starts on the first recordEnrollment() call (first KYC flow).
+        PayShieldEdgeInitializer.initialize(
             context        = applicationContext,
             signalSink     = sdkSignalSink,
             sdkState       = sdkState,
@@ -217,10 +206,15 @@ class DiimeApp : Application() {
             tenantId       = "default"
         )
 
-        // One-time startup evaluation — captures the device's initial RASP state.
-        appScope.launch(Dispatchers.Default) {
-            try { orchestrator.evaluateAll() } catch (_: Throwable) {}
-        }
+        // Mark PayShieldSDK as initialized so PayShieldSDK.evaluateAtCheckpoint()
+        // works in PaymentActivity / LoginActivity.  requireOrchestrator() resolves
+        // via PayShieldEdgeInitializer.internalOrchestrator (set by the call above).
+        PayShieldSDK.configure(
+            backendUrl       = BuildConfig.NONASHIELD_BASE_URL,
+            tenantId         = "default",
+            environment      = sdkEnvironment,
+            enableBehavioral = true,
+        )
 
         Log.i(TAG, "PayShield SDK initialized (env=$sdkEnvironment, atl2027=true, " +
             "dpipSalt=${if (EnrollmentState.loadDpipSalt().isNotBlank()) "ISSUED" else "PENDING_ENROLLMENT"})")
