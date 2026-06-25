@@ -51,6 +51,13 @@ class DiimeApp : Application() {
             private set
 
         /**
+         * Ring buffer of the last 5 RASP signals fired this session.
+         * Written by the SDK sink; read by PaymentActivity's 500ms refresh loop.
+         * The app does ZERO detection here — it only stores what the SDK already decided.
+         */
+        val recentRaspSignals: ArrayDeque<EdgeSignal> = ArrayDeque(5)
+
+        /**
          * Observable enrollment status — collected by MainActivity to gate the
          * "Get Started" button and show error messages.
          *
@@ -313,6 +320,12 @@ class DiimeApp : Application() {
             override fun onSignalsCollected(signals: List<EdgeSignal>) {
                 for (signal in signals) {
                     Log.w(TAG, "RASP: ${signal.type} [${signal.threatId}] sev=${signal.severity} conf=${signal.confidence}")
+                    // Buffer for live threat ticker in PaymentActivity.
+                    // Cap at 5; drop oldest when full (SDK decided these — app just displays).
+                    synchronized(recentRaspSignals) {
+                        if (recentRaspSignals.size >= 5) recentRaspSignals.removeFirst()
+                        recentRaspSignals.addLast(signal)
+                    }
                 }
             }
 

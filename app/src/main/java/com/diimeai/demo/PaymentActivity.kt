@@ -109,7 +109,17 @@ class PaymentActivity : AppCompatActivity() {
     private val bioRefreshRunnable = object : Runnable {
         override fun run() {
             refreshBiometricPanel()
+            refreshThreatTicker()
             handler.postDelayed(this, BIO_REFRESH_MS)
+        }
+    }
+
+    // Fires 30 s after baseline is locked; puts the biometric engine into
+    // comparison mode so any person who picks up the phone is compared against
+    // the original user's profile — no re-login required.
+    private val autoCompareRunnable = Runnable {
+        if (!BehavioralSessionManager.isComparisonMode) {
+            BehavioralSessionManager.enterComparisonMode()
         }
     }
 
@@ -169,6 +179,7 @@ class PaymentActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         handler.removeCallbacks(bioRefreshRunnable)
+        handler.removeCallbacks(autoCompareRunnable)
         // ── Behavioral: detach listeners to avoid leaking references ───────────
         keystrokeDynamics.detachFromRoot()
         captureManager.detachFrom(binding.root)
@@ -222,11 +233,71 @@ class PaymentActivity : AppCompatActivity() {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Live RASP threat ticker
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private val FRIENDLY_NAMES = mapOf(
+        "SCREEN_RECORDING_ACTIVE" to "Screen Recording",
+        "SCREEN_MIRRORING"        to "Screen Mirroring",
+        "VPN_CONFLICT"            to "VPN Active",
+        "DEV_MODE_ENABLED"        to "Developer Mode On",
+        "ADB_INSTALL"             to "ADB Debugging On",
+        "ACCESSIBILITY_ABUSE"     to "Accessibility RAT",
+        "SIDELOAD_DETECTED"       to "App Cloning / Sideload",
+        "MOCK_LOCATION"           to "Mock GPS Location",
+        "SIM_SWAP"                to "SIM Swap Detected",
+        "TAPJACKING_RISK"         to "Overlay Attack",
+        "ROOT_DETECTED"           to "Device Rooted",
+        "RASP_BUILD_001"          to "Unsigned / Debug Build",
+        "BIOMETRIC_ANOMALY"       to "Biometric Mismatch",
+        "SCAM_AI_001"             to "Remote Scam Session",
+        "SCAM_AI_002"             to "Social Engineering"
+    )
+
+    private fun refreshThreatTicker() {
+        val recent = synchronized(DiimeApp.recentRaspSignals) {
+            DiimeApp.recentRaspSignals.toList().asReversed()
+        }
+        val rows = listOf(
+            binding.tvRecentThreat1,
+            binding.tvRecentThreat2,
+            binding.tvRecentThreat3,
+        )
+        rows.forEachIndexed { i, tv ->
+            val signal = recent.getOrNull(i)
+            if (signal == null) {
+                tv.visibility = View.GONE
+            } else {
+                val icon = when (signal.severity.name) {
+                    "CRITICAL" -> "🔴"
+                    "HIGH"     -> "🟠"
+                    "MEDIUM"   -> "🟡"
+                    else       -> "🟢"
+                }
+                val name = FRIENDLY_NAMES[signal.type] ?: signal.type
+                tv.text = "$icon $name"
+                tv.visibility = View.VISIBLE
+            }
+        }
+        val hasSignals = recent.isNotEmpty()
+        binding.tvNoThreatsDetected.visibility = if (hasSignals) View.GONE else View.VISIBLE
+    }
+
     // Behavioral biometrics panel
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun refreshBiometricPanel() {
         val summary = BehavioralSessionManager.buildDeviationSummary()
+
+        // Auto-lock baseline when calibration first completes (no button tap needed).
+        // Then after 30 s enter comparison mode so any person who picks up the phone
+        // is automatically compared against the enrolled user's biometric profile.
+        if (summary.isCalibrated && BehavioralSessionManager.savedBaseline == null
+                && !BehavioralSessionManager.isComparisonMode) {
+            BehavioralSessionManager.saveBaseline()
+            handler.removeCallbacks(autoCompareRunnable)
+            handler.postDelayed(autoCompareRunnable, 30_000L)
+        }
 
         // Calibration row
         if (summary.isCalibrated) {
