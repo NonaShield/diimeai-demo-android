@@ -314,6 +314,16 @@
                             android:fontFamily="monospace" />
                     </LinearLayout>
 
+                    <LinearLayout android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="wrap_content" android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="Micro-Tremor" android:textSize="10sp" android:textColor="#888888" />
+                        <TextView android:id="@+id/tvBioTremorZcr"
+                            android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="🟢 –" android:textSize="11sp" android:textColor="#CCCCCC"
+                            android:fontFamily="monospace" />
+                    </LinearLayout>
+
                 </LinearLayout>
 
                 <!-- Different-user alarm banner — shown when biometric deviation ≥ 65% -->

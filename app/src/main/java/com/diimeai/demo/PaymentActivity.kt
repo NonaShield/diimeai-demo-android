@@ -141,13 +141,15 @@ class PaymentActivity : AppCompatActivity() {
 
         // ── Demo 5: Start behavioral biometrics session ───────────────────────
         if (previousUserId != null) {
-            // This is Session B — comparison against Session A baseline
-            BehavioralSessionManager.enterComparisonMode()
+            // Session B — score against Session A baseline.  Wire sink so that
+            // BEHAVIORAL_BIOMETRIC_MISMATCH / SOCIAL_ENGINEERING_BIOMETRIC appear in ticker.
+            BehavioralSessionManager.enterComparisonMode(behavioralSink)
             showSocialEngineeringWarning(previousUserId!!)
             binding.rowDeviationBar.visibility = View.VISIBLE
         } else {
-            // Session A — build the user baseline
-            BehavioralSessionManager.start(this)
+            // Session A — build user baseline.  Wire sink so per-channel MEDIUM signals
+            // are also emitted once comparison mode kicks in after 5 payments.
+            BehavioralSessionManager.start(this, behavioralSink)
         }
 
         // Button wiring
@@ -443,7 +445,7 @@ class PaymentActivity : AppCompatActivity() {
             }
         }
 
-        // 6 sensor channels — always 🟢 for enrolled user; show deviation only in comparison mode
+        // 7 sensor channels — always 🟢 for enrolled user; show deviation only in comparison mode
         binding.tvBioPressure.text   = formatChannel(summary.pressure, inCompare)
         binding.tvBioFingerSize.text = formatChannel(summary.fingerSize, inCompare, "px")
         binding.tvBioSwipe.text      = formatChannel(summary.swipe, inCompare, "px/ms")
@@ -459,7 +461,15 @@ class PaymentActivity : AppCompatActivity() {
             if (inCompare && summary.posture.deviation > 0) "$icon $v  Δ${summary.posture.deviationPct}%"
             else "$icon $v"
         }
-        binding.tvBioGrip.text = formatChannel(summary.grip, inCompare)
+        binding.tvBioGrip.text     = formatChannel(summary.grip, inCompare)
+        // Ch 7: Micro-tremor ZCR — shown in crossings/s
+        binding.tvBioTremorZcr.text = run {
+            val icon = if (inCompare) summary.tremorZcr.statusIcon else "🟢"
+            val v    = "${"%.0f".format(summary.tremorZcr.value)} zc/s"
+            if (inCompare && summary.tremorZcr.deviation > 0)
+                "$icon $v  Δ${summary.tremorZcr.deviationPct}%"
+            else "$icon $v"
+        }
 
         // 2 ML channels — 🟢 for enrolled user; bot-detection icons only in comparison mode
         val mlFeatures = captureManager.getLatestFeatures()
@@ -505,9 +515,13 @@ class PaymentActivity : AppCompatActivity() {
             binding.rowUserMismatchAlarm.visibility =
                 if (isHighDeviation) View.VISIBLE else View.GONE
             if (isHighDeviation) {
+                // Count the 2 ML channels (jitter, curvature) alongside the 7 sensor channels.
+                val mlFlagged = mlFeatures?.let {
+                    listOf(it.jitterScore < 0.001f, it.curvatureEntropy < 0.3f).count { f -> f }
+                } ?: 0
                 binding.tvUserMismatchDetail.text =
                     "Biometric deviation: ${summary.compositePct}%  •  " +
-                    "${summary.deviatingChannels.size}/8 channels flagged"
+                    "${summary.deviatingChannels.size + mlFlagged}/9 channels flagged"
             }
 
             // Auto-show full alert dialog when ≥3 channels deviate (once per session)
@@ -549,7 +563,7 @@ class PaymentActivity : AppCompatActivity() {
             paymentTapCount++
             if (paymentTapCount >= BASELINE_PAYMENTS) {
                 BehavioralSessionManager.saveBaseline()
-                BehavioralSessionManager.enterComparisonMode()
+                BehavioralSessionManager.enterComparisonMode(behavioralSink)
                 Toast.makeText(this,
                     "✅ Biometric profile locked — comparison active",
                     Toast.LENGTH_SHORT).show()
