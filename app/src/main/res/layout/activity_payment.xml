@@ -676,6 +676,19 @@
                     app:backgroundTint="#00D4FF"
                     app:cornerRadius="10dp" />
 
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAttestAndPay"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:text="Attest &amp; Pay — Show Immutable Proof"
+                    android:textSize="12sp"
+                    android:textColor="#00FF88"
+                    app:backgroundTint="#001A0A"
+                    app:strokeColor="#00FF88"
+                    app:strokeWidth="1dp"
+                    app:cornerRadius="10dp"
+                    android:layout_marginTop="8dp" />
+
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 

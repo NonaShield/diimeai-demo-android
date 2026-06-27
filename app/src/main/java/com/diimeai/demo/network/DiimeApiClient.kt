@@ -381,12 +381,20 @@ object DiimeApiClient {
                     response.isSuccessful -> {
                         val json = JSONObject(responseBody)
                         val txnId = json.optString("transaction_id", "TXN_DEMO")
+                        // Read attestation values captured by PinningInterceptor for this request.
+                        // These are the exact nonce/timestamp/hash/hwLevel that were signed and
+                        // sent to the NGINX gateway — proof the request was device-attested.
+                        val att = com.payshield.android.sdk.LastAttestation
                         PaymentResult.Success(
                             transactionId = txnId,
                             status        = json.optString("status", "PENDING"),
                             receiptUrl    = json.optString("receipt_url", ""),
-                            // payment endpoint returns transaction_id (= decision_id for the receipt)
-                            decisionId    = json.optString("decision_id", txnId)
+                            decisionId    = json.optString("decision_id", txnId),
+                            nonce         = att.nonce,
+                            timestampEpoch= att.timestampEpoch,
+                            deviceKeyId   = att.deviceId,
+                            hwLevel       = att.hwLevel,
+                            requestHash   = att.requestHash,
                         )
                     }
                     response.code == 403 -> {
@@ -1580,7 +1588,15 @@ sealed class PaymentResult {
         val transactionId: String,
         val status: String,
         val receiptUrl: String = "",        // Demo 2: non-repudiation receipt URL
-        val decisionId: String = ""
+        val decisionId: String = "",
+        // Immutable audit: cryptographic attestation values captured from PinningInterceptor.
+        // Populated only when DiimeApiClient.initiatePayment() uses the secured client
+        // (i.e., the request actually passed through PinningInterceptor signing).
+        val nonce:          String = "",    // 256-bit random anti-replay nonce (hex)
+        val timestampEpoch: Long   = 0L,   // server-aligned epoch seconds (X-Timestamp)
+        val deviceKeyId:    String = "",   // device ID = SHA-256(ECDSA public key DER)
+        val hwLevel:        String = "",   // AndroidKeyStore security tier (STRONGBOX/TEE/SOFTWARE)
+        val requestHash:    String = "",   // SHA-256 of canonical payment request body
     ) : PaymentResult()
     data class Blocked(val reason: String, val threatType: String = "")  : PaymentResult()
     data class StepUpRequired(val challengeType: String)                 : PaymentResult()

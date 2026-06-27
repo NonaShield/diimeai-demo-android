@@ -107,6 +107,11 @@ class PaymentActivity : AppCompatActivity() {
     private var lastReceiptUrl: String = ""
     private var lastDecisionId: String = ""
 
+    // When true, the next initiatePayment() call bypasses soft RASP/biometric/SIM gates
+    // and displays the immutable audit proof (nonce, device key, timestamp) on success.
+    // Set by btnAttestAndPay; cleared after the payment completes (success or failure).
+    private var isDemoAttestationMode = false
+
     // ── Biometric baseline: locked after BASELINE_PAYMENTS payment taps ───────
     // Counter increments on every Send Payment tap regardless of validation result.
     // At tap #BASELINE_PAYMENTS the profile is saved and comparison mode activates.
@@ -153,8 +158,9 @@ class PaymentActivity : AppCompatActivity() {
         }
 
         // Button wiring
-        binding.btnSendPayment.setOnClickListener { initiatePayment() }
-        binding.btnViewProof.setOnClickListener   { openReceipt() }
+        binding.btnSendPayment.setOnClickListener  { initiatePayment() }
+        binding.btnAttestAndPay.setOnClickListener { isDemoAttestationMode = true; initiatePayment() }
+        binding.btnViewProof.setOnClickListener    { openReceipt() }
         binding.btnEnrollKyc.setOnClickListener   { promptKycEnrollment() }
         binding.btnLogout.setOnClickListener      { logout() }
         binding.btnSocDashboard.setOnClickListener {
@@ -571,67 +577,65 @@ class PaymentActivity : AppCompatActivity() {
             }
         }
 
-        // ── Screen capture check (mirroring + software recording) ─────────────
-        val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
-        if (dm.displays.size > 1) {
-            Log.w(TAG, "[Demo4] Screen mirroring: ${dm.displays.size} displays active")
-            showThreatBlockedDialog("RASP_DEV_025")
-            return
-        }
-        // RASP_DEV_051: software screen recording detected by the continuous SDK loop
-        if (PayShieldEdgeInitializer.hasScreenCaptureThreat()) {
-            Log.w(TAG, "[Demo4] Screen capture threat active (RASP_DEV_051)")
-            showThreatBlockedDialog("RASP_DEV_051")
-            return
-        }
+        // Capture attestation mode on the UI thread before the coroutine captures it.
+        // isDemoAttestationMode is always cleared after the payment completes.
+        val isAttestation = isDemoAttestationMode
 
-        // ── UC-08 LIVE: SIM swap check ────────────────────────────────────────
-        // Compare current SIM fingerprint against the one stored at KYC enrollment.
-        // Combines with behavioral biometric deviation for dual-signal confidence.
-        val simSwapSuspected = PayShieldEdgeInitializer.isSimSwapSuspected() == true
-        val bioDev = BehavioralSessionManager.deviationScore()
-        if (simSwapSuspected) {
-            Log.w(TAG, "[UC-08] SIM swap suspected — bioDev=${(bioDev * 100).toInt()}%")
-            showSimSwapDialog(iccidChanged = true, biometricDeviation = bioDev)
-            // Fire live signal to backend asynchronously (don't block UI)
-            val deviceId = DiimeApp.enrollmentState?.deviceId
-                ?: PayShieldEdgeInitializer.getStableDeviceId()
-            lifecycleScope.launch(Dispatchers.IO) {
-                runCatching { DiimeApiClient.ingestLiveSimSwap(deviceId, bioDev, iccidChanged = true) }
-                    .also { Log.i(TAG, "[UC-08] live ingest result: ${it.getOrNull()?.decision}") }
-            }
-            return
-        }
-
-        // ── Demo 5: Behavioral mismatch gate ─────────────────────────────────
-        if (BehavioralSessionManager.isComparisonMode) {
-            val dev = BehavioralSessionManager.deviationScore()
-            if (dev > 0.55f) {
-                showBiometricPaymentBlockedDialog(dev)
+        if (!isAttestation) {
+            // ── Screen capture check (mirroring + software recording) ─────────
+            val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+            if (dm.displays.size > 1) {
+                Log.w(TAG, "[Demo4] Screen mirroring: ${dm.displays.size} displays active")
+                showThreatBlockedDialog("RASP_DEV_025")
                 return
             }
-        }
+            if (PayShieldEdgeInitializer.hasScreenCaptureThreat()) {
+                Log.w(TAG, "[Demo4] Screen capture threat active (RASP_DEV_051)")
+                showThreatBlockedDialog("RASP_DEV_051")
+                return
+            }
 
-        // ── Local RASP gate ───────────────────────────────────────────────────
-        try {
-            EdgeRiskEnforcer.assertAllowed()
-        } catch (e: SecurityException) {
-            showThreatBlockedDialog(EdgeRiskEnforcer.activeHighThreat())
-            return
+            // ── UC-08 LIVE: SIM swap check ────────────────────────────────────
+            val simSwapSuspected = PayShieldEdgeInitializer.isSimSwapSuspected() == true
+            val bioDev = BehavioralSessionManager.deviationScore()
+            if (simSwapSuspected) {
+                Log.w(TAG, "[UC-08] SIM swap suspected — bioDev=${(bioDev * 100).toInt()}%")
+                showSimSwapDialog(iccidChanged = true, biometricDeviation = bioDev)
+                val deviceId = DiimeApp.enrollmentState?.deviceId
+                    ?: PayShieldEdgeInitializer.getStableDeviceId()
+                lifecycleScope.launch(Dispatchers.IO) {
+                    runCatching { DiimeApiClient.ingestLiveSimSwap(deviceId, bioDev, iccidChanged = true) }
+                        .also { Log.i(TAG, "[UC-08] live ingest result: ${it.getOrNull()?.decision}") }
+                }
+                return
+            }
+
+            // ── Demo 5: Behavioral mismatch gate ──────────────────────────────
+            if (BehavioralSessionManager.isComparisonMode) {
+                val dev = BehavioralSessionManager.deviationScore()
+                if (dev > 0.55f) {
+                    showBiometricPaymentBlockedDialog(dev)
+                    return
+                }
+            }
+
+            // ── Local RASP gate ────────────────────────────────────────────────
+            try {
+                EdgeRiskEnforcer.assertAllowed()
+            } catch (e: SecurityException) {
+                showThreatBlockedDialog(EdgeRiskEnforcer.activeHighThreat())
+                return
+            }
         }
 
         setLoading(true)
         binding.tvResult.visibility    = View.GONE
         binding.btnViewProof.visibility = View.GONE
 
-        // Snapshot the note text on the UI thread before launching the coroutine.
         val noteText = binding.etNote.text.toString().trim()
 
         lifecycleScope.launch(Dispatchers.IO) {
-            // ── Behavioral telemetry: send BEFORE payment so the backend decision
-            //    engine has up-to-date behavioral features when it evaluates this
-            //    PAYMENT action.  Fail-open — a network error here does NOT block
-            //    the payment (BehavioralTelemetrySender returns null on error).
+            // ── Behavioral telemetry: fail-open, never blocks the payment ─────
             val behavioralFeatures = captureManager.getLatestFeatures()
             if (behavioralFeatures != null) {
                 val sessionId = resolveSessionId()
@@ -652,37 +656,38 @@ class PaymentActivity : AppCompatActivity() {
                 }
             }
 
-            // ── SDK checkpoint gate (UC-PAYMENT-RISK) ────────────────────────
-            // Customer integration: call evaluateAtCheckpoint BEFORE sending the
-            // payment to the backend.  The SDK evaluates:
-            //   1. RASP signal set (all 41 sensors synchronously)
-            //   2. On-device behavioral biometrics (BehavioralAnomalySignal)
-            //   3. Default policy (DefaultPolicyEvaluator)
-            //   4. Backend behavioral confirmation (async, Dispatchers.IO)
-            // STEP_UP → show OTP challenge; DENY → block; ALLOW → proceed.
-            val checkpoint = runCatching {
-                PayShieldSDK.evaluateAtCheckpoint(
-                    context  = this@PaymentActivity,
-                    action   = "PAYMENT",
-                    features = behavioralFeatures
-                )
-            }.getOrNull()
+            // ── SDK checkpoint gate — skipped in attestation mode ─────────────
+            // Attestation demo is specifically for showing telemetry proof even
+            // when the SDK would normally gate the payment.
+            if (!isAttestation) {
+                val checkpoint = runCatching {
+                    PayShieldSDK.evaluateAtCheckpoint(
+                        context  = this@PaymentActivity,
+                        action   = "PAYMENT",
+                        features = behavioralFeatures
+                    )
+                }.getOrNull()
 
-            if (checkpoint != null && checkpoint.decision == PolicyDecision.DENY) {
-                withContext(Dispatchers.Main) {
-                    setLoading(false)
-                    showThreatBlockedDialog(checkpoint.reason ?: "PAYMENT_RISK_BLOCK")
+                if (checkpoint != null && checkpoint.decision == PolicyDecision.DENY) {
+                    withContext(Dispatchers.Main) {
+                        setLoading(false)
+                        showThreatBlockedDialog(checkpoint.reason ?: "PAYMENT_RISK_BLOCK")
+                    }
+                    return@launch
                 }
-                return@launch
+
+                if (checkpoint != null && checkpoint.decision == PolicyDecision.STEP_UP) {
+                    withContext(Dispatchers.Main) {
+                        setLoading(false)
+                        showPaymentRiskStepUpDialog(amount, checkpoint.reason)
+                    }
+                    return@launch
+                }
             }
 
-            if (checkpoint != null && checkpoint.decision == PolicyDecision.STEP_UP) {
-                withContext(Dispatchers.Main) {
-                    setLoading(false)
-                    showPaymentRiskStepUpDialog(amount, checkpoint.reason)
-                }
-                return@launch
-            }
+            // Allow PinningInterceptor to sign the request even when the device
+            // is in a risk-blocked state (attestation demo only).
+            if (isAttestation) EdgeRiskEnforcer.demoAttestationMode = true
 
             val result = DiimeApiClient.initiatePayment(
                 amount      = amount,
@@ -690,11 +695,86 @@ class PaymentActivity : AppCompatActivity() {
                 recipientId = recipient,
                 note        = noteText
             )
+
+            // Always clear the bypass — never leave it open after the request.
+            if (isAttestation) EdgeRiskEnforcer.demoAttestationMode = false
+
             withContext(Dispatchers.Main) {
+                isDemoAttestationMode = false
                 setLoading(false)
-                handlePaymentResult(result)
+                if (isAttestation && result is PaymentResult.Success) {
+                    showImmutableAuditDialog(result)
+                } else {
+                    handlePaymentResult(result)
+                }
             }
         }
+    }
+
+    private fun showImmutableAuditDialog(result: PaymentResult.Success) {
+        lastReceiptUrl = result.receiptUrl
+        lastDecisionId = result.decisionId
+
+        val nonceShort  = result.nonce.take(32).let { if (result.nonce.length > 32) "$it…" else it }
+        val hashShort   = result.requestHash.take(32).let { if (result.requestHash.length > 32) "$it…" else it }
+        val keyShort    = result.deviceKeyId.take(24).let { if (result.deviceKeyId.length > 24) "$it…" else it }
+        val iso = if (result.timestampEpoch > 0L)
+            java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
+                .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+                .format(java.util.Date(result.timestampEpoch * 1000L))
+        else "—"
+
+        val msg = buildString {
+            append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+            append("IMMUTABLE AUDIT PROOF\n")
+            append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+            append("Txn ID :  ${result.transactionId}\n")
+            append("Status :  ${result.status} — AUTHORISED\n\n")
+            append("── Cryptographic Attestation ──\n\n")
+            append("Nonce (anti-replay 256-bit):\n")
+            append("  $nonceShort\n\n")
+            append("Device Key (hw-bound):\n")
+            append("  $keyShort\n")
+            if (result.hwLevel.isNotBlank())
+                append("  Backed by: ${result.hwLevel}\n")
+            append("\n")
+            append("Timestamp (server-aligned):\n")
+            append("  $iso\n\n")
+            append("Request Hash (SHA-256):\n")
+            append("  $hashShort\n\n")
+            append("Signing Algorithm:  ECDSA_P256\n\n")
+            append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+            append("Every field above is ECDSA-signed\n")
+            append("by the device hardware key before\n")
+            append("leaving the device. A replayed or\n")
+            append("spoofed nonce fails NGINX Phase-1\n")
+            append("immediately. Immutable once the\n")
+            append("evidence chain block is written.")
+        }
+
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Cryptographic Attestation")
+            .setMessage(msg)
+            .setPositiveButton("Full Receipt") { _, _ -> openReceipt() }
+            .setNegativeButton("Close", null)
+            .show()
+
+        binding.tvResult.apply {
+            text = buildString {
+                append("PAYMENT AUTHORISED — Attestation Demo\n\n")
+                append("Txn ID  : ${result.transactionId}\n")
+                append("Nonce   : ${result.nonce.take(16)}…\n")
+                append("HW Key  : ${result.hwLevel}\n")
+                append("Signed  : $iso\n\n")
+                append("Cryptographic proof shown above.\n")
+                append("Nonce, key, timestamp are ECDSA-\n")
+                append("signed — unspoofable + immutable.")
+            }
+            setTextColor(getColor(android.R.color.holo_green_dark))
+            visibility = View.VISIBLE
+        }
+        if (result.receiptUrl.isNotBlank() || result.decisionId.isNotBlank())
+            binding.btnViewProof.visibility = View.VISIBLE
     }
 
     private fun handlePaymentResult(result: PaymentResult) {
@@ -1132,7 +1212,8 @@ class PaymentActivity : AppCompatActivity() {
     }
 
     private fun setLoading(loading: Boolean) {
-        binding.btnSendPayment.isEnabled = !loading
-        binding.progressBar.visibility   = if (loading) View.VISIBLE else View.GONE
+        binding.btnSendPayment.isEnabled  = !loading
+        binding.btnAttestAndPay.isEnabled = !loading
+        binding.progressBar.visibility    = if (loading) View.VISIBLE else View.GONE
     }
 }
