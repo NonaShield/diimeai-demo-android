@@ -56,6 +56,9 @@ class PaymentActivity : AppCompatActivity() {
 
         /** Refresh the behavioral panel every 500 ms even without touch events. */
         private const val BIO_REFRESH_MS = 500L
+
+        /** Number of payment interactions to capture before locking the biometric baseline. */
+        private const val BASELINE_PAYMENTS = 5
     }
 
     private lateinit var binding: ActivityPaymentBinding
@@ -104,6 +107,12 @@ class PaymentActivity : AppCompatActivity() {
     private var lastReceiptUrl: String = ""
     private var lastDecisionId: String = ""
 
+    // ── Biometric baseline: locked after BASELINE_PAYMENTS payment taps ───────
+    // Counter increments on every Send Payment tap regardless of validation result.
+    // At tap #BASELINE_PAYMENTS the profile is saved and comparison mode activates.
+    // Reset to 0 on logout/fullReset.
+    private var paymentTapCount = 0
+
     // ── Biometric panel refresh ───────────────────────────────────────────────
     private val handler = Handler(Looper.getMainLooper())
     private val bioRefreshRunnable = object : Runnable {
@@ -111,15 +120,6 @@ class PaymentActivity : AppCompatActivity() {
             refreshBiometricPanel()
             refreshThreatTicker()
             handler.postDelayed(this, BIO_REFRESH_MS)
-        }
-    }
-
-    // Fires 30 s after baseline is locked; puts the biometric engine into
-    // comparison mode so any person who picks up the phone is compared against
-    // the original user's profile — no re-login required.
-    private val autoCompareRunnable = Runnable {
-        if (!BehavioralSessionManager.isComparisonMode) {
-            BehavioralSessionManager.enterComparisonMode()
         }
     }
 
@@ -179,8 +179,6 @@ class PaymentActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         handler.removeCallbacks(bioRefreshRunnable)
-        handler.removeCallbacks(autoCompareRunnable)
-        // ── Behavioral: detach listeners to avoid leaking references ───────────
         keystrokeDynamics.detachFromRoot()
         captureManager.detachFrom(binding.root)
     }
@@ -303,43 +301,47 @@ class PaymentActivity : AppCompatActivity() {
 
     private fun refreshBiometricPanel() {
         val summary = BehavioralSessionManager.buildDeviationSummary()
+        val inCompare = BehavioralSessionManager.isComparisonMode
 
-        // Auto-lock baseline when calibration first completes (no button tap needed).
-        // Then after 30 s enter comparison mode so any person who picks up the phone
-        // is automatically compared against the enrolled user's biometric profile.
-        if (summary.isCalibrated && BehavioralSessionManager.savedBaseline == null
-                && !BehavioralSessionManager.isComparisonMode) {
-            BehavioralSessionManager.saveBaseline()
-            handler.removeCallbacks(autoCompareRunnable)
-            handler.postDelayed(autoCompareRunnable, 30_000L)
-        }
-
-        // Calibration row
-        if (summary.isCalibrated) {
+        // Calibration progress bar — show until BASELINE_PAYMENTS taps are done
+        val baselineLocked = inCompare || BehavioralSessionManager.savedBaseline != null
+        if (baselineLocked) {
             binding.rowCalibration.visibility = View.GONE
         } else {
             binding.rowCalibration.visibility = View.VISIBLE
-            binding.progressCalibration.progress = summary.calibrationPct
-            binding.tvCalibrationPct.text = "  ${summary.calibrationPct}%"
+            // Progress = payment taps completed out of BASELINE_PAYMENTS
+            val pct = (paymentTapCount * 100 / BASELINE_PAYMENTS).coerceIn(0, 100)
+            binding.progressCalibration.progress = pct
+            binding.tvCalibrationPct.text = "  ${paymentTapCount}/${BASELINE_PAYMENTS}"
         }
-
-        val inCompare = BehavioralSessionManager.isComparisonMode
 
         // Risk badge
         when {
-            inCompare && summary.isCalibrated -> {
+            inCompare -> {
+                // Comparison mode: show live deviation score
                 binding.tvBioRiskBadge.text = "${summary.riskLabel}  ${summary.compositePct}%"
                 binding.tvBioRiskBadge.setBackgroundColor(summary.riskColor)
                 binding.tvBioHint.visibility = View.GONE
             }
-            summary.isCalibrated -> {
+            baselineLocked -> {
+                // Baseline saved, not yet in comparison mode (transitional — shouldn't linger)
                 binding.tvBioRiskBadge.text = "ENROLLED USER ✓"
                 binding.tvBioRiskBadge.setBackgroundColor(0xFF00AA44.toInt())
                 binding.tvBioHint.visibility = View.GONE
             }
-            else -> {
-                binding.tvBioRiskBadge.text = "LEARNING…  ${summary.calibrationPct}%"
+            paymentTapCount >= BASELINE_PAYMENTS -> {
+                // 5 taps done but sensor calibration not complete yet (very unlikely)
+                binding.tvBioRiskBadge.text = "ENROLLING…  touch screen"
                 binding.tvBioRiskBadge.setBackgroundColor(0xFF334455.toInt())
+                binding.tvBioHint.visibility = View.VISIBLE
+            }
+            else -> {
+                // Still building: show payment count progress
+                val remaining = BASELINE_PAYMENTS - paymentTapCount
+                binding.tvBioRiskBadge.text = "BUILDING PROFILE: ${paymentTapCount}/${BASELINE_PAYMENTS}"
+                binding.tvBioRiskBadge.setBackgroundColor(0xFF334455.toInt())
+                binding.tvBioHint.text =
+                    "Make $remaining more payment${if (remaining == 1) "" else "s"} to lock your biometric profile"
                 binding.tvBioHint.visibility = View.VISIBLE
             }
         }
@@ -436,6 +438,22 @@ class PaymentActivity : AppCompatActivity() {
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun initiatePayment() {
+        // Count every payment tap for baseline building (even if validation fails below)
+        if (!BehavioralSessionManager.isComparisonMode &&
+                BehavioralSessionManager.savedBaseline == null) {
+            paymentTapCount++
+            if (paymentTapCount >= BASELINE_PAYMENTS) {
+                // Lock the biometric profile and immediately start comparing
+                BehavioralSessionManager.saveBaseline()
+                BehavioralSessionManager.enterComparisonMode()
+                Toast.makeText(this,
+                    "✅ Biometric profile locked — comparison active",
+                    Toast.LENGTH_SHORT).show()
+                // Refresh badge immediately so the user sees the state change
+                handler.post { refreshBiometricPanel() }
+            }
+        }
+
         val amount    = binding.etAmount.text.toString().toDoubleOrNull()
         val recipient = binding.etRecipient.text.toString().trim()
 
@@ -990,8 +1008,8 @@ class PaymentActivity : AppCompatActivity() {
     }
 
     private fun logout() {
-        // Record screen exit before clearing state.
         captureManager.sessionFlowAnalyzer.onScreenTransition()
+        paymentTapCount = 0
         BehavioralSessionManager.fullReset()
         DiimeApiClient.clearSession()
         startActivity(Intent(this, MainActivity::class.java).apply {
