@@ -155,6 +155,10 @@ class PaymentActivity : AppCompatActivity() {
         binding.btnViewProof.setOnClickListener   { openReceipt() }
         binding.btnEnrollKyc.setOnClickListener   { promptKycEnrollment() }
         binding.btnLogout.setOnClickListener      { logout() }
+        binding.btnSocDashboard.setOnClickListener {
+            startActivity(Intent(Intent.ACTION_VIEW,
+                Uri.parse("https://api.diimeai.com/dashboard")))
+        }
     }
 
     override fun onResume() {

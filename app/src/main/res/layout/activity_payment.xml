@@ -53,6 +53,25 @@
             app:layout_constraintStart_toStartOf="parent"
             android:layout_marginTop="2dp" />
 
+        <!-- ─── SOC Dashboard shortcut ───────────────────────────────────────── -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSocDashboard"
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:text="📊  Live SOC Dashboard  →"
+            android:textSize="13sp"
+            android:textColor="#00D4FF"
+            android:letterSpacing="0.02"
+            app:backgroundTint="#060D18"
+            app:strokeColor="#1A3A55"
+            app:strokeWidth="1dp"
+            app:cornerRadius="10dp"
+            app:icon="@null"
+            app:layout_constraintTop_toBottomOf="@id/tvDeviceId"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="12dp" />
+
         <!-- ─── Account Balance Card ──────────────────────────────────────────── -->
         <androidx.cardview.widget.CardView
             android:id="@+id/cardBalance"
@@ -61,10 +80,10 @@
             app:cardBackgroundColor="#0B1A2E"
             app:cardCornerRadius="16dp"
             app:cardElevation="8dp"
-            app:layout_constraintTop_toBottomOf="@id/tvDeviceId"
+            app:layout_constraintTop_toBottomOf="@id/btnSocDashboard"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            android:layout_marginTop="16dp">
+            android:layout_marginTop="12dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
