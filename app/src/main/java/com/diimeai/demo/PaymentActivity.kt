@@ -254,33 +254,48 @@ class PaymentActivity : AppCompatActivity() {
         "SCAM_AI_002"             to "Social Engineering"
     )
 
+    // Track last rendered set to avoid rebuilding the list on every 500ms tick
+    private var lastRenderedThreatTypes: List<String> = emptyList()
+
     private fun refreshThreatTicker() {
-        val recent = synchronized(DiimeApp.recentRaspSignals) {
-            DiimeApp.recentRaspSignals.toList().asReversed()
+        val signals = synchronized(DiimeApp.recentRaspSignals) {
+            DiimeApp.recentRaspSignals.toList()
         }
-        val rows = listOf(
-            binding.tvRecentThreat1,
-            binding.tvRecentThreat2,
-            binding.tvRecentThreat3,
-        )
-        rows.forEachIndexed { i, tv ->
-            val signal = recent.getOrNull(i)
-            if (signal == null) {
-                tv.visibility = View.GONE
-            } else {
-                val icon = when (signal.severity.name) {
-                    "CRITICAL" -> "🔴"
-                    "HIGH"     -> "🟠"
-                    "MEDIUM"   -> "🟡"
-                    else       -> "🟢"
-                }
-                val name = FRIENDLY_NAMES[signal.type] ?: signal.type
-                tv.text = "$icon $name"
-                tv.visibility = View.VISIBLE
-            }
-        }
-        val hasSignals = recent.isNotEmpty()
+        // Newest last → show newest at top
+        val ordered = signals.reversed()
+        val types = ordered.map { it.type }
+        if (types == lastRenderedThreatTypes) return   // nothing changed
+        lastRenderedThreatTypes = types
+
+        val hasSignals = ordered.isNotEmpty()
         binding.tvNoThreatsDetected.visibility = if (hasSignals) View.GONE else View.VISIBLE
+        binding.llRaspAlertList.visibility     = if (hasSignals) View.VISIBLE else View.GONE
+        binding.tvAlertCount.text = if (hasSignals) "${ordered.size} active" else "0 active"
+        binding.tvAlertCount.setTextColor(if (hasSignals) 0xFFFF6644.toInt() else 0xFF448844.toInt())
+
+        binding.llRaspAlertList.removeAllViews()
+        ordered.forEach { signal ->
+            val icon = when (signal.severity.name) {
+                "CRITICAL" -> "🔴"
+                "HIGH"     -> "🟠"
+                "MEDIUM"   -> "🟡"
+                else       -> "🟡"
+            }
+            val name = FRIENDLY_NAMES[signal.type] ?: signal.type
+            val tv = android.widget.TextView(this).apply {
+                text = "$icon  $name"
+                textSize = 12f
+                setTextColor(when (signal.severity.name) {
+                    "CRITICAL" -> 0xFFFF4444.toInt()
+                    "HIGH"     -> 0xFFFF8844.toInt()
+                    else       -> 0xFFFFCC44.toInt()
+                })
+                typeface = android.graphics.Typeface.MONOSPACE
+                val pad = (8 * resources.displayMetrics.density).toInt()
+                setPadding(0, pad / 2, 0, pad / 2)
+            }
+            binding.llRaspAlertList.addView(tv)
+        }
     }
 
     // Behavioral biometrics panel
@@ -308,47 +323,65 @@ class PaymentActivity : AppCompatActivity() {
             binding.tvCalibrationPct.text = "  ${summary.calibrationPct}%"
         }
 
-        // Risk badge on the biometrics card
-        if (BehavioralSessionManager.isComparisonMode && summary.isCalibrated) {
-            binding.tvBioRiskBadge.text = "${summary.riskLabel}  ${summary.compositePct}%"
-            binding.tvBioRiskBadge.setBackgroundColor(summary.riskColor)
-        } else if (summary.isCalibrated) {
-            binding.tvBioRiskBadge.text = "BASELINE LOCKED ✓"
-            binding.tvBioRiskBadge.setBackgroundColor(0xFF00AA44.toInt())
-        } else {
-            binding.tvBioRiskBadge.text = "CALIBRATING…"
-            binding.tvBioRiskBadge.setBackgroundColor(0xFF444444.toInt())
+        val inCompare = BehavioralSessionManager.isComparisonMode
+
+        // Risk badge
+        when {
+            inCompare && summary.isCalibrated -> {
+                binding.tvBioRiskBadge.text = "${summary.riskLabel}  ${summary.compositePct}%"
+                binding.tvBioRiskBadge.setBackgroundColor(summary.riskColor)
+                binding.tvBioHint.visibility = View.GONE
+            }
+            summary.isCalibrated -> {
+                binding.tvBioRiskBadge.text = "ENROLLED USER ✓"
+                binding.tvBioRiskBadge.setBackgroundColor(0xFF00AA44.toInt())
+                binding.tvBioHint.visibility = View.GONE
+            }
+            else -> {
+                binding.tvBioRiskBadge.text = "LEARNING…  ${summary.calibrationPct}%"
+                binding.tvBioRiskBadge.setBackgroundColor(0xFF334455.toInt())
+                binding.tvBioHint.visibility = View.VISIBLE
+            }
         }
 
-        // 6-channel sensor rows (pressure / size / speed / hesitation / posture / grip)
-        binding.tvBioPressure.text  = formatChannel(summary.pressure)
-        binding.tvBioFingerSize.text= formatChannel(summary.fingerSize,  "px")
-        binding.tvBioSwipe.text     = formatChannel(summary.swipe, "px/ms")
-        binding.tvBioHesitation.text= "${summary.hesitation.statusIcon} ${summary.hesitation.value.toLong()}ms" +
-            if (BehavioralSessionManager.isComparisonMode && summary.hesitation.deviation > 0)
-                " Δ${summary.hesitation.deviationPct}%" else ""
-        binding.tvBioPosture.text   = "${summary.posture.statusIcon} ${"%.1f".format(summary.posture.value)}°" +
-            if (BehavioralSessionManager.isComparisonMode && summary.posture.deviation > 0)
-                " Δ${summary.posture.deviationPct}%" else ""
-        binding.tvBioGrip.text      = formatChannel(summary.grip)
+        // 6 sensor channels — always 🟢 for enrolled user; show deviation only in comparison mode
+        binding.tvBioPressure.text   = formatChannel(summary.pressure, inCompare)
+        binding.tvBioFingerSize.text = formatChannel(summary.fingerSize, inCompare, "px")
+        binding.tvBioSwipe.text      = formatChannel(summary.swipe, inCompare, "px/ms")
+        binding.tvBioHesitation.text = run {
+            val icon = if (inCompare) summary.hesitation.statusIcon else "🟢"
+            val v = "${summary.hesitation.value.toLong()}ms"
+            if (inCompare && summary.hesitation.deviation > 0) "$icon $v  Δ${summary.hesitation.deviationPct}%"
+            else "$icon $v"
+        }
+        binding.tvBioPosture.text = run {
+            val icon = if (inCompare) summary.posture.statusIcon else "🟢"
+            val v = "${"%.1f".format(summary.posture.value)}°"
+            if (inCompare && summary.posture.deviation > 0) "$icon $v  Δ${summary.posture.deviationPct}%"
+            else "$icon $v"
+        }
+        binding.tvBioGrip.text = formatChannel(summary.grip, inCompare)
 
-        // 2 ML-derived channels from BehavioralCaptureManager (jitter + path entropy)
-        // These come from the feature extractor that runs per-gesture, not per-sensor.
+        // 2 ML channels — 🟢 for enrolled user; bot-detection icons only in comparison mode
         val mlFeatures = captureManager.getLatestFeatures()
         if (mlFeatures != null) {
-            val jitterIcon = when {
-                mlFeatures.jitterScore < 0.001f -> "🔴"   // near-zero = bot/injected touch
+            val jitterIcon = if (!inCompare) "🟢" else when {
+                mlFeatures.jitterScore < 0.001f -> "🔴"
                 mlFeatures.jitterScore < 0.01f  -> "🟡"
                 else                            -> "🟢"
             }
             binding.tvBioJitter.text = "$jitterIcon ${"%.4f".format(mlFeatures.jitterScore)}"
 
-            val entropyIcon = when {
-                mlFeatures.curvatureEntropy < 0.3f -> "🔴"  // perfectly straight = bot
+            val entropyIcon = if (!inCompare) "🟢" else when {
+                mlFeatures.curvatureEntropy < 0.3f -> "🔴"
                 mlFeatures.curvatureEntropy < 1.0f -> "🟡"
                 else                               -> "🟢"
             }
             binding.tvBioCurvature.text = "$entropyIcon ${"%.2f".format(mlFeatures.curvatureEntropy)}"
+        } else {
+            // No touch gesture processed yet
+            binding.tvBioJitter.text    = "🟢 –"
+            binding.tvBioCurvature.text = "🟢 –"
         }
 
         // Deviation bar (comparison mode only)
@@ -390,12 +423,12 @@ class PaymentActivity : AppCompatActivity() {
 
     private var socialEngAlertShown = false
 
-    private fun formatChannel(ch: BiometricChannelStatus, unit: String = ""): String {
+    private fun formatChannel(ch: BiometricChannelStatus, inCompare: Boolean, unit: String = ""): String {
         val value = "${"%.2f".format(ch.value)}$unit"
-        return if (BehavioralSessionManager.isComparisonMode && ch.deviation > 0)
+        return if (inCompare && ch.deviation > 0)
             "${ch.statusIcon} $value  Δ${ch.deviationPct}%"
         else
-            "${ch.statusIcon} $value"
+            "🟢 $value"
     }
 
     // ─────────────────────────────────────────────────────────────────────────

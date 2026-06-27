@@ -51,11 +51,12 @@ class DiimeApp : Application() {
             private set
 
         /**
-         * Ring buffer of the last 5 RASP signals fired this session.
+         * Deduped live signal list for the RASP alert ticker.
+         * Keyed by signal type — newest signal per type wins, up to 20 unique types.
          * Written by the SDK sink; read by PaymentActivity's 500ms refresh loop.
-         * The app does ZERO detection here — it only stores what the SDK already decided.
+         * The app does ZERO detection — only stores what the SDK already decided.
          */
-        val recentRaspSignals: ArrayDeque<EdgeSignal> = ArrayDeque(5)
+        val recentRaspSignals: ArrayDeque<EdgeSignal> = ArrayDeque(20)
 
         /**
          * Observable enrollment status — collected by MainActivity to gate the
@@ -317,8 +318,10 @@ class DiimeApp : Application() {
                     // Buffer for live threat ticker in PaymentActivity.
                     // Cap at 5; drop oldest when full (SDK decided these — app just displays).
                     synchronized(recentRaspSignals) {
-                        if (recentRaspSignals.size >= 5) recentRaspSignals.removeFirst()
+                        // Replace existing entry of same type so each threat appears once
+                        recentRaspSignals.removeAll { it.type == signal.type }
                         recentRaspSignals.addLast(signal)
+                        while (recentRaspSignals.size > 20) recentRaspSignals.removeFirst()
                     }
                 }
             }
