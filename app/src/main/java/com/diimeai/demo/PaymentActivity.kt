@@ -438,27 +438,27 @@ class PaymentActivity : AppCompatActivity() {
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun initiatePayment() {
-        // Count every payment tap for baseline building (even if validation fails below)
-        if (!BehavioralSessionManager.isComparisonMode &&
-                BehavioralSessionManager.savedBaseline == null) {
-            paymentTapCount++
-            if (paymentTapCount >= BASELINE_PAYMENTS) {
-                // Lock the biometric profile and immediately start comparing
-                BehavioralSessionManager.saveBaseline()
-                BehavioralSessionManager.enterComparisonMode()
-                Toast.makeText(this,
-                    "✅ Biometric profile locked — comparison active",
-                    Toast.LENGTH_SHORT).show()
-                // Refresh badge immediately so the user sees the state change
-                handler.post { refreshBiometricPanel() }
-            }
-        }
-
         val amount    = binding.etAmount.text.toString().toDoubleOrNull()
         val recipient = binding.etRecipient.text.toString().trim()
 
         if (amount == null || amount <= 0) { binding.etAmount.error = "Enter a valid amount"; return }
         if (recipient.isBlank()) { binding.etRecipient.error = "Recipient required"; return }
+
+        // Count only validated payment attempts for baseline building.
+        // Counting before validation caused the baseline to lock on empty taps,
+        // producing an empty behavioral profile and false deviation on real use.
+        if (!BehavioralSessionManager.isComparisonMode &&
+                BehavioralSessionManager.savedBaseline == null) {
+            paymentTapCount++
+            if (paymentTapCount >= BASELINE_PAYMENTS) {
+                BehavioralSessionManager.saveBaseline()
+                BehavioralSessionManager.enterComparisonMode()
+                Toast.makeText(this,
+                    "✅ Biometric profile locked — comparison active",
+                    Toast.LENGTH_SHORT).show()
+                handler.post { refreshBiometricPanel() }
+            }
+        }
 
         // ── Screen capture check (mirroring + software recording) ─────────────
         val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
