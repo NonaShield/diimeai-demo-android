@@ -261,6 +261,13 @@ class PaymentActivity : AppCompatActivity() {
 
     private fun refreshThreatTicker() {
         val signals = synchronized(DiimeApp.recentRaspSignals) {
+            // Prune signals whose condition has resolved (TTL expired or OS clear callback fired).
+            // Without this, the ticker keeps showing WhatsApp screen-share signals indefinitely
+            // after the WhatsApp session closes — SignalStateManager knows they're gone but the
+            // display buffer never removes them.
+            DiimeApp.recentRaspSignals.removeAll { signal ->
+                !PayShieldEdgeInitializer.isSignalActive(signal.type)
+            }
             DiimeApp.recentRaspSignals.toList()
         }
         // Newest last → show newest at top
@@ -1015,6 +1022,8 @@ class PaymentActivity : AppCompatActivity() {
         captureManager.sessionFlowAnalyzer.onScreenTransition()
         paymentTapCount = 0
         BehavioralSessionManager.fullReset()
+        synchronized(DiimeApp.recentRaspSignals) { DiimeApp.recentRaspSignals.clear() }
+        lastRenderedThreatTypes = emptyList()
         DiimeApiClient.clearSession()
         startActivity(Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
