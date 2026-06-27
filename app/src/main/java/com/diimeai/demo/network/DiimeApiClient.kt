@@ -381,14 +381,21 @@ object DiimeApiClient {
                     response.isSuccessful -> {
                         val json = JSONObject(responseBody)
                         val txnId = json.optString("transaction_id", "TXN_DEMO")
+                        // Backend payment response uses "decision" (ALLOW/DENY/STEP_UP),
+                        // not "status".  Fall back to "status" for any future field rename,
+                        // then to "ALLOW" so existing receipts show meaningful text.
+                        val decision = json.optString("decision")
+                            .ifBlank { json.optString("status", "ALLOW") }
                         // Read attestation values captured by PinningInterceptor for this request.
                         // These are the exact nonce/timestamp/hash/hwLevel that were signed and
                         // sent to the NGINX gateway — proof the request was device-attested.
                         val att = com.payshield.android.sdk.LastAttestation
                         PaymentResult.Success(
                             transactionId = txnId,
-                            status        = json.optString("status", "PENDING"),
+                            status        = decision,
                             receiptUrl    = json.optString("receipt_url", ""),
+                            // Backend returns transaction_id as the primary key used for
+                            // evidence receipt lookup (GET /api/v1/evidence/{id}/receipt).
                             decisionId    = json.optString("decision_id", txnId),
                             nonce         = att.nonce,
                             timestampEpoch= att.timestampEpoch,
