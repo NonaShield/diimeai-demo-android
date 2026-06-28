@@ -615,11 +615,19 @@ class PaymentActivity : AppCompatActivity() {
                 showThreatBlockedDialog("RASP_DEV_051")
                 return
             }
-            val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
-            if (dm.displays.size > 1) {
-                Log.w(TAG, "[Demo4] Screen mirroring: ${dm.displays.size} displays active")
-                showThreatBlockedDialog("RASP_DEV_025")
-                return
+            // Raw display-count fallback — guards the race window between onDisplayAdded()
+            // and evaluateNow() completing.  Skip entirely when the companion display was
+            // acknowledged ("Proceed Anyway") or is still signalled as active: the extra
+            // display IS the companion virtual display and blocking it here would contradict
+            // the advisory acknowledgment and prevent payment from executing (Scenario 3).
+            val companionDisplayActive = skipCompanionCheck || PayShieldEdgeInitializer.hasCompanionScreenShare()
+            if (!companionDisplayActive) {
+                val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+                if (dm.displays.size > 1) {
+                    Log.w(TAG, "[Demo4] Screen mirroring: ${dm.displays.size} displays active")
+                    showThreatBlockedDialog("RASP_DEV_025")
+                    return
+                }
             }
 
             // ── UC-08 LIVE: SIM swap check ────────────────────────────────────
