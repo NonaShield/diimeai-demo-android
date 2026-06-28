@@ -112,6 +112,11 @@ class PaymentActivity : AppCompatActivity() {
     // Set by btnAttestAndPay; cleared after the payment completes (success or failure).
     private var isDemoAttestationMode = false
 
+    // When true, the companion screen-share advisory has been acknowledged by the user
+    // ("Proceed Anyway").  The companion check in initiatePayment() is skipped exactly once;
+    // the flag is cleared when initiatePayment() is called again.
+    private var companionShareAcknowledged = false
+
     // ── Biometric baseline: locked after BASELINE_PAYMENTS payment taps ───────
     // Counter increments on every Send Payment tap regardless of validation result.
     // At tap #BASELINE_PAYMENTS the profile is saved and comparison mode activates.
@@ -253,6 +258,7 @@ class PaymentActivity : AppCompatActivity() {
         // ── Screen / display ──────────────────────────────────────────────────
         "SCREEN_RECORDING_ACTIVE"      to "Screen Recording Active",
         "SCREEN_RECORDING"             to "Screen Recording Active",   // FreeRASP
+        "COMPANION_SCREEN_SHARE_ACTIVE" to "Screen Shared via Companion App",  // advisory
         "SCREEN_MIRRORING"             to "Screen Mirroring",
         "REMOTE_DESKTOP"               to "Remote Desktop Active",
         "SCREENSHOT"                   to "Screenshot Taken",
@@ -582,16 +588,37 @@ class PaymentActivity : AppCompatActivity() {
         val isAttestation = isDemoAttestationMode
 
         if (!isAttestation) {
-            // ── Screen capture check (mirroring + software recording) ─────────
+            // ── Screen capture check ──────────────────────────────────────────
+            // Three-tier logic based on who owns the virtual display:
+            //
+            //   COMPANION_SCREEN_SHARE_ACTIVE (MEDIUM, advisory):
+            //     A verified companion app (WhatsApp Web, Telegram Desktop) is mirroring
+            //     the screen.  Screen IS at risk but source is known — show a graceful
+            //     "please pause sharing" prompt rather than a hard block.
+            //
+            //   hasScreenCaptureThreat() (HIGH, hard block):
+            //     Unknown recorder app, hardware mirroring (Chromecast/HDMI), or
+            //     multiple virtual displays — cannot determine ownership.
+            //
+            //   dm.displays.size > 1 without any SDK signal:
+            //     SDK may not have had time to evaluate the new display yet (race).
+            //     Fall through to the screen capture threat check — the next
+            //     evaluateNow() triggered by onDisplayAdded will update the signal.
+            val skipCompanionCheck = companionShareAcknowledged.also { companionShareAcknowledged = false }
+            if (!skipCompanionCheck && PayShieldEdgeInitializer.hasCompanionScreenShare()) {
+                Log.w(TAG, "[RASP] Companion screen share active — showing advisory")
+                showCompanionShareAdvisory()
+                return
+            }
+            if (PayShieldEdgeInitializer.hasScreenCaptureThreat()) {
+                Log.w(TAG, "[RASP] Screen capture threat active (RASP_DEV_051)")
+                showThreatBlockedDialog("RASP_DEV_051")
+                return
+            }
             val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
             if (dm.displays.size > 1) {
                 Log.w(TAG, "[Demo4] Screen mirroring: ${dm.displays.size} displays active")
                 showThreatBlockedDialog("RASP_DEV_025")
-                return
-            }
-            if (PayShieldEdgeInitializer.hasScreenCaptureThreat()) {
-                Log.w(TAG, "[Demo4] Screen capture threat active (RASP_DEV_051)")
-                showThreatBlockedDialog("RASP_DEV_051")
                 return
             }
 
@@ -881,8 +908,58 @@ class PaymentActivity : AppCompatActivity() {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Demo 4: Screen Mirroring / threat-specific dialog
+    // Demo 4: Screen capture — companion advisory + threat block dialogs
     // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Graceful advisory shown when COMPANION_SCREEN_SHARE_ACTIVE fires (MEDIUM).
+     *
+     * A verified companion app (WhatsApp Web, Telegram Desktop) is actively mirroring
+     * the screen.  This is NOT a hard block — the source is trusted — but financial
+     * data is visible on the external device.  We ask the user to pause sharing before
+     * entering payment details.  The payment is NOT blocked; the user can dismiss and
+     * proceed if they accept the risk (this matches the zero-trust advisory model: we
+     * warn, the user decides, the backend records the elevated risk context).
+     *
+     * The companion signal clears automatically the instant they stop sharing
+     * (DisplayListener.onDisplayRemoved fires → SignalStateManager.clear()).
+     */
+    private fun showCompanionShareAdvisory() {
+        AlertDialog.Builder(this)
+            .setTitle("📡  Screen Being Shared")
+            .setMessage(buildString {
+                append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+                append("⚠️  ADVISORY  ·  RASP_DEV_051\n")
+                append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+                append("NonaShield detected that your screen is currently being mirrored ")
+                append("via a trusted companion app (e.g. WhatsApp Web, Telegram Desktop).\n\n")
+                append("Risk: The external device can see everything on your screen, including:\n")
+                append("  • Payment amount and recipient\n")
+                append("  • OTP codes as they appear\n")
+                append("  • Account numbers and balances\n\n")
+                append("Source: Verified companion app (trusted, not blocked)\n")
+                append("Severity: MEDIUM  ·  Advisory\n\n")
+                append("For your security, please disconnect WhatsApp Web or close the companion\n")
+                append("app before completing this payment.")
+            })
+            .setPositiveButton("Stop Sharing & Retry") { _, _ ->
+                Toast.makeText(
+                    this,
+                    "Disconnect WhatsApp Web / Telegram Desktop, then tap Send Payment again.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            .setNeutralButton("Proceed Anyway") { _, _ ->
+                // User explicitly accepts the risk — proceed with payment.
+                // Backend receives COMPANION_SCREEN_SHARE_ACTIVE signal context and can
+                // apply additional step-up or risk scoring as per its policy configuration.
+                Toast.makeText(this, "Proceeding with elevated screen-share risk context", Toast.LENGTH_SHORT).show()
+                companionShareAcknowledged = true
+                initiatePayment()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
 
     private fun showThreatBlockedDialog(threatId: String?) {
         val (title, message) = when {
