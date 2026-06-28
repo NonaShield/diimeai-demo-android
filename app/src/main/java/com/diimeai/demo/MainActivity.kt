@@ -161,12 +161,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderBindingProof(proof: BindingProof) {
-        // Attestation badge
+        // Attestation badge.
+        // "FULL" from the backend means Play Integrity was requested.  In the demo build
+        // the app is NOT distributed via Google Play Store, so Play Integrity API returns
+        // CANNOT_ATTEST / MEET_BASIC_INTEGRITY at best.  We display this honestly as
+        // "PENDING" — the hardware key binding IS complete (AndroidKeyStore ECDSA key
+        // enrolled), only the Google-side Play Integrity verdict is unavailable.
         val (badgeText, badgeColor) = when (proof.attestationLevel) {
-            "FULL"    -> "FULL ATTESTATION"   to 0xFF00AA44.toInt()
-            "BASIC"   -> "BASIC ATTESTATION"  to 0xFFFF8800.toInt()
-            "GATEWAY" -> "GATEWAY ENROLLED"   to 0xFF0088FF.toInt()
-            else      -> "ENROLLED"           to 0xFF666666.toInt()
+            "FULL"    -> "PENDING (Play Integrity)"  to 0xFFFF8800.toInt()  // amber — not green
+            "BASIC"   -> "BASIC ATTESTATION"         to 0xFF0088FF.toInt()
+            "GATEWAY" -> "GATEWAY ENROLLED"          to 0xFF0088FF.toInt()
+            else      -> "ENROLLED"                  to 0xFF666666.toInt()
         }
         binding.tvAttestationBadge.text = badgeText
         binding.tvAttestationBadge.setBackgroundColor(badgeColor)
@@ -235,9 +240,28 @@ class MainActivity : AppCompatActivity() {
             append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
             append("🔐  HARDWARE ATTESTATION PROOF\n")
             append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
-            append("Proof ID:\n  ${proof.proofId.take(24)}…\n\n")
+            // Proof ID — backend-issued UUID for this enrollment attestation record.
+            // It is the immutable, auditable reference to the moment this device's
+            // hardware key was cryptographically enrolled with NonaShield.  Presenting
+            // this ID to a regulator or fraud investigator lets them pull the full
+            // enrollment evidence chain (public key, timestamp, device fingerprint)
+            // from the NonaShield audit log without any personal data leaving the server.
+            append("Proof ID:\n  ${proof.proofId.take(24)}…\n")
+            append("  (Enrollment audit reference — immutable server record)\n\n")
             append("Device ID:\n  ${proof.deviceId.take(24)}…\n\n")
-            append("Attestation Level:\n  ${proof.attestationLevel}\n\n")
+            // Attestation level explanation:
+            //   FULL     = Play Integrity verdict was requested at enrollment.  In this
+            //              demo build the app is not distributed via Google Play Store,
+            //              so the Play Integrity API cannot verify the device posture —
+            //              displayed as PENDING until a Play-signed build is used.
+            //   BASIC    = AndroidKeyStore hardware key enrolled; no Play Integrity.
+            //   GATEWAY  = Enrolled at the NonaShield edge gateway only (no device key).
+            val levelDisplay = when (proof.attestationLevel) {
+                "FULL"  -> "PENDING\n  (Play Integrity unavailable — app not on Google Play Store.\n  AndroidKeyStore hardware binding is complete.)"
+                "BASIC" -> "BASIC\n  (AndroidKeyStore key enrolled; Play Integrity not requested)"
+                else    -> proof.attestationLevel
+            }
+            append("Attestation Level:\n  $levelDisplay\n\n")
             append("Hardware Backed:\n  ${if (proof.hardwareBacked) "YES — AndroidKeyStore (StrongBox/TEE)" else "NO — Software key"}\n\n")
             val fp = proof.pubkeyFingerprint
             if (fp.isNotBlank()) {
