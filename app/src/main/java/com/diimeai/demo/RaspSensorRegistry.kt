@@ -1,9 +1,14 @@
 package com.diimeai.demo
 
 /**
- * Canonical registry of every RASP sensor (signal class) registered by the SDK in
- * [com.payshield.sdk.PayShieldEdgeInitializer]. One row per `orchestrator.register(...)`
- * call — this is the source of truth for [ScenarioListFragment] tab 0 (Device / Runtime
+ * Canonical registry of every RASP sensor exposed by the SDK — both detection layers:
+ *
+ *   1. PayShield-native signals — one row per `orchestrator.register(...)` call in
+ *      [com.payshield.sdk.PayShieldEdgeInitializer].
+ *   2. FreeRASP (Talsec)-bridged signals — one row per `FreeRaspEvent` case mapped in
+ *      `FreeRaspBridge.toEdgeSignal()`, marked "(FreeRASP)" in the sensor name.
+ *
+ * This is the source of truth for [ScenarioListFragment] tab 0 (Device / Runtime
  * Integrity), which renders this list as a live 3-column sensor status table.
  *
  * `signalTypes` lists every EdgeSignal `type` string a sensor can emit. A sensor's live
@@ -39,7 +44,7 @@ object RaspSensorRegistry {
         Sensor("SELinux Disabled",             "RASP_DEV_015", Severity.HIGH,     listOf("SELINUX_DISABLED")),
         Sensor("VPN Conflict Detected",        "RASP_DEV_024", Severity.MEDIUM,   listOf("VPN_CONFLICT")),
         Sensor("App Repackaged",               "RASP_DEV_022", Severity.CRITICAL, listOf("APP_REPACKAGED")),
-        Sensor("Keyguard Not Secure",          "RASP_DEV_016", Severity.MEDIUM,   listOf("KEYGUARD_NOT_SECURE")),
+        Sensor("Keyguard Not Secure",          "RASP_DEV_016", Severity.MEDIUM,   listOf("KEYGUARD_NOT_SECURE", "PASSCODE_NOT_SET")),
         Sensor("User CA Certificate",          "RASP_DEV_020", Severity.HIGH,     listOf("USER_CA_CERT")),
         Sensor("Remote Desktop Active",        "RASP_DEV_026", Severity.HIGH,     listOf("REMOTE_DESKTOP")),
         Sensor("Hooking Framework",            "RASP_DEV_037", Severity.CRITICAL, listOf("HOOKING_FRAMEWORK")),
@@ -78,5 +83,30 @@ object RaspSensorRegistry {
         Sensor("Auto Clicker Detected",        "RASP_DEV_070", Severity.HIGH,     listOf("AUTO_CLICKER_DETECTED")),
         Sensor("USB Debugging Active",         "RASP_DEV_014", Severity.MEDIUM,   listOf("USB_DEBUGGING_ACTIVE", "DEVELOPER_OPTIONS_ACTIVE")),
         Sensor("Agentic Social Manipulation",  "SCAM_AI_002",  Severity.HIGH,     listOf("MESSAGING_APP_PRE_SESSION", "NOTIFICATION_TRIGGERED_SESSION")),
+
+        // ── FreeRASP (Talsec) bridged sensors ─────────────────────────────────────
+        // Native FreeRASP detection engine, bridged via FreeRaspBridge.kt — a second,
+        // independent detection layer running alongside the PayShield-native sensors
+        // above. Every FreeRaspEvent case in FreeRaspBridge.toEdgeSignal() has a row
+        // here; kept in sync manually when a new FreeRaspEvent case is added.
+        Sensor("Root / Jailbreak Detected (FreeRASP)",   "RASP_DEV_001",  Severity.CRITICAL, listOf("ROOT_OR_JAILBREAK")),
+        Sensor("Debugger Attached (FreeRASP)",           "RASP_DEV_003",  Severity.CRITICAL, listOf("DEBUGGER_DETECTED")),
+        Sensor("Emulator Detected (FreeRASP)",           "BEH_DEV_002",   Severity.HIGH,     listOf("EMULATOR_DETECTED")),
+        Sensor("App Tampering Detected (FreeRASP)",      "APP_RUNTIME_008", Severity.CRITICAL, listOf("APP_TAMPERING")),
+        Sensor("Untrusted Install Source (FreeRASP)",    "DEV_SEC_001",   Severity.HIGH,     listOf("UNTRUSTED_INSTALL_SOURCE")),
+        Sensor("Device Binding Mismatch (FreeRASP)",     "BEH_DEV_001",   Severity.MEDIUM,   listOf("DEVICE_BINDING")),
+        Sensor("Obfuscation Risk (FreeRASP)",            "DATA_SEC_020",  Severity.MEDIUM,   listOf("OBFUSCATION_RISK")),
+        Sensor("Malware Detected (FreeRASP)",            "DATA_SEC_020",  Severity.CRITICAL, listOf("MALWARE_DETECTED")),
+        Sensor("Automation Framework (FreeRASP)",        "BOT_APP_015",   Severity.HIGH,     listOf("AUTOMATION_FRAMEWORK")),
+        Sensor("Screenshot Captured (FreeRASP)",         "USR_BEH_002",   Severity.MEDIUM,   listOf("SCREENSHOT")),
+        Sensor("Screen Recording (FreeRASP)",            "USR_BEH_001",   Severity.HIGH,     listOf("SCREEN_RECORDING")),
+        Sensor("Multiple App Instances (FreeRASP)",      "BEH_DEV_001",   Severity.MEDIUM,   listOf("MULTI_INSTANCE")),
+        Sensor("Unsecure WiFi Network (FreeRASP)",       "NET_SEC_001",   Severity.MEDIUM,   listOf("UNSECURE_WIFI")),
+        Sensor("System Time Spoofing (FreeRASP)",        "BEH_DEV_003",   Severity.MEDIUM,   listOf("TIME_SPOOFING")),
+        Sensor("Hardware Keystore Unavailable (FreeRASP)", "DATA_SEC_020", Severity.HIGH,    listOf("HW_KEYSTORE_UNAVAILABLE")),
+        Sensor("Developer Mode Enabled (FreeRASP)",      "DATA_SEC_020",  Severity.CRITICAL, listOf("DEVELOPER_MODE")),
+        Sensor("ADB Currently Enabled (FreeRASP)",       "DATA_SEC_020",  Severity.CRITICAL, listOf("ADB_ENABLED")),
+        Sensor("System VPN Active (FreeRASP)",           "NET_SEC_002",   Severity.MEDIUM,   listOf("SYSTEM_VPN")),
+        Sensor("Device ID Changed (FreeRASP)",           "BEH_DEV_001",   Severity.MEDIUM,   listOf("DEVICE_ID_CHANGED")),
     )
 }
