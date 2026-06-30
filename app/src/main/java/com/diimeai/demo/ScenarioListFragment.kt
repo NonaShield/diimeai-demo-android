@@ -14,6 +14,7 @@ import com.diimeai.demo.network.DiimeApiClient
 import com.diimeai.demo.network.ScenarioResult
 import com.google.android.material.button.MaterialButton
 import com.payshield.sdk.PayShieldEdgeInitializer
+import com.payshield.sdk.state.SignalStateManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -155,8 +156,23 @@ class ScenarioListFragment : Fragment() {
         )
     }
 
-    private var liveRefreshJob: Job? = null
+    // Safety-net poll interval — covers silent TTL expiry only (a transient signal aging
+    // out without an explicit clear() call). The push listener below handles every actual
+    // fire/clear transition instantly; this loop just catches the rare case where a TTL
+    // lapses with no corresponding OS callback. 30s is far below user-perceptible staleness
+    // for that edge case while eliminating the previous 1s busy-poll entirely.
+    private var safetyNetJob: Job? = null
     private val sensorStatusViews = mutableMapOf<Int, TextView>()
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /**
+     * Pushed by the SDK the instant any RASP signal fires or clears — see
+     * PayShieldEdgeInitializer.addSignalStateListener(). Runs on whatever thread the
+     * triggering signal evaluation happened on, so UI work is marshalled to main.
+     */
+    private val raspStateListener = SignalStateManager.SignalStateListener { _, _ ->
+        mainHandler.post { refreshLiveStatuses() }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -170,7 +186,8 @@ class ScenarioListFragment : Fragment() {
         val container = view.findViewById<LinearLayout>(R.id.scenarioContainer)
         if (tabIndex == 0) {
             buildLiveSensorTable(container)
-            startLiveRefreshLoop()
+            PayShieldEdgeInitializer.addSignalStateListener(raspStateListener)
+            startSafetyNetLoop()
         } else {
             buildCards(tabIndex, container)
         }
@@ -178,19 +195,21 @@ class ScenarioListFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        if ((arguments?.getInt(ARG_TAB) ?: 0) == 0 && liveRefreshJob?.isActive != true) {
-            startLiveRefreshLoop()
+        if ((arguments?.getInt(ARG_TAB) ?: 0) == 0) {
+            refreshLiveStatuses()  // catch anything that changed while paused
+            if (safetyNetJob?.isActive != true) startSafetyNetLoop()
         }
     }
 
     override fun onPause() {
         super.onPause()
-        liveRefreshJob?.cancel()
+        safetyNetJob?.cancel()
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
-        liveRefreshJob?.cancel()
+        safetyNetJob?.cancel()
+        PayShieldEdgeInitializer.removeSignalStateListener(raspStateListener)
         sensorStatusViews.clear()
     }
 
@@ -274,11 +293,11 @@ class ScenarioListFragment : Fragment() {
         refreshLiveStatuses()
     }
 
-    private fun startLiveRefreshLoop() {
-        liveRefreshJob = lifecycleScope.launch {
+    private fun startSafetyNetLoop() {
+        safetyNetJob = lifecycleScope.launch {
             while (isActive) {
+                delay(30_000L)
                 refreshLiveStatuses()
-                delay(1_000L)
             }
         }
     }
