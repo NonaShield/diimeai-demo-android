@@ -14,7 +14,7 @@ import com.diimeai.demo.network.DiimeApiClient
 import com.diimeai.demo.network.ScenarioResult
 import com.google.android.material.button.MaterialButton
 import com.payshield.sdk.PayShieldEdgeInitializer
-import com.payshield.sdk.state.SignalStateManager
+import com.payshield.sdk.state.SignalStateListener
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -170,7 +170,7 @@ class ScenarioListFragment : Fragment() {
      * PayShieldEdgeInitializer.addSignalStateListener(). Runs on whatever thread the
      * triggering signal evaluation happened on, so UI work is marshalled to main.
      */
-    private val raspStateListener = SignalStateManager.SignalStateListener { _, _ ->
+    private val raspStateListener = SignalStateListener { _, _ ->
         mainHandler.post { refreshLiveStatuses() }
     }
 
