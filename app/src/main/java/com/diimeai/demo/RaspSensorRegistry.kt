@@ -3,10 +3,8 @@ package com.diimeai.demo
 /**
  * Canonical registry of every RASP sensor (signal class) registered by the SDK in
  * [com.payshield.sdk.PayShieldEdgeInitializer]. One row per `orchestrator.register(...)`
- * call — this is the source of truth for both:
- *
- *   - [RaspSensorTableActivity] — full live status table for CISO/investor demos
- *   - [ScenarioListFragment] tab 0 — summary cards on Device / Runtime Integrity
+ * call — this is the source of truth for [ScenarioListFragment] tab 0 (Device / Runtime
+ * Integrity), which renders this list as a live 3-column sensor status table.
  *
  * `signalTypes` lists every EdgeSignal `type` string a sensor can emit. A sensor's live
  * status is ACTIVE if `PayShieldEdgeInitializer.isSignalActive(type)` is true for ANY of

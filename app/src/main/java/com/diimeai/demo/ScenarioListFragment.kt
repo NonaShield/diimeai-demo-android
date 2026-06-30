@@ -144,69 +144,19 @@ class ScenarioListFragment : Fragment() {
         )
 
         // Tab → scenario IDs mapping.
-        // Tab 0 (Device / Runtime Integrity) is rendered separately via RASP_LIVE_GROUPS —
-        // it shows real on-device sensor status, not the simulated cards below.
+        // Tab 0 (Device / Runtime Integrity) is rendered separately as a live 3-column
+        // sensor table — see buildLiveSensorTable() — not the simulated cards below.
         val TAB_SCENARIOS: List<List<Int>> = listOf(
-            emptyList(),                   // 0: Device / Runtime Integrity (RASP) — live cards, see buildLiveRaspCards()
+            emptyList(),                   // 0: Device / Runtime Integrity (RASP) — live table, see buildLiveSensorTable()
             listOf(8, 13, 15),             // 1: Identity & Account Fraud
             listOf(4, 9, 10),              // 2: Behavioral & Biometric Fraud
             listOf(6, 11, 14, 16, 19),     // 3: Network / Transaction Fraud
             listOf(1, 2, 17),              // 4: Platform Verification
         )
-
-        /**
-         * Live (non-simulated) RASP sensor groups shown on Tab 0.
-         * Status is read directly from [PayShieldEdgeInitializer.isSignalActive] — same
-         * source of truth as [RaspSensorTableActivity]. Each group's `signalTypes` is a
-         * subset of [RaspSensorRegistry.ALL] grouped by fraud-scenario concept for the
-         * investor/CISO narrative.
-         */
-        data class RaspLiveGroup(
-            val emoji:       String,
-            val name:        String,
-            val description: String,
-            val signalTypes: List<String>,
-            val sensorCount: Int,
-            val opensTable:  Boolean = false,
-        )
-
-        val RASP_LIVE_GROUPS: List<RaspLiveGroup> = listOf(
-            RaspLiveGroup(
-                "🛡", "Device RASP — All Sensors",
-                "Composite status across every registered RASP sensor on this device — root, hooking, tamper, emulator, and more",
-                RaspSensorRegistry.ALL.flatMap { it.signalTypes },
-                RaspSensorRegistry.ALL.size,
-                opensTable = true,
-            ),
-            RaspLiveGroup(
-                "📺", "Screen Mirroring / Recording",
-                "Unauthorized screen capture, casting, or companion-app sharing while the app is in foreground",
-                listOf("SCREEN_MIRRORING", "SCREEN_RECORDING_ACTIVE", "COMPANION_SCREEN_SHARE_ACTIVE"),
-                3,
-            ),
-            RaspLiveGroup(
-                "🤖", "Bot Attack / Emulator",
-                "Emulator fingerprint, automated touch injection, scripted enrollment bursts",
-                listOf("EMULATOR_FINGERPRINT", "ENROLLMENT_BURST", "AUTO_CLICKER_DETECTED"),
-                3,
-            ),
-            RaspLiveGroup(
-                "☣", "Malicious APK Injection",
-                "Repackaged or sideloaded APK, certificate mismatch, malicious app cloning",
-                listOf("APP_REPACKAGED", "SIDELOAD_DETECTED", "APP_CLONE_MALICIOUS", "APP_CLONE_DETECTED"),
-                3,
-            ),
-            RaspLiveGroup(
-                "🔍", "Device Fingerprint / ATO",
-                "Device anchor mismatch and hardware attestation failure — new-device account takeover risk",
-                listOf("DEVICE_ANCHOR_MISMATCH", "ATTESTATION_NO_CHAIN", "ATTESTATION_UNTRUSTED"),
-                2,
-            ),
-        )
     }
 
     private var liveRefreshJob: Job? = null
-    private val liveStatusBadges = mutableMapOf<Int, TextView>()
+    private val sensorStatusViews = mutableMapOf<Int, TextView>()
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -219,7 +169,7 @@ class ScenarioListFragment : Fragment() {
         val tabIndex = arguments?.getInt(ARG_TAB) ?: 0
         val container = view.findViewById<LinearLayout>(R.id.scenarioContainer)
         if (tabIndex == 0) {
-            buildLiveRaspCards(container)
+            buildLiveSensorTable(container)
             startLiveRefreshLoop()
         } else {
             buildCards(tabIndex, container)
@@ -241,34 +191,84 @@ class ScenarioListFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         liveRefreshJob?.cancel()
-        liveStatusBadges.clear()
+        sensorStatusViews.clear()
     }
 
-    // ── Tab 0: live RASP sensor cards (real data, no simulation) ────────────────
+    // ── Tab 0: live 3-column RASP sensor table (real data, no simulation, no cards) ──
 
-    private fun buildLiveRaspCards(container: LinearLayout) {
-        val inflater = LayoutInflater.from(requireContext())
-        liveStatusBadges.clear()
+    private fun buildLiveSensorTable(container: LinearLayout) {
+        sensorStatusViews.clear()
+        val ctx = requireContext()
 
-        RASP_LIVE_GROUPS.forEachIndexed { index, group ->
-            val card = inflater.inflate(R.layout.item_rasp_live_card, container, false)
+        // Header row
+        val header = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(Color.parseColor("#0D1117"))
+            setPadding(12, 10, 12, 10)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+        fun headerCell(text: String, weight: Float) = TextView(ctx).apply {
+            this.text = text
+            textSize = 10.5f
+            setTextColor(Color.parseColor("#666666"))
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, weight)
+        }
+        header.addView(headerCell("RASP SENSOR", 2.2f))
+        header.addView(headerCell("SEVERITY", 1f))
+        header.addView(headerCell("STATUS", 1f))
+        container.addView(header)
 
-            card.findViewById<TextView>(R.id.tvLiveEmoji).text = group.emoji
-            card.findViewById<TextView>(R.id.tvLiveName).text = group.name
-            card.findViewById<TextView>(R.id.tvLiveDesc).text = group.description
-            card.findViewById<TextView>(R.id.tvLiveSensorCount).text =
-                "${group.sensorCount} sensor${if (group.sensorCount == 1) "" else "s"} · live, on-device"
-            card.findViewById<TextView>(R.id.tvLiveViewDetail).text =
-                if (group.opensTable) "View All Sensors →" else "View in Sensor Table →"
-
-            val badge = card.findViewById<TextView>(R.id.tvLiveStatusBadge)
-            liveStatusBadges[index] = badge
-
-            card.setOnClickListener {
-                startActivity(android.content.Intent(requireContext(), RaspSensorTableActivity::class.java))
+        RaspSensorRegistry.ALL.forEachIndexed { index, sensor ->
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(12, 12, 12, 12)
+                setBackgroundColor(
+                    if (index % 2 == 0) Color.parseColor("#0D1117") else Color.parseColor("#0A0A1A")
+                )
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                )
             }
 
-            container.addView(card)
+            val nameCol = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 2.2f)
+            }
+            nameCol.addView(TextView(ctx).apply {
+                text = sensor.name
+                textSize = 12f
+                setTextColor(Color.parseColor("#FFFFFF"))
+            })
+            nameCol.addView(TextView(ctx).apply {
+                text = sensor.threatId
+                textSize = 9f
+                setTextColor(Color.parseColor("#555555"))
+                typeface = android.graphics.Typeface.MONOSPACE
+            })
+
+            val severityView = TextView(ctx).apply {
+                text = sensor.severity.label
+                textSize = 10.5f
+                setTextColor(Color.parseColor(sensor.severity.colorHex))
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+
+            val statusView = TextView(ctx).apply {
+                textSize = 10.5f
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            sensorStatusViews[index] = statusView
+
+            row.addView(nameCol)
+            row.addView(severityView)
+            row.addView(statusView)
+            container.addView(row)
         }
 
         refreshLiveStatuses()
@@ -284,15 +284,15 @@ class ScenarioListFragment : Fragment() {
     }
 
     private fun refreshLiveStatuses() {
-        RASP_LIVE_GROUPS.forEachIndexed { index, group ->
-            val badge = liveStatusBadges[index] ?: return@forEachIndexed
-            val active = group.signalTypes.any { PayShieldEdgeInitializer.isSignalActive(it) }
+        RaspSensorRegistry.ALL.forEachIndexed { index, sensor ->
+            val view = sensorStatusViews[index] ?: return@forEachIndexed
+            val active = sensor.signalTypes.any { PayShieldEdgeInitializer.isSignalActive(it) }
             if (active) {
-                badge.text = "ACTIVE"
-                badge.setBackgroundColor(Color.parseColor("#FF3333"))
+                view.text = "● ACTIVE"
+                view.setTextColor(Color.parseColor("#FF3333"))
             } else {
-                badge.text = "CLEAN"
-                badge.setBackgroundColor(Color.parseColor("#00CC55"))
+                view.text = "● Inactive"
+                view.setTextColor(Color.parseColor("#00CC55"))
             }
         }
     }
