@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  item_rasp_live_card — Device / Runtime Integrity (RASP) tab card.
+
+  Unlike item_scenario_card (used by tabs 1-4, which has a "Simulate Attack" button
+  triggering canned backend data), this card shows REAL-TIME on-device sensor status
+  with zero simulation — built for CISO/investor walkthroughs where credibility matters
+  more than a flashy demo button.
+-->
+<androidx.cardview.widget.CardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    app:cardBackgroundColor="#0D1117"
+    app:cardCornerRadius="14dp"
+    app:cardElevation="6dp"
+    android:layout_marginBottom="14dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <!-- Top row: emoji + title + LIVE status badge -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="6dp">
+
+            <TextView
+                android:id="@+id/tvLiveEmoji"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:textSize="22sp"
+                android:gravity="center"
+                android:text="🛡" />
+
+            <TextView
+                android:id="@+id/tvLiveName"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="#FFFFFF"
+                android:layout_marginStart="8dp"
+                android:text="Sensor Group Name" />
+
+            <!-- Status badge: ACTIVE (red) / CLEAN (green) -->
+            <TextView
+                android:id="@+id/tvLiveStatusBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="CLEAN"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:textColor="#000000"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp"
+                android:background="#00CC55" />
+
+        </LinearLayout>
+
+        <!-- Description -->
+        <TextView
+            android:id="@+id/tvLiveDesc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Description of what this sensor group detects"
+            android:textSize="12sp"
+            android:textColor="#AAAAAA"
+            android:layout_marginBottom="10dp" />
+
+        <!-- Sensor count + detail row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/tvLiveSensorCount"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="3 sensors · live, on-device"
+                android:textSize="10sp"
+                android:textColor="#555555"
+                android:fontFamily="monospace" />
+
+            <TextView
+                android:id="@+id/tvLiveViewDetail"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="View Sensors →"
+                android:textSize="11sp"
+                android:textColor="#00D4FF"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.cardview.widget.CardView>

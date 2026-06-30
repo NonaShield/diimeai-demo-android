@@ -1,5 +1,6 @@
 package com.diimeai.demo
 
+import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -12,7 +13,11 @@ import androidx.lifecycle.lifecycleScope
 import com.diimeai.demo.network.DiimeApiClient
 import com.diimeai.demo.network.ScenarioResult
 import com.google.android.material.button.MaterialButton
+import com.payshield.sdk.PayShieldEdgeInitializer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -138,15 +143,70 @@ class ScenarioListFragment : Fragment() {
                 72, "STEP_UP", "PAYMENT"),
         )
 
-        // Tab → scenario IDs mapping
+        // Tab → scenario IDs mapping.
+        // Tab 0 (Device / Runtime Integrity) is rendered separately via RASP_LIVE_GROUPS —
+        // it shows real on-device sensor status, not the simulated cards below.
         val TAB_SCENARIOS: List<List<Int>> = listOf(
-            listOf(5, 3, 7, 12, 18),       // 0: Device / Runtime Integrity (RASP)
+            emptyList(),                   // 0: Device / Runtime Integrity (RASP) — live cards, see buildLiveRaspCards()
             listOf(8, 13, 15),             // 1: Identity & Account Fraud
             listOf(4, 9, 10),              // 2: Behavioral & Biometric Fraud
             listOf(6, 11, 14, 16, 19),     // 3: Network / Transaction Fraud
             listOf(1, 2, 17),              // 4: Platform Verification
         )
+
+        /**
+         * Live (non-simulated) RASP sensor groups shown on Tab 0.
+         * Status is read directly from [PayShieldEdgeInitializer.isSignalActive] — same
+         * source of truth as [RaspSensorTableActivity]. Each group's `signalTypes` is a
+         * subset of [RaspSensorRegistry.ALL] grouped by fraud-scenario concept for the
+         * investor/CISO narrative.
+         */
+        data class RaspLiveGroup(
+            val emoji:       String,
+            val name:        String,
+            val description: String,
+            val signalTypes: List<String>,
+            val sensorCount: Int,
+            val opensTable:  Boolean = false,
+        )
+
+        val RASP_LIVE_GROUPS: List<RaspLiveGroup> = listOf(
+            RaspLiveGroup(
+                "🛡", "Device RASP — All Sensors",
+                "Composite status across every registered RASP sensor on this device — root, hooking, tamper, emulator, and more",
+                RaspSensorRegistry.ALL.flatMap { it.signalTypes },
+                RaspSensorRegistry.ALL.size,
+                opensTable = true,
+            ),
+            RaspLiveGroup(
+                "📺", "Screen Mirroring / Recording",
+                "Unauthorized screen capture, casting, or companion-app sharing while the app is in foreground",
+                listOf("SCREEN_MIRRORING", "SCREEN_RECORDING_ACTIVE", "COMPANION_SCREEN_SHARE_ACTIVE"),
+                3,
+            ),
+            RaspLiveGroup(
+                "🤖", "Bot Attack / Emulator",
+                "Emulator fingerprint, automated touch injection, scripted enrollment bursts",
+                listOf("EMULATOR_FINGERPRINT", "ENROLLMENT_BURST", "AUTO_CLICKER_DETECTED"),
+                3,
+            ),
+            RaspLiveGroup(
+                "☣", "Malicious APK Injection",
+                "Repackaged or sideloaded APK, certificate mismatch, malicious app cloning",
+                listOf("APP_REPACKAGED", "SIDELOAD_DETECTED", "APP_CLONE_MALICIOUS", "APP_CLONE_DETECTED"),
+                3,
+            ),
+            RaspLiveGroup(
+                "🔍", "Device Fingerprint / ATO",
+                "Device anchor mismatch and hardware attestation failure — new-device account takeover risk",
+                listOf("DEVICE_ANCHOR_MISMATCH", "ATTESTATION_NO_CHAIN", "ATTESTATION_UNTRUSTED"),
+                2,
+            ),
+        )
     }
+
+    private var liveRefreshJob: Job? = null
+    private val liveStatusBadges = mutableMapOf<Int, TextView>()
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -158,8 +218,86 @@ class ScenarioListFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         val tabIndex = arguments?.getInt(ARG_TAB) ?: 0
         val container = view.findViewById<LinearLayout>(R.id.scenarioContainer)
-        buildCards(tabIndex, container)
+        if (tabIndex == 0) {
+            buildLiveRaspCards(container)
+            startLiveRefreshLoop()
+        } else {
+            buildCards(tabIndex, container)
+        }
     }
+
+    override fun onResume() {
+        super.onResume()
+        if ((arguments?.getInt(ARG_TAB) ?: 0) == 0 && liveRefreshJob?.isActive != true) {
+            startLiveRefreshLoop()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        liveRefreshJob?.cancel()
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        liveRefreshJob?.cancel()
+        liveStatusBadges.clear()
+    }
+
+    // ── Tab 0: live RASP sensor cards (real data, no simulation) ────────────────
+
+    private fun buildLiveRaspCards(container: LinearLayout) {
+        val inflater = LayoutInflater.from(requireContext())
+        liveStatusBadges.clear()
+
+        RASP_LIVE_GROUPS.forEachIndexed { index, group ->
+            val card = inflater.inflate(R.layout.item_rasp_live_card, container, false)
+
+            card.findViewById<TextView>(R.id.tvLiveEmoji).text = group.emoji
+            card.findViewById<TextView>(R.id.tvLiveName).text = group.name
+            card.findViewById<TextView>(R.id.tvLiveDesc).text = group.description
+            card.findViewById<TextView>(R.id.tvLiveSensorCount).text =
+                "${group.sensorCount} sensor${if (group.sensorCount == 1) "" else "s"} · live, on-device"
+            card.findViewById<TextView>(R.id.tvLiveViewDetail).text =
+                if (group.opensTable) "View All Sensors →" else "View in Sensor Table →"
+
+            val badge = card.findViewById<TextView>(R.id.tvLiveStatusBadge)
+            liveStatusBadges[index] = badge
+
+            card.setOnClickListener {
+                startActivity(android.content.Intent(requireContext(), RaspSensorTableActivity::class.java))
+            }
+
+            container.addView(card)
+        }
+
+        refreshLiveStatuses()
+    }
+
+    private fun startLiveRefreshLoop() {
+        liveRefreshJob = lifecycleScope.launch {
+            while (isActive) {
+                refreshLiveStatuses()
+                delay(1_000L)
+            }
+        }
+    }
+
+    private fun refreshLiveStatuses() {
+        RASP_LIVE_GROUPS.forEachIndexed { index, group ->
+            val badge = liveStatusBadges[index] ?: return@forEachIndexed
+            val active = group.signalTypes.any { PayShieldEdgeInitializer.isSignalActive(it) }
+            if (active) {
+                badge.text = "ACTIVE"
+                badge.setBackgroundColor(Color.parseColor("#FF3333"))
+            } else {
+                badge.text = "CLEAN"
+                badge.setBackgroundColor(Color.parseColor("#00CC55"))
+            }
+        }
+    }
+
+    // ── Tabs 1-4: simulated attack cards (backend ingest demo) ───────────────────
 
     private fun buildCards(tabIndex: Int, container: LinearLayout) {
         val inflater = LayoutInflater.from(requireContext())

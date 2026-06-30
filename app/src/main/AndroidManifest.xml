@@ -107,6 +107,13 @@
             android:screenOrientation="portrait"
             android:label="Trust Dashboard" />
 
+        <!-- Live RASP sensor table — all registered sensors, real-time status, for CISO/investor demos -->
+        <activity
+            android:name=".RaspSensorTableActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:label="RASP Sensor Status" />
+
         <!-- SOC dashboard is a backend admin web UI — not a customer-facing screen -->
         <!-- SocDashboardActivity retained for internal/admin reference only -->
 
