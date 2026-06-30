@@ -59,6 +59,46 @@ class DiimeApp : Application() {
          */
         val recentRaspSignals: ArrayDeque<EdgeSignal> = ArrayDeque(20)
 
+        /** DEBUG ONLY — currently foregrounded activity, used by the RASP debug popup. */
+        @Volatile
+        private var debugCurrentActivity: android.app.Activity? = null
+
+        /** DEBUG ONLY — signal types covered by the screen-recording false-positive debug popup. */
+        private val SCREEN_DEBUG_TYPES = setOf(
+            "SCREEN_RECORDING", "SCREEN_RECORDING_ACTIVE",
+            "COMPANION_SCREEN_SHARE_ACTIVE", "SCREEN_MIRRORING",
+        )
+
+        /**
+         * DEBUG ONLY — shows a blocking AlertDialog with the full diagnostic context
+         * for a screen-recording-related signal: which file/function emitted it, the
+         * raw display dump, and any heuristic match. Lets us see the exact trigger on
+         * the device screen without needing `adb logcat`. Remove once the screen
+         * recording false-positive investigation is closed.
+         */
+        private fun showRaspDebugPopup(signal: EdgeSignal) {
+            val activity = debugCurrentActivity ?: return
+            val ctxDump = signal.context.entries.joinToString("\n") { (k, v) -> "$k = $v" }
+            val message = "threatId=${signal.threatId}\nseverity=${signal.severity}\n\n$ctxDump"
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                try {
+                    android.app.AlertDialog.Builder(activity)
+                        .setTitle("RASP DEBUG: ${signal.type}")
+                        .setMessage(message)
+                        .setPositiveButton("OK", null)
+                        .setCancelable(true)
+                        .show()
+                } catch (_: Throwable) {
+                    // Activity may have finished between the check and show() — fall back to Toast.
+                    android.widget.Toast.makeText(
+                        activity.applicationContext,
+                        "RASP DEBUG ${signal.type}: ${signal.context["debug_source"] ?: "?"}",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+
         /**
          * Observable enrollment status — collected by MainActivity to gate the
          * "Get Started" button and show error messages.
@@ -125,6 +165,22 @@ class DiimeApp : Application() {
         // PAYMENT / KYC / LOGIN checkpoint.  Must be set before any Activity starts.
         BehavioralTelemetrySender.backendBaseUrl = BuildConfig.NONASHIELD_BASE_URL
 
+        // ── DEBUG ONLY: track foreground activity so the RASP debug popup (see
+        // initPayShieldEdge → sdkSignalSink) can show an AlertDialog over whatever
+        // screen is currently visible. Temporary instrumentation for the screen
+        // recording false-positive investigation — safe to remove once resolved.
+        if (BuildConfig.DEBUG) {
+            registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+                override fun onActivityResumed(a: android.app.Activity) { debugCurrentActivity = a }
+                override fun onActivityPaused(a: android.app.Activity) { if (debugCurrentActivity == a) debugCurrentActivity = null }
+                override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) {}
+                override fun onActivityStarted(a: android.app.Activity) {}
+                override fun onActivityStopped(a: android.app.Activity) {}
+                override fun onActivitySaveInstanceState(a: android.app.Activity, b: android.os.Bundle) {}
+                override fun onActivityDestroyed(a: android.app.Activity) {}
+            })
+        }
+
         // ── Step 4: Register RASP signal sink ─────────────────────────────────
         // Routes all RASP signals to backend and triggers BlockedActivity on termination.
         registerSignalSink()
@@ -188,6 +244,13 @@ class DiimeApp : Application() {
                 PayShieldSDK.signalSink.emit(signal)                           // ThreatBuffer path
                 DiimeApiClient.signalSink?.onSignalsCollected(listOf(signal))  // in-app alert path
                 Log.d(TAG, "SDK signal: ${signal.type} [${signal.threatId}] confidence=${signal.confidence}")
+
+                // DEBUG ONLY — pop up the full diagnostic context for screen-recording
+                // related signals so the exact trigger is visible on-device. See
+                // showRaspDebugPopup() doc comment. Remove once investigation is closed.
+                if (BuildConfig.DEBUG && signal.type in SCREEN_DEBUG_TYPES) {
+                    showRaspDebugPopup(signal)
+                }
             }
             override fun onBlock(reason: String) {
                 Log.e(TAG, "SDK block: $reason")
