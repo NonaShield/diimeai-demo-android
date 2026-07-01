@@ -141,6 +141,9 @@ HOOKING_FRAMEWORK fires if Frida server, Xposed Module, or Substrate injection i
 On detection, the SDK terminates the process immediately (Process.killProcess). This is the only category where the SDK kills the app directly — because continued execution risks in-memory key exfiltration.
 
 Note — signals NOT included here to avoid debug-build false positives:
+  • HOOKING_FRAMEWORK — debuggable=true APKs allow debugging-equivalent memory access, which
+    FreeRASP treats as a hooking-capable environment. Fires on every debug build by design.
+    In production (release APK, ProGuard enabled) this fires only for real Frida/Xposed.
   • APP_TAMPERING — FreeRASP explicitly flags debuggable=true APKs as tampered. Every debug
     build triggers this by design. It fires in production on all non-debug builds.
   • SHELL_MAPPED_IN_PROCESS / SHELL_CHILD_PROCESS_DETECTED — Samsung One UI 8 spawns shell
@@ -154,7 +157,6 @@ Hardware defence: even if an attacker delays detection, the private key never le
             riskScore = 100,
             decision = Decision.BLOCK,
             signalTypes = listOf(
-                "HOOKING_FRAMEWORK",
                 "PTRACE_ATTACHED",
                 "NATIVE_LIB_TAMPER",
             ),
