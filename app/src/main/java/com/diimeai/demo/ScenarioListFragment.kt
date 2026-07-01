@@ -154,7 +154,7 @@ class ScenarioListFragment : Fragment() {
         val TAB_SCENARIOS: List<List<Int>> = listOf(
             emptyList(),                   // 0: Device / Runtime Integrity — live sensor table
             emptyList(),                   // 1: Identity & Account Fraud — live identity table
-            listOf(4, 9, 10),              // 2: Behavioral & Biometric Fraud
+            emptyList(),                   // 2: Behavioral & Biometric — live 40-param baseline table
             listOf(6, 11, 14, 16, 19),     // 3: Network / Transaction Fraud
             listOf(1, 2, 17),              // 4: Platform Verification
         )
@@ -211,6 +211,7 @@ class ScenarioListFragment : Fragment() {
                 PayShieldEdgeInitializer.addSignalStateListener(identityStateListener)
                 startIdentitySafetyNetLoop()
             }
+            2 -> buildBehaviourBiometricsTable(container)
             else -> buildCards(tabIndex, container)
         }
     }
@@ -559,6 +560,220 @@ class ScenarioListFragment : Fragment() {
                 }
             }
         }
+    }
+
+    // ── Tab 2: live 40-parameter Behavioural Biometrics baseline vs. actual table ─
+
+    private fun buildBehaviourBiometricsTable(container: LinearLayout) {
+        val ctx = requireContext()
+        val reg = BehaviourBiometricsRegistry
+
+        // ── Summary banner ────────────────────────────────────────────────────────
+        val banner = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#050F1A"))
+            setPadding(16, 14, 16, 14)
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+        }
+        banner.addView(TextView(ctx).apply {
+            text = "Behavioural Biometrics Profile"
+            textSize = 12.5f
+            setTextColor(Color.parseColor("#FFCC80"))
+            typeface = Typeface.DEFAULT_BOLD
+        })
+        banner.addView(TextView(ctx).apply {
+            text = "Enrolled: 15-min baseline · 312 touch events · 1,847 keystrokes"
+            textSize = 8f
+            setTextColor(Color.parseColor("#6A5530"))
+            setPadding(0, 4, 0, 0)
+        })
+        // Match / Drift / Anomaly summary chips
+        val chipRow = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 8, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+        }
+        fun chip(text: String, colorHex: String) = TextView(ctx).apply {
+            this.text = text
+            textSize = 9f
+            setTextColor(Color.parseColor(colorHex))
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, 0, 20, 0)
+        }
+        chipRow.addView(chip("✓ ${reg.matchCount} Match",   "#00CC55"))
+        chipRow.addView(chip("⚠ ${reg.driftCount} Drift",   "#FFAA00"))
+        chipRow.addView(chip("✗ ${reg.anomalyCount} Anomaly","#FF3333"))
+        chipRow.addView(chip("→ Risk: 25 / 100", "#4FC3F7"))
+        banner.addView(chipRow)
+        container.addView(banner)
+
+        container.addView(View(ctx).apply {
+            setBackgroundColor(Color.parseColor("#3A2800"))
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 2)
+        })
+
+        // ── Column header ─────────────────────────────────────────────────────────
+        val header = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(Color.parseColor("#040D14"))
+            setPadding(10, 10, 10, 10)
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+        }
+        fun hCell(text: String, wt: Float, align: Int = android.view.Gravity.START) =
+            TextView(ctx).apply {
+                this.text = text
+                textSize = 8.5f
+                setTextColor(Color.parseColor("#7A6040"))
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = align
+                layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, wt)
+            }
+        header.addView(hCell("#", 0.28f, android.view.Gravity.CENTER))
+        header.addView(hCell("PARAMETER", 2.1f))
+        header.addView(hCell("BASELINE (15 min enrol)", 1.35f, android.view.Gravity.CENTER))
+        header.addView(hCell("ACTUAL", 1.1f, android.view.Gravity.CENTER))
+        header.addView(hCell("STATUS", 0.8f, android.view.Gravity.CENTER))
+        container.addView(header)
+
+        container.addView(View(ctx).apply {
+            setBackgroundColor(Color.parseColor("#1A0E00"))
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 1)
+        })
+
+        // ── Data rows grouped by category ─────────────────────────────────────────
+        var lastCategory: BehaviourBiometricsRegistry.Category? = null
+        var globalIndex = 0
+
+        BehaviourBiometricsRegistry.ALL.forEach { param ->
+            // Category divider row when category changes
+            if (param.category != lastCategory) {
+                lastCategory = param.category
+                container.addView(LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setBackgroundColor(Color.parseColor("#0A0A0A"))
+                    setPadding(10, 6, 10, 6)
+                    layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+                    addView(TextView(ctx).apply {
+                        text = "▸  ${param.category.label}"
+                        textSize = 8f
+                        setTextColor(Color.parseColor(param.category.colorHex))
+                        typeface = Typeface.DEFAULT_BOLD
+                        alpha = 0.85f
+                    })
+                })
+            }
+
+            globalIndex++
+            val rowBg = when (param.status) {
+                BehaviourBiometricsRegistry.Status.ANOMALY -> Color.parseColor("#1A0000")
+                BehaviourBiometricsRegistry.Status.DRIFT   -> Color.parseColor("#12100A")
+                else -> if (globalIndex % 2 == 0) Color.parseColor("#060E16")
+                        else Color.parseColor("#040A11")
+            }
+
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(10, 11, 10, 11)
+                setBackgroundColor(rowBg)
+                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+            }
+
+            // #
+            row.addView(TextView(ctx).apply {
+                text = "$globalIndex"
+                textSize = 8f
+                setTextColor(Color.parseColor("#334455"))
+                gravity = android.view.Gravity.CENTER
+                typeface = Typeface.MONOSPACE
+                layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 0.28f)
+            })
+
+            // Parameter name + category dot
+            val nameCol = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 2.1f)
+            }
+            nameCol.addView(TextView(ctx).apply {
+                text = param.name
+                textSize = 10.5f
+                setTextColor(
+                    if (param.status == BehaviourBiometricsRegistry.Status.ANOMALY)
+                        Color.parseColor("#FF6666")
+                    else Color.parseColor("#CCDDEE")
+                )
+            })
+            row.addView(nameCol)
+
+            // Baseline
+            row.addView(TextView(ctx).apply {
+                text = param.baseline
+                textSize = 9.5f
+                setTextColor(Color.parseColor("#557799"))
+                gravity = android.view.Gravity.CENTER
+                typeface = Typeface.MONOSPACE
+                layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1.35f)
+            })
+
+            // Actual
+            row.addView(TextView(ctx).apply {
+                text = param.actual
+                textSize = 9.5f
+                setTextColor(Color.parseColor(param.status.colorHex))
+                gravity = android.view.Gravity.CENTER
+                typeface = Typeface.MONOSPACE
+                typeface = if (param.status != BehaviourBiometricsRegistry.Status.MATCH)
+                    Typeface.DEFAULT_BOLD else Typeface.MONOSPACE
+                layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1.1f)
+            })
+
+            // Status
+            row.addView(TextView(ctx).apply {
+                text = "${param.status.symbol} ${param.status.label}"
+                textSize = 9f
+                setTextColor(Color.parseColor(param.status.colorHex))
+                gravity = android.view.Gravity.CENTER
+                typeface = Typeface.DEFAULT_BOLD
+                layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 0.8f)
+            })
+
+            container.addView(row)
+
+            container.addView(View(ctx).apply {
+                setBackgroundColor(Color.parseColor("#080E14"))
+                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 1)
+            })
+        }
+
+        // ── Footer: behaviour score contribution ──────────────────────────────────
+        container.addView(View(ctx).apply {
+            setBackgroundColor(Color.parseColor("#3A2800"))
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 2)
+        })
+        container.addView(LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#050F1A"))
+            setPadding(16, 12, 16, 12)
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+            addView(TextView(ctx).apply {
+                text = "Behaviour score: 25 / 100  ·  Contributes 25% to X-Edge-Risk-Level"
+                textSize = 8.5f
+                setTextColor(Color.parseColor("#FFCC80"))
+                typeface = Typeface.DEFAULT_BOLD
+            })
+            addView(TextView(ctx).apply {
+                text = "Anomalies flagged: Clipboard spike (16× baseline) · App-switch rate (5× baseline)"
+                textSize = 7.5f
+                setTextColor(Color.parseColor("#AA4444"))
+                setPadding(0, 5, 0, 0)
+            })
+            addView(TextView(ctx).apply {
+                text = "Risk formula: RASP (60%) + Behaviour (25%) + Network (15%) → X-Edge-Risk-Level"
+                textSize = 7f
+                setTextColor(Color.parseColor("#445566"))
+                setPadding(0, 4, 0, 0)
+            })
+        })
     }
 
     private fun showAgenticAdvisory(
