@@ -168,8 +168,13 @@ class ScenarioListFragment : Fragment() {
     private var safetyNetJob: Job? = null
     private var identitySafetyNetJob: Job? = null
     private val sensorStatusViews = mutableMapOf<Int, TextView>()
-    // Pair<statusView, riskScoreView> for each identity threat row
-    private val identityRowViews = mutableMapOf<Int, Pair<TextView, TextView>>()
+    // Triple<statusView, riskScoreView, threat> for each identity threat row
+    private data class IdentityRowView(
+        val statusView: TextView,
+        val riskView: TextView,
+        val threat: IdentityThreatRegistry.Threat,
+    )
+    private val identityRowViews = mutableMapOf<Int, IdentityRowView>()
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     /**
@@ -490,9 +495,9 @@ class ScenarioListFragment : Fragment() {
                 layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 0.85f)
             })
 
-            identityRowViews[index] = Pair(statusView, riskView)
+            identityRowViews[index] = IdentityRowView(statusView, riskView, threat)
 
-            // Tap → show full detail dialog
+            // Tap row → show full detail dialog
             row.isClickable = true
             row.isFocusable = true
             row.setOnClickListener { showIdentityThreatDetail(threat) }
@@ -520,30 +525,53 @@ class ScenarioListFragment : Fragment() {
 
     private fun refreshIdentityStatuses() {
         IdentityThreatRegistry.ALL.forEachIndexed { index, threat ->
-            val (statusView, riskView) = identityRowViews[index] ?: return@forEachIndexed
+            val rv = identityRowViews[index] ?: return@forEachIndexed
+            val (statusView, riskView) = rv.statusView to rv.riskView
+            val activeSignals = threat.signalTypes.filter { PayShieldEdgeInitializer.isSignalActive(it) }
             when {
                 threat.architectureProtected -> {
                     // Protection is structural (KeyStore TEE / NGINX gateway headers) —
                     // always active regardless of device signal state.
                     statusView.text = "🛡 Protected"
                     statusView.setTextColor(Color.parseColor("#00AACC"))
+                    statusView.isClickable = false
+                    statusView.setOnClickListener(null)
                     riskView.text = "0"
                     riskView.setTextColor(Color.parseColor("#00AACC"))
                 }
-                threat.signalTypes.any { PayShieldEdgeInitializer.isSignalActive(it) } -> {
-                    statusView.text = "● ACTIVE"
+                activeSignals.isNotEmpty() -> {
+                    statusView.text = "● ACTIVE ▶"
                     statusView.setTextColor(Color.parseColor("#FF2222"))
+                    // Tap ACTIVE label → Agentic AI Root Cause Advisory
+                    statusView.isClickable = true
+                    statusView.isFocusable = true
+                    statusView.setOnClickListener { showAgenticAdvisory(threat, activeSignals) }
                     riskView.text = threat.riskScore.toString()
                     riskView.setTextColor(Color.parseColor("#FF2222"))
                 }
                 else -> {
                     statusView.text = "● Safe"
                     statusView.setTextColor(Color.parseColor("#00CC55"))
+                    statusView.isClickable = false
+                    statusView.setOnClickListener(null)
                     riskView.text = "—"
                     riskView.setTextColor(Color.parseColor("#334455"))
                 }
             }
         }
+    }
+
+    private fun showAgenticAdvisory(
+        threat: IdentityThreatRegistry.Threat,
+        activeSignals: List<String>,
+    ) {
+        val msg = AgenticAdvisory.buildAdvisory(threat, activeSignals)
+        AlertDialog.Builder(requireContext(), android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("🤖 Agentic AI Root Cause Advisory")
+            .setMessage(msg)
+            .setPositiveButton("Dismiss", null)
+            .setNeutralButton("Full Detail") { _, _ -> showIdentityThreatDetail(threat) }
+            .show()
     }
 
     private fun showIdentityThreatDetail(threat: IdentityThreatRegistry.Threat) {

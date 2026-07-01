@@ -110,8 +110,9 @@ EMULATOR_FINGERPRINT fires when hardware signatures (CPU, sensors, display, GSF 
 Note — signals NOT included here to avoid debug-build false positives:
   • ATTESTATION_NO_CHAIN / ATTESTATION_UNTRUSTED — debug APKs cannot get Play Integrity
     hardware attestation by design; these fire on every debug install.
-  • AUTOMATION_FRAMEWORK — Samsung One UI includes UIAutomator infrastructure that triggers
-    this on real Samsung devices regardless of an attacker being present.
+  • AUTOMATION_FRAMEWORK — Samsung One UI system services (Smart Switch, Device Care,
+    Samsung Diagnostics) register UiAutomation accessibility connections; FreeRASP detects
+    any active UiAutomation connection and fires this signal on all Samsung devices.
   • ENROLLMENT_BURST — fires on rapid reinstalls during development.
 These signals are still enforced in the production SDK; they are excluded from the demo
 table only to prevent false positives on development devices.
