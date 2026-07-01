@@ -491,6 +491,12 @@ class ScenarioListFragment : Fragment() {
             })
 
             identityRowViews[index] = Pair(statusView, riskView)
+
+            // Tap → show full detail dialog
+            row.isClickable = true
+            row.isFocusable = true
+            row.setOnClickListener { showIdentityThreatDetail(threat) }
+
             container.addView(row)
 
             // Row separator
@@ -528,6 +534,71 @@ class ScenarioListFragment : Fragment() {
                 riskView.setTextColor(Color.parseColor("#334455"))
             }
         }
+    }
+
+    private fun showIdentityThreatDetail(threat: IdentityThreatRegistry.Threat) {
+        val active = threat.signalTypes.any { PayShieldEdgeInitializer.isSignalActive(it) }
+        val statusLine   = if (active) "● ACTIVE  —  risk score: ${threat.riskScore} / 100" else "● Safe  —  no active signals"
+        val activeSignals = threat.signalTypes
+            .filter { PayShieldEdgeInitializer.isSignalActive(it) }
+            .joinToString("\n  ") { "● $it" }
+            .ifBlank { "(none)" }
+        val allSignals = threat.signalTypes.joinToString("\n  ") { "· $it" }
+
+        val nonce     = java.util.UUID.randomUUID().toString()
+        val tsEpoch   = System.currentTimeMillis() / 1000L
+        val hashSample = "SHA-256(METHOD|path|body)"
+
+        val msg = buildString {
+            append("━━━━━━━━━━━━━━━━━━━━━━━━\n")
+            append("${threat.name}\n")
+            append("ID: ${threat.threatId}   Severity: ${threat.severity.label}\n")
+            append("━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+
+            append("STATUS\n  $statusLine\n\n")
+
+            append("──── How NonaShield Stops This ────\n")
+            append(threat.detailText)
+            append("\n\n")
+
+            append("──── Hardware-Bound Identity ────\n")
+            append("  Key alias:   payshield_device_key\n")
+            append("  Storage:     AndroidKeyStore TEE (hardware-backed)\n")
+            append("  Algorithm:   HMAC-SHA256\n")
+            append("  Properties:  Non-exportable · device-bound · never in heap\n")
+            append("  Guarantee:   Cloned APK = no key = gateway HTTP 401\n\n")
+
+            append("──── NonaShield Request Headers ────\n")
+            append("  X-PS-Nonce:         $nonce\n")
+            append("                      (per-request UUID — 60 s validity)\n")
+            append("  X-PS-Timestamp:     $tsEpoch\n")
+            append("                      (epoch sec — rejects requests > ±30 s old)\n")
+            append("  X-PS-Request-Hash:  $hashSample\n")
+            append("                      (tampered body → hash mismatch → HTTP 400)\n")
+            append("  X-Edge-Risk-Level:  [0–100 fused RASP score]\n")
+            append("                      ≥ 70  →  NGINX enforces BLOCK\n")
+            append("                      40–69 →  NGINX enforces STEP_UP\n")
+            append("                      < 40  →  ALLOW\n\n")
+
+            append("──── Risk Score Formula ────\n")
+            append("  RASP signals (60%) + Behaviour (25%) + Network (15%)\n")
+            append("  This threat's peak score: ${threat.riskScore} / 100\n")
+            append("  Enforcement when active:  ${threat.decision.label}\n\n")
+
+            append("──── Signals Monitored ────\n")
+            append("  $allSignals\n\n")
+
+            if (active) {
+                append("──── Currently Firing ────\n")
+                append("  $activeSignals\n")
+            }
+        }
+
+        AlertDialog.Builder(requireContext(), android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Identity Defense Detail")
+            .setMessage(msg)
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     // ── Tabs 2-4: simulated attack cards (backend ingest demo) ──────────────────
