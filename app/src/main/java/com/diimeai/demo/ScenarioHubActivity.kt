@@ -1,10 +1,12 @@
 package com.diimeai.demo
 
 import android.os.Bundle
+import android.view.MotionEvent
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.payshield.sdk.PayShieldEdgeInitializer
 
 /**
  * Main hub after login — 5-tab fraud scenario dashboard.
@@ -45,6 +47,11 @@ class ScenarioHubActivity : AppCompatActivity() {
     // Fragments cached after first creation so scroll position is preserved
     private val fragmentCache = mutableMapOf<Int, Fragment>()
     private var activeTabIndex = 0
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        PayShieldEdgeInitializer.recordTouchForBiometrics(ev)
+        return super.dispatchTouchEvent(ev)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

@@ -17,6 +17,8 @@ import androidx.lifecycle.lifecycleScope
 import com.diimeai.demo.network.DiimeApiClient
 import com.diimeai.demo.network.ScenarioResult
 import com.google.android.material.button.MaterialButton
+import com.payshield.sdk.BehaviourParam
+import com.payshield.sdk.BehaviourStatus
 import com.payshield.sdk.PayShieldEdgeInitializer
 import com.payshield.sdk.state.SignalStateListener
 import kotlinx.coroutines.Dispatchers
@@ -177,6 +179,21 @@ class ScenarioListFragment : Fragment() {
     private val identityRowViews = mutableMapOf<Int, IdentityRowView>()
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
+    // ── Tab 2: behavioural biometrics live refresh ────────────────────────────
+    private var behaviourRefreshJob: Job? = null
+    private data class BehaviourRowView(
+        val rowLayout: LinearLayout,
+        val nameView: TextView,
+        val baselineView: TextView,
+        val actualView: TextView,
+        val statusView: TextView,
+    )
+    private val behaviourRowViews = mutableListOf<BehaviourRowView>()
+    private var behaviourChipMatch: TextView? = null
+    private var behaviourChipDrift: TextView? = null
+    private var behaviourChipAnomaly: TextView? = null
+    private var behaviourBaselineInfo: TextView? = null
+
     /**
      * Pushed by the SDK the instant any RASP signal fires or clears — see
      * PayShieldEdgeInitializer.addSignalStateListener(). Runs on whatever thread the
@@ -211,7 +228,10 @@ class ScenarioListFragment : Fragment() {
                 PayShieldEdgeInitializer.addSignalStateListener(identityStateListener)
                 startIdentitySafetyNetLoop()
             }
-            2 -> buildBehaviourBiometricsTable(container)
+            2 -> {
+                buildBehaviourBiometricsTable(container)
+                startBehaviourRefreshLoop()
+            }
             else -> buildCards(tabIndex, container)
         }
     }
@@ -227,6 +247,10 @@ class ScenarioListFragment : Fragment() {
                 refreshIdentityStatuses()
                 if (identitySafetyNetJob?.isActive != true) startIdentitySafetyNetLoop()
             }
+            2 -> {
+                refreshBehaviourTable()
+                if (behaviourRefreshJob?.isActive != true) startBehaviourRefreshLoop()
+            }
         }
     }
 
@@ -234,16 +258,23 @@ class ScenarioListFragment : Fragment() {
         super.onPause()
         safetyNetJob?.cancel()
         identitySafetyNetJob?.cancel()
+        behaviourRefreshJob?.cancel()
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
         safetyNetJob?.cancel()
         identitySafetyNetJob?.cancel()
+        behaviourRefreshJob?.cancel()
         PayShieldEdgeInitializer.removeSignalStateListener(raspStateListener)
         PayShieldEdgeInitializer.removeSignalStateListener(identityStateListener)
         sensorStatusViews.clear()
         identityRowViews.clear()
+        behaviourRowViews.clear()
+        behaviourChipMatch = null
+        behaviourChipDrift = null
+        behaviourChipAnomaly = null
+        behaviourBaselineInfo = null
     }
 
     // ── Tab 0: live 3-column RASP sensor table (real data, no simulation, no cards) ──
@@ -565,6 +596,7 @@ class ScenarioListFragment : Fragment() {
     // ── Tab 2: live 40-parameter Behavioural Biometrics baseline vs. actual table ─
 
     private fun buildBehaviourBiometricsTable(container: LinearLayout) {
+        behaviourRowViews.clear()
         val ctx = requireContext()
         val reg = BehaviourBiometricsRegistry
 
@@ -581,12 +613,14 @@ class ScenarioListFragment : Fragment() {
             setTextColor(Color.parseColor("#FFCC80"))
             typeface = Typeface.DEFAULT_BOLD
         })
-        banner.addView(TextView(ctx).apply {
-            text = "Enrolled: 15-min baseline · 312 touch events · 1,847 keystrokes"
+        val tvBaselineInfo = TextView(ctx).apply {
+            text = "Calibrating… — interact with the app to build baseline (10 touch events)"
             textSize = 8f
             setTextColor(Color.parseColor("#6A5530"))
             setPadding(0, 4, 0, 0)
-        })
+        }
+        behaviourBaselineInfo = tvBaselineInfo
+        banner.addView(tvBaselineInfo)
         // Match / Drift / Anomaly summary chips
         val chipRow = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -600,9 +634,15 @@ class ScenarioListFragment : Fragment() {
             typeface = Typeface.DEFAULT_BOLD
             setPadding(0, 0, 20, 0)
         }
-        chipRow.addView(chip("✓ ${reg.matchCount} Match",   "#00CC55"))
-        chipRow.addView(chip("⚠ ${reg.driftCount} Drift",   "#FFAA00"))
-        chipRow.addView(chip("✗ ${reg.anomalyCount} Anomaly","#FF3333"))
+        val cMatch   = chip("✓ ${reg.matchCount} Match",    "#00CC55")
+        val cDrift   = chip("⚠ ${reg.driftCount} Drift",    "#FFAA00")
+        val cAnomaly = chip("✗ ${reg.anomalyCount} Anomaly", "#FF3333")
+        behaviourChipMatch   = cMatch
+        behaviourChipDrift   = cDrift
+        behaviourChipAnomaly = cAnomaly
+        chipRow.addView(cMatch)
+        chipRow.addView(cDrift)
+        chipRow.addView(cAnomaly)
         chipRow.addView(chip("→ Risk: 25 / 100", "#4FC3F7"))
         banner.addView(chipRow)
         container.addView(banner)
@@ -694,7 +734,7 @@ class ScenarioListFragment : Fragment() {
                 orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 2.1f)
             }
-            nameCol.addView(TextView(ctx).apply {
+            val tvName = TextView(ctx).apply {
                 text = param.name
                 textSize = 10.5f
                 setTextColor(
@@ -702,41 +742,45 @@ class ScenarioListFragment : Fragment() {
                         Color.parseColor("#FF6666")
                     else Color.parseColor("#CCDDEE")
                 )
-            })
+            }
+            nameCol.addView(tvName)
             row.addView(nameCol)
 
             // Baseline
-            row.addView(TextView(ctx).apply {
+            val tvBaseline = TextView(ctx).apply {
                 text = param.baseline
                 textSize = 9.5f
                 setTextColor(Color.parseColor("#557799"))
                 gravity = android.view.Gravity.CENTER
                 typeface = Typeface.MONOSPACE
                 layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1.35f)
-            })
+            }
+            row.addView(tvBaseline)
 
             // Actual
-            row.addView(TextView(ctx).apply {
+            val tvActual = TextView(ctx).apply {
                 text = param.actual
                 textSize = 9.5f
                 setTextColor(Color.parseColor(param.status.colorHex))
                 gravity = android.view.Gravity.CENTER
-                typeface = Typeface.MONOSPACE
                 typeface = if (param.status != BehaviourBiometricsRegistry.Status.MATCH)
                     Typeface.DEFAULT_BOLD else Typeface.MONOSPACE
                 layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1.1f)
-            })
+            }
+            row.addView(tvActual)
 
             // Status
-            row.addView(TextView(ctx).apply {
+            val tvStatus = TextView(ctx).apply {
                 text = "${param.status.symbol} ${param.status.label}"
                 textSize = 9f
                 setTextColor(Color.parseColor(param.status.colorHex))
                 gravity = android.view.Gravity.CENTER
                 typeface = Typeface.DEFAULT_BOLD
                 layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 0.8f)
-            })
+            }
+            row.addView(tvStatus)
 
+            behaviourRowViews.add(BehaviourRowView(row, tvName, tvBaseline, tvActual, tvStatus))
             container.addView(row)
 
             container.addView(View(ctx).apply {
@@ -774,6 +818,66 @@ class ScenarioListFragment : Fragment() {
                 setPadding(0, 4, 0, 0)
             })
         })
+    }
+
+    private fun startBehaviourRefreshLoop() {
+        behaviourRefreshJob = lifecycleScope.launch {
+            while (isActive) {
+                delay(3_000L)
+                refreshBehaviourTable()
+            }
+        }
+    }
+
+    private fun refreshBehaviourTable() {
+        if (!isAdded || view == null) return
+        val params = PayShieldEdgeInitializer.getBehaviourParams()
+        if (params.isEmpty()) return
+
+        val pct = PayShieldEdgeInitializer.getBehaviourBaselineProgressPct()
+        val matchCount   = params.count { it.status == BehaviourStatus.MATCH }
+        val driftCount   = params.count { it.status == BehaviourStatus.DRIFT }
+        val anomalyCount = params.count { it.status == BehaviourStatus.ANOMALY }
+        val liveCount    = params.count { it.isLive }
+
+        behaviourChipMatch?.text   = "✓ $matchCount Match"
+        behaviourChipDrift?.text   = "⚠ $driftCount Drift"
+        behaviourChipAnomaly?.text = "✗ $anomalyCount Anomaly"
+
+        behaviourBaselineInfo?.text = if (pct < 100) {
+            "Calibrating $pct%  —  keep interacting; baseline locks after 10 touches"
+        } else {
+            "Baseline locked  ·  $liveCount live sensors active  ·  refreshing every 3 s"
+        }
+
+        params.forEachIndexed { i, param ->
+            val rv = behaviourRowViews.getOrNull(i) ?: return@forEachIndexed
+            rv.baselineView.text = param.baseline
+            rv.actualView.text   = param.actual
+
+            val (statusText, colorHex) = when (param.status) {
+                BehaviourStatus.ANOMALY -> ("✗ Anomaly" to "#FF3333")
+                BehaviourStatus.DRIFT   -> ("⚠ Drift"   to "#FFAA00")
+                else                    -> ("✓ Match"   to "#00CC55")
+            }
+            val color = Color.parseColor(colorHex)
+            rv.statusView.text = statusText
+            rv.statusView.setTextColor(color)
+            rv.actualView.setTextColor(color)
+            rv.actualView.typeface = if (param.status != BehaviourStatus.MATCH)
+                Typeface.DEFAULT_BOLD else Typeface.MONOSPACE
+
+            val rowBg = when (param.status) {
+                BehaviourStatus.ANOMALY -> Color.parseColor("#1A0000")
+                BehaviourStatus.DRIFT   -> Color.parseColor("#12100A")
+                else -> if (i % 2 == 0) Color.parseColor("#060E16") else Color.parseColor("#040A11")
+            }
+            rv.rowLayout.setBackgroundColor(rowBg)
+            rv.nameView.setTextColor(
+                if (param.status == BehaviourStatus.ANOMALY) Color.parseColor("#FF6666")
+                else Color.parseColor("#CCDDEE")
+            )
+        }
     }
 
     private fun showAgenticAdvisory(
