@@ -1,11 +1,15 @@
 package com.diimeai.demo
 
 import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Bundle
+import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.LinearLayout.MATCH_PARENT
+import android.widget.LinearLayout.WRAP_CONTENT
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
@@ -145,11 +149,11 @@ class ScenarioListFragment : Fragment() {
         )
 
         // Tab → scenario IDs mapping.
-        // Tab 0 (Device / Runtime Integrity) is rendered separately as a live 3-column
-        // sensor table — see buildLiveSensorTable() — not the simulated cards below.
+        // Tab 0 — live RASP sensor table (buildLiveSensorTable); no simulated cards.
+        // Tab 1 — live Identity threat defense table (buildIdentityThreatTable); no simulated cards.
         val TAB_SCENARIOS: List<List<Int>> = listOf(
-            emptyList(),                   // 0: Device / Runtime Integrity (RASP) — live table, see buildLiveSensorTable()
-            listOf(8, 13, 15),             // 1: Identity & Account Fraud
+            emptyList(),                   // 0: Device / Runtime Integrity — live sensor table
+            emptyList(),                   // 1: Identity & Account Fraud — live identity table
             listOf(4, 9, 10),              // 2: Behavioral & Biometric Fraud
             listOf(6, 11, 14, 16, 19),     // 3: Network / Transaction Fraud
             listOf(1, 2, 17),              // 4: Platform Verification
@@ -162,7 +166,10 @@ class ScenarioListFragment : Fragment() {
     // lapses with no corresponding OS callback. 30s is far below user-perceptible staleness
     // for that edge case while eliminating the previous 1s busy-poll entirely.
     private var safetyNetJob: Job? = null
+    private var identitySafetyNetJob: Job? = null
     private val sensorStatusViews = mutableMapOf<Int, TextView>()
+    // Pair<statusView, riskScoreView> for each identity threat row
+    private val identityRowViews = mutableMapOf<Int, Pair<TextView, TextView>>()
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     /**
@@ -172,6 +179,10 @@ class ScenarioListFragment : Fragment() {
      */
     private val raspStateListener = SignalStateListener { _, _ ->
         mainHandler.post { refreshLiveStatuses() }
+    }
+
+    private val identityStateListener = SignalStateListener { _, _ ->
+        mainHandler.post { refreshIdentityStatuses() }
     }
 
     override fun onCreateView(
@@ -184,33 +195,49 @@ class ScenarioListFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         val tabIndex = arguments?.getInt(ARG_TAB) ?: 0
         val container = view.findViewById<LinearLayout>(R.id.scenarioContainer)
-        if (tabIndex == 0) {
-            buildLiveSensorTable(container)
-            PayShieldEdgeInitializer.addSignalStateListener(raspStateListener)
-            startSafetyNetLoop()
-        } else {
-            buildCards(tabIndex, container)
+        when (tabIndex) {
+            0 -> {
+                buildLiveSensorTable(container)
+                PayShieldEdgeInitializer.addSignalStateListener(raspStateListener)
+                startSafetyNetLoop()
+            }
+            1 -> {
+                buildIdentityThreatTable(container)
+                PayShieldEdgeInitializer.addSignalStateListener(identityStateListener)
+                startIdentitySafetyNetLoop()
+            }
+            else -> buildCards(tabIndex, container)
         }
     }
 
     override fun onResume() {
         super.onResume()
-        if ((arguments?.getInt(ARG_TAB) ?: 0) == 0) {
-            refreshLiveStatuses()  // catch anything that changed while paused
-            if (safetyNetJob?.isActive != true) startSafetyNetLoop()
+        when (arguments?.getInt(ARG_TAB) ?: 0) {
+            0 -> {
+                refreshLiveStatuses()
+                if (safetyNetJob?.isActive != true) startSafetyNetLoop()
+            }
+            1 -> {
+                refreshIdentityStatuses()
+                if (identitySafetyNetJob?.isActive != true) startIdentitySafetyNetLoop()
+            }
         }
     }
 
     override fun onPause() {
         super.onPause()
         safetyNetJob?.cancel()
+        identitySafetyNetJob?.cancel()
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
         safetyNetJob?.cancel()
+        identitySafetyNetJob?.cancel()
         PayShieldEdgeInitializer.removeSignalStateListener(raspStateListener)
+        PayShieldEdgeInitializer.removeSignalStateListener(identityStateListener)
         sensorStatusViews.clear()
+        identityRowViews.clear()
     }
 
     // ── Tab 0: live 3-column RASP sensor table (real data, no simulation, no cards) ──
@@ -316,7 +343,194 @@ class ScenarioListFragment : Fragment() {
         }
     }
 
-    // ── Tabs 1-4: simulated attack cards (backend ingest demo) ───────────────────
+    // ── Tab 1: live 5-column Identity threat defense table ──────────────────────
+
+    private fun buildIdentityThreatTable(container: LinearLayout) {
+        identityRowViews.clear()
+        val ctx = requireContext()
+
+        // Protection pillars header banner
+        val banner = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#050F1A"))
+            setPadding(16, 14, 16, 14)
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+        }
+        banner.addView(TextView(ctx).apply {
+            text = "NonaShield Identity Defense Layer"
+            textSize = 12.5f
+            setTextColor(Color.parseColor("#4FC3F7"))
+            typeface = Typeface.DEFAULT_BOLD
+        })
+        banner.addView(TextView(ctx).apply {
+            text = "🔑 Hardware-bound public key (AndroidKeyStore TEE)" +
+                   "  ·  📋 Signed headers: X-PS-Nonce, X-PS-Timestamp, X-PS-Request-Hash" +
+                   "  ·  🔍 Runtime threat signals → X-Edge-Risk-Level at NGINX"
+            textSize = 8f
+            setTextColor(Color.parseColor("#4A7A8A"))
+            setPadding(0, 5, 0, 0)
+            maxLines = 3
+        })
+        container.addView(banner)
+
+        // Thin accent divider
+        container.addView(View(ctx).apply {
+            setBackgroundColor(Color.parseColor("#0D3355"))
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 2)
+        })
+
+        // Column header row
+        val header = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(Color.parseColor("#040D14"))
+            setPadding(10, 10, 10, 10)
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+        }
+        fun hCell(text: String, wt: Float, align: Int = android.view.Gravity.START) =
+            TextView(ctx).apply {
+                this.text = text
+                textSize = 9f
+                setTextColor(Color.parseColor("#5577AA"))
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = align
+                layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, wt)
+            }
+        header.addView(hCell("IDENTITY THREAT  /  NONASHIELD PROTECTION", 3.0f))
+        header.addView(hCell("SEV", 0.65f, android.view.Gravity.CENTER))
+        header.addView(hCell("STATUS", 0.95f, android.view.Gravity.CENTER))
+        header.addView(hCell("RISK", 0.55f, android.view.Gravity.CENTER))
+        header.addView(hCell("ACTION", 0.85f, android.view.Gravity.CENTER))
+        container.addView(header)
+
+        // Divider under header
+        container.addView(View(ctx).apply {
+            setBackgroundColor(Color.parseColor("#0D2233"))
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 1)
+        })
+
+        // Data rows
+        IdentityThreatRegistry.ALL.forEachIndexed { index, threat ->
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(10, 14, 10, 14)
+                setBackgroundColor(
+                    if (index % 2 == 0) Color.parseColor("#060E16") else Color.parseColor("#040A11")
+                )
+                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+            }
+
+            // Column 1: threat name + protection subtitle
+            val nameCol = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 3.0f)
+            }
+            nameCol.addView(TextView(ctx).apply {
+                text = threat.name
+                textSize = 11f
+                setTextColor(Color.parseColor("#E8E8FF"))
+                typeface = Typeface.DEFAULT_BOLD
+                maxLines = 2
+                ellipsize = TextUtils.TruncateAt.END
+            })
+            nameCol.addView(TextView(ctx).apply {
+                text = threat.protectionLine
+                textSize = 8f
+                setTextColor(Color.parseColor("#445566"))
+                setPadding(0, 3, 0, 0)
+                maxLines = 2
+                ellipsize = TextUtils.TruncateAt.END
+            })
+            nameCol.addView(TextView(ctx).apply {
+                text = threat.threatId
+                textSize = 7.5f
+                setTextColor(Color.parseColor("#2A3A4A"))
+                typeface = Typeface.MONOSPACE
+                setPadding(0, 2, 0, 0)
+            })
+            row.addView(nameCol)
+
+            // Column 2: severity
+            row.addView(TextView(ctx).apply {
+                text = threat.severity.label
+                textSize = 8.5f
+                setTextColor(Color.parseColor(threat.severity.colorHex))
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = android.view.Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 0.65f)
+            })
+
+            // Column 3: status (live, updated by refreshIdentityStatuses)
+            val statusView = TextView(ctx).apply {
+                text = "● ..."
+                textSize = 8.5f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = android.view.Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 0.95f)
+            }
+            row.addView(statusView)
+
+            // Column 4: risk score (shown when active)
+            val riskView = TextView(ctx).apply {
+                text = "—"
+                textSize = 10f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = android.view.Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 0.55f)
+            }
+            row.addView(riskView)
+
+            // Column 5: decision badge
+            row.addView(TextView(ctx).apply {
+                text = threat.decision.label
+                textSize = 8f
+                setTextColor(Color.parseColor(threat.decision.colorHex))
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = android.view.Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 0.85f)
+            })
+
+            identityRowViews[index] = Pair(statusView, riskView)
+            container.addView(row)
+
+            // Row separator
+            container.addView(View(ctx).apply {
+                setBackgroundColor(Color.parseColor("#090F16"))
+                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 1)
+            })
+        }
+
+        refreshIdentityStatuses()
+    }
+
+    private fun startIdentitySafetyNetLoop() {
+        identitySafetyNetJob = lifecycleScope.launch {
+            while (isActive) {
+                delay(30_000L)
+                refreshIdentityStatuses()
+            }
+        }
+    }
+
+    private fun refreshIdentityStatuses() {
+        IdentityThreatRegistry.ALL.forEachIndexed { index, threat ->
+            val (statusView, riskView) = identityRowViews[index] ?: return@forEachIndexed
+            val active = threat.signalTypes.any { PayShieldEdgeInitializer.isSignalActive(it) }
+            if (active) {
+                statusView.text = "● ACTIVE"
+                statusView.setTextColor(Color.parseColor("#FF2222"))
+                riskView.text = threat.riskScore.toString()
+                riskView.setTextColor(Color.parseColor("#FF2222"))
+            } else {
+                statusView.text = "● Safe"
+                statusView.setTextColor(Color.parseColor("#00CC55"))
+                riskView.text = "—"
+                riskView.setTextColor(Color.parseColor("#334455"))
+            }
+        }
+    }
+
+    // ── Tabs 2-4: simulated attack cards (backend ingest demo) ──────────────────
 
     private fun buildCards(tabIndex: Int, container: LinearLayout) {
         val inflater = LayoutInflater.from(requireContext())
