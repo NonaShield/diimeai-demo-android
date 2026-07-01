@@ -39,6 +39,10 @@ object IdentityThreatRegistry {
         val riskScore: Int,
         val decision: Decision,
         val signalTypes: List<String>,
+        // True for threats whose protection is structural (KeyStore TEE / NGINX gateway),
+        // not signal-driven. These show "Protected" (teal) rather than Active/Safe so an
+        // investor understands the defence is always active — not conditional on signal state.
+        val architectureProtected: Boolean = false,
     )
 
     val ALL: List<Threat> = listOf(
@@ -96,12 +100,21 @@ Hardware key defence: the private key (payshield_device_key) lives inside the An
 
         Threat(
             name = "Automated Emulator & Bot Attacks",
-            protectionLine = "🔍 HW attestation + emulator fingerprint · 📋 X-PS-Nonce prevents replay",
+            protectionLine = "🔍 Emulator HW fingerprint detect · 📋 X-PS-Nonce prevents replay",
             detailText = """
 Attack: Fraudsters run thousands of emulated devices to automate account takeover (ATO), credential stuffing, or OTP enumeration. Emulators spoof device fingerprints to evade basic checks.
 
 How NonaShield blocks it:
-ATTESTATION_NO_CHAIN / ATTESTATION_UNTRUSTED — Play Integrity hardware attestation fails on emulators and rooted devices; the certificate chain is absent or untrusted. EMULATOR_FINGERPRINT fires when hardware signatures (CPU, sensors, display, GSF ID) are inconsistent with a real device. AUTOMATION_FRAMEWORK fires if an instrumentation framework (UIAutomator, Appium, Espresso) is active.
+EMULATOR_FINGERPRINT fires when hardware signatures (CPU, sensors, display, GSF ID) are inconsistent with a real device. EMULATOR_DETECTED is the FreeRASP deep check for Android emulator runtime characteristics.
+
+Note — signals NOT included here to avoid debug-build false positives:
+  • ATTESTATION_NO_CHAIN / ATTESTATION_UNTRUSTED — debug APKs cannot get Play Integrity
+    hardware attestation by design; these fire on every debug install.
+  • AUTOMATION_FRAMEWORK — Samsung One UI includes UIAutomator infrastructure that triggers
+    this on real Samsung devices regardless of an attacker being present.
+  • ENROLLMENT_BURST — fires on rapid reinstalls during development.
+These signals are still enforced in the production SDK; they are excluded from the demo
+table only to prevent false positives on development devices.
 
 Replay defence: X-PS-Nonce is a UUID generated fresh for every request. The gateway rejects any nonce seen in the last 60 seconds, eliminating request replay attacks even if the attacker captures a legitimate request.
             """.trimIndent(),
@@ -110,27 +123,30 @@ Replay defence: X-PS-Nonce is a UUID generated fresh for every request. The gate
             riskScore = 98,
             decision = Decision.BLOCK,
             signalTypes = listOf(
-                "ATTESTATION_NO_CHAIN",
-                "ATTESTATION_UNTRUSTED",
                 "EMULATOR_FINGERPRINT",
                 "EMULATOR_DETECTED",
-                "AUTOMATION_FRAMEWORK",
-                "ENROLLMENT_BURST",
             ),
         ),
 
         Threat(
             name = "Hooking & Runtime Manipulation",
-            protectionLine = "🔑 KeyStore key is hardware-bound, cannot be hooked · 🔍 Frida/ptrace → process killed",
+            protectionLine = "🔑 KeyStore key is hardware-bound, cannot be hooked · 🔍 Frida/Xposed/ptrace → process killed",
             detailText = """
 Attack: Tools like Frida, Xposed, and Substrate attach to the running banking process and modify function return values at runtime — bypassing PIN checks, patching biometric results, or dumping decrypted session tokens from memory.
 
 How NonaShield blocks it:
-HOOKING_FRAMEWORK fires if Frida server, Xposed Module, or Substrate injection is detected in the process. PTRACE_ATTACHED fires if a debugger is attached (ptrace syscall). NATIVE_LIB_TAMPER fires if core native libraries are patched in memory. APP_TAMPERING is the FreeRASP deep check.
+HOOKING_FRAMEWORK fires if Frida server, Xposed Module, or Substrate injection is detected in the process. PTRACE_ATTACHED fires if a debugger is actively attached via ptrace syscall. NATIVE_LIB_TAMPER fires if core native libraries are patched in memory at runtime.
 
-On detection of HOOKING_FRAMEWORK or PTRACE_ATTACHED, the SDK terminates the process immediately (Process.killProcess). This is the only category where the SDK kills the app directly — not waiting for gateway enforcement — because continued execution risks in-memory key exfiltration.
+On detection, the SDK terminates the process immediately (Process.killProcess). This is the only category where the SDK kills the app directly — because continued execution risks in-memory key exfiltration.
 
-Hardware defence: even if the attacker delays detection long enough to extract an encrypted blob from memory, the private key never leaves the TEE. HmacSHA256 signing happens inside the KeyStore hardware boundary; the key material is never exposed to the app process.
+Note — signals NOT included here to avoid debug-build false positives:
+  • APP_TAMPERING — FreeRASP explicitly flags debuggable=true APKs as tampered. Every debug
+    build triggers this by design. It fires in production on all non-debug builds.
+  • SHELL_MAPPED_IN_PROCESS / SHELL_CHILD_PROCESS_DETECTED — Samsung One UI 8 spawns shell
+    child processes as part of its system services; these fire on all Samsung devices
+    regardless of any attacker activity.
+
+Hardware defence: even if an attacker delays detection, the private key never leaves the TEE. HmacSHA256 signing happens inside the KeyStore hardware boundary; the key material is never exposed to the app process.
             """.trimIndent(),
             threatId = "RASP-ID-004",
             severity = RaspSensorRegistry.Severity.CRITICAL,
@@ -140,9 +156,6 @@ Hardware defence: even if the attacker delays detection long enough to extract a
                 "HOOKING_FRAMEWORK",
                 "PTRACE_ATTACHED",
                 "NATIVE_LIB_TAMPER",
-                "APP_TAMPERING",
-                "SHELL_MAPPED_IN_PROCESS",
-                "SHELL_CHILD_PROCESS_DETECTED",
             ),
         ),
 
@@ -195,29 +208,27 @@ X-PS-Nonce additionally prevents replay of the request itself: each nonce is val
 
         Threat(
             name = "Hardcoded Secrets in App",
-            protectionLine = "🔑 Zero secrets in app bytecode — all in KeyStore TEE · 🔍 Rogue/tampered build detect",
+            protectionLine = "🔑 Zero secrets in app bytecode — all in AndroidKeyStore TEE (architecture guarantee)",
             detailText = """
 Attack: Developers accidentally commit API keys, private keys, or auth tokens directly in source code or resource files. Attackers decompile the APK, extract the secrets, and call bank APIs directly without the app.
 
-How NonaShield eliminates the risk:
+How NonaShield eliminates the risk — by architecture, not by signal:
 There are NO secrets anywhere in the app binary. All cryptographic operations use keys stored in the AndroidKeyStore TEE (alias: payshield_device_key). The key material never appears in the Kotlin/Java heap, DEX bytecode, or resource files — decompiling the APK yields an empty shell with no extractable secrets.
 
-When these signals ARE active, it means someone has already tampered with the app:
-  • ROGUE_BUILD_DETECTED — a modified build of the app is running (attacker rebuilt with extracted key attempts)
-  • SDK_SELF_TAMPER — the SDK's own hash has changed since enrollment
-  • OBFUSCATION_RISK — the app's obfuscation layer has been stripped, exposing internal structure
+This protection is ALWAYS active regardless of device state. It is guaranteed by the key storage architecture, not by runtime detection. That is why this row shows "Protected" rather than a live signal status.
 
-These signal the ATTEMPT to extract secrets, not the presence of secrets. The enforcement action (BLOCK) ensures no further transactions proceed on the compromised installation.
+Why no live signals? All three candidate signals are false positives on debug builds:
+  • OBFUSCATION_RISK — debug builds intentionally have no ProGuard/R8 obfuscation; fires on every debug install.
+  • SDK_SELF_TAMPER — the SDK enrolled hash was computed for the production AAR; the debug build hash always differs.
+  • ROGUE_BUILD_DETECTED — debug signing certificate never matches the production certificate enrolled in the SDK.
+In production (signed release APK, ProGuard enabled), these signals are meaningful and enforced.
             """.trimIndent(),
             threatId = "RASP-ID-007",
             severity = RaspSensorRegistry.Severity.CRITICAL,
-            riskScore = 88,
+            riskScore = 0,
             decision = Decision.BLOCK,
-            signalTypes = listOf(
-                "ROGUE_BUILD_DETECTED",
-                "SDK_SELF_TAMPER",
-                "OBFUSCATION_RISK",
-            ),
+            signalTypes = emptyList(),
+            architectureProtected = true,
         ),
 
         Threat(
@@ -247,35 +258,39 @@ X-PS-Timestamp (epoch seconds) prevents replaying a captured unmodified request 
 
         Threat(
             name = "API Exploitation (Bypass App Layer)",
-            protectionLine = "📋 NGINX rejects requests without valid X-PS-Request-Hash + risk level",
+            protectionLine = "📋 NGINX rejects all requests without valid X-PS-Request-Hash (architecture guarantee)",
             detailText = """
 Attack: Attacker reverse-engineers the API contract from network traffic or decompiled code and calls the bank's backend directly using curl / Postman — bypassing all client-side RASP checks, certificate pinning, and fraud controls embedded in the app.
 
-How NonaShield blocks it:
-The NonaShield NGINX gateway sits between the internet and the bank's core API. It validates three mandatory headers on every inbound request:
+How NonaShield blocks it — by gateway architecture, not by runtime signal:
+The NonaShield NGINX gateway sits between the internet and the bank's core API. It validates mandatory headers on every inbound request:
 
   1. X-PS-Request-Hash — SHA-256(METHOD|path|body) signed with the device TEE key.
      Direct API calls cannot produce a valid hash without the hardware key.
+     Result: curl/Postman calls → HTTP 401 (signature missing or invalid).
 
   2. X-Edge-Risk-Level — the fused RASP score from the SDK (0–100).
      Absent or spoofed values default to risk=100 → BLOCK.
 
   3. X-PS-Nonce — UUID unique per request.
-     Replayed or missing nonces are rejected with HTTP 409.
+     Replayed or missing nonces → HTTP 409 (nonce reuse rejected).
 
-A direct curl call to the bank API, even with a stolen JWT, returns HTTP 401 because it cannot produce the HMAC-SHA256 signature that only the enrolled device's TEE can generate.
+This protection is ALWAYS active at the gateway level. It is guaranteed by the NGINX enforcement architecture. That is why this row shows "Protected" rather than a live signal status.
+
+Why no live signals? All candidate signals fire on any developer device:
+  • ADB_ENABLED / DEVELOPER_MODE / USB_DEBUGGING_ACTIVE / DEVELOPER_OPTIONS_ACTIVE — these
+    are ON because you need developer options to install the debug APK via ADB. They fire
+    on every development device regardless of any attacker activity.
+  • MAVSV_CONTROL_FAILURE — MAVSV controls include obfuscation and production build checks;
+    fails on every debug build by design.
+In production (developer options off, release APK from Play Store), these signals are meaningful.
             """.trimIndent(),
             threatId = "RASP-ID-009",
             severity = RaspSensorRegistry.Severity.HIGH,
-            riskScore = 88,
+            riskScore = 0,
             decision = Decision.BLOCK,
-            signalTypes = listOf(
-                "MASVS_CONTROL_FAILURE",
-                "ADB_ENABLED",
-                "DEVELOPER_MODE",
-                "USB_DEBUGGING_ACTIVE",
-                "DEVELOPER_OPTIONS_ACTIVE",
-            ),
+            signalTypes = emptyList(),
+            architectureProtected = true,
         ),
 
         Threat(

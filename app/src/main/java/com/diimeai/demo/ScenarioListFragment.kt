@@ -521,24 +521,38 @@ class ScenarioListFragment : Fragment() {
     private fun refreshIdentityStatuses() {
         IdentityThreatRegistry.ALL.forEachIndexed { index, threat ->
             val (statusView, riskView) = identityRowViews[index] ?: return@forEachIndexed
-            val active = threat.signalTypes.any { PayShieldEdgeInitializer.isSignalActive(it) }
-            if (active) {
-                statusView.text = "● ACTIVE"
-                statusView.setTextColor(Color.parseColor("#FF2222"))
-                riskView.text = threat.riskScore.toString()
-                riskView.setTextColor(Color.parseColor("#FF2222"))
-            } else {
-                statusView.text = "● Safe"
-                statusView.setTextColor(Color.parseColor("#00CC55"))
-                riskView.text = "—"
-                riskView.setTextColor(Color.parseColor("#334455"))
+            when {
+                threat.architectureProtected -> {
+                    // Protection is structural (KeyStore TEE / NGINX gateway headers) —
+                    // always active regardless of device signal state.
+                    statusView.text = "🛡 Protected"
+                    statusView.setTextColor(Color.parseColor("#00AACC"))
+                    riskView.text = "0"
+                    riskView.setTextColor(Color.parseColor("#00AACC"))
+                }
+                threat.signalTypes.any { PayShieldEdgeInitializer.isSignalActive(it) } -> {
+                    statusView.text = "● ACTIVE"
+                    statusView.setTextColor(Color.parseColor("#FF2222"))
+                    riskView.text = threat.riskScore.toString()
+                    riskView.setTextColor(Color.parseColor("#FF2222"))
+                }
+                else -> {
+                    statusView.text = "● Safe"
+                    statusView.setTextColor(Color.parseColor("#00CC55"))
+                    riskView.text = "—"
+                    riskView.setTextColor(Color.parseColor("#334455"))
+                }
             }
         }
     }
 
     private fun showIdentityThreatDetail(threat: IdentityThreatRegistry.Threat) {
         val active = threat.signalTypes.any { PayShieldEdgeInitializer.isSignalActive(it) }
-        val statusLine   = if (active) "● ACTIVE  —  risk score: ${threat.riskScore} / 100" else "● Safe  —  no active signals"
+        val statusLine = when {
+            threat.architectureProtected -> "🛡 Protected — guaranteed by architecture (KeyStore TEE / NGINX gateway)"
+            active                       -> "● ACTIVE  —  risk score: ${threat.riskScore} / 100"
+            else                         -> "● Safe  —  no active signals"
+        }
         val activeSignals = threat.signalTypes
             .filter { PayShieldEdgeInitializer.isSignalActive(it) }
             .joinToString("\n  ") { "● $it" }
