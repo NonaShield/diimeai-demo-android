@@ -157,7 +157,7 @@ class ScenarioListFragment : Fragment() {
             emptyList(),                   // 0: Device / Runtime Integrity — live sensor table
             emptyList(),                   // 1: Identity & Account Fraud — live identity table
             emptyList(),                   // 2: Behavioral & Biometric — live 40-param baseline table
-            listOf(6, 11, 14, 16, 19),     // 3: Network / Transaction Fraud
+            emptyList(),                   // 3: Network / Transaction Fraud — live NGINX threat table
             listOf(1, 2, 17),              // 4: Platform Verification
         )
     }
@@ -169,6 +169,7 @@ class ScenarioListFragment : Fragment() {
     // for that edge case while eliminating the previous 1s busy-poll entirely.
     private var safetyNetJob: Job? = null
     private var identitySafetyNetJob: Job? = null
+    private var networkSafetyNetJob: Job? = null
     private val sensorStatusViews = mutableMapOf<Int, TextView>()
     // Triple<statusView, riskScoreView, threat> for each identity threat row
     private data class IdentityRowView(
@@ -177,6 +178,12 @@ class ScenarioListFragment : Fragment() {
         val threat: IdentityThreatRegistry.Threat,
     )
     private val identityRowViews = mutableMapOf<Int, IdentityRowView>()
+    private data class NetworkRowView(
+        val statusView: TextView,
+        val riskView: TextView,
+        val threat: NetworkThreatRegistry.NetworkThreat,
+    )
+    private val networkRowViews = mutableMapOf<Int, NetworkRowView>()
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     // ── Tab 2: behavioural biometrics live refresh ────────────────────────────
@@ -207,6 +214,10 @@ class ScenarioListFragment : Fragment() {
         mainHandler.post { refreshIdentityStatuses() }
     }
 
+    private val networkStateListener = SignalStateListener { _, _ ->
+        mainHandler.post { refreshNetworkStatuses() }
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -232,6 +243,11 @@ class ScenarioListFragment : Fragment() {
                 buildBehaviourBiometricsTable(container)
                 startBehaviourRefreshLoop()
             }
+            3 -> {
+                buildNetworkThreatTable(container)
+                PayShieldEdgeInitializer.addSignalStateListener(networkStateListener)
+                startNetworkSafetyNetLoop()
+            }
             else -> buildCards(tabIndex, container)
         }
     }
@@ -251,6 +267,10 @@ class ScenarioListFragment : Fragment() {
                 refreshBehaviourTable()
                 if (behaviourRefreshJob?.isActive != true) startBehaviourRefreshLoop()
             }
+            3 -> {
+                refreshNetworkStatuses()
+                if (networkSafetyNetJob?.isActive != true) startNetworkSafetyNetLoop()
+            }
         }
     }
 
@@ -259,6 +279,7 @@ class ScenarioListFragment : Fragment() {
         safetyNetJob?.cancel()
         identitySafetyNetJob?.cancel()
         behaviourRefreshJob?.cancel()
+        networkSafetyNetJob?.cancel()
     }
 
     override fun onDestroyView() {
@@ -266,10 +287,13 @@ class ScenarioListFragment : Fragment() {
         safetyNetJob?.cancel()
         identitySafetyNetJob?.cancel()
         behaviourRefreshJob?.cancel()
+        networkSafetyNetJob?.cancel()
         PayShieldEdgeInitializer.removeSignalStateListener(raspStateListener)
         PayShieldEdgeInitializer.removeSignalStateListener(identityStateListener)
+        PayShieldEdgeInitializer.removeSignalStateListener(networkStateListener)
         sensorStatusViews.clear()
         identityRowViews.clear()
+        networkRowViews.clear()
         behaviourRowViews.clear()
         behaviourChipMatch = null
         behaviourChipDrift = null
@@ -879,6 +903,287 @@ class ScenarioListFragment : Fragment() {
                 else Color.parseColor("#CCDDEE")
             )
         }
+    }
+
+    // ── Tab 3: live 5-column Network threat table (NGINX Lua pipeline) ──────────
+
+    private fun buildNetworkThreatTable(container: LinearLayout) {
+        networkRowViews.clear()
+        val ctx = requireContext()
+
+        // Banner
+        val banner = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#050F1A"))
+            setPadding(16, 14, 16, 14)
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+        }
+        banner.addView(TextView(ctx).apply {
+            text = "NonaShield Network Defense Layer"
+            textSize = 12.5f
+            setTextColor(Color.parseColor("#4FC3F7"))
+            typeface = Typeface.DEFAULT_BOLD
+        })
+        banner.addView(TextView(ctx).apply {
+            text = "5-phase NGINX/OpenResty pipeline  ·  17 Lua enforcement modules" +
+                   "  ·  Redis nonce dedup  ·  MaxMind GeoIP2"
+            textSize = 8f
+            setTextColor(Color.parseColor("#1A4A6A"))
+            setPadding(0, 5, 0, 0)
+            maxLines = 2
+        })
+        container.addView(banner)
+
+        container.addView(View(ctx).apply {
+            setBackgroundColor(Color.parseColor("#0D3355"))
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 2)
+        })
+
+        // Column header
+        val header = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(Color.parseColor("#040D14"))
+            setPadding(10, 10, 10, 10)
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+        }
+        fun hCell(text: String, wt: Float, align: Int = android.view.Gravity.START) =
+            TextView(ctx).apply {
+                this.text = text
+                textSize = 9f
+                setTextColor(Color.parseColor("#5577AA"))
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = align
+                layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, wt)
+            }
+        header.addView(hCell("NETWORK THREAT  /  NGINX LUA MODULE", 3.0f))
+        header.addView(hCell("SEV", 0.65f, android.view.Gravity.CENTER))
+        header.addView(hCell("STATUS", 0.95f, android.view.Gravity.CENTER))
+        header.addView(hCell("RISK", 0.55f, android.view.Gravity.CENTER))
+        header.addView(hCell("ACTION", 0.85f, android.view.Gravity.CENTER))
+        container.addView(header)
+
+        container.addView(View(ctx).apply {
+            setBackgroundColor(Color.parseColor("#0D2233"))
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 1)
+        })
+
+        var rowIndex = 0
+        NetworkThreatRegistry.ALL_GROUPS.forEach { group ->
+            // Group label row
+            container.addView(LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setBackgroundColor(Color.parseColor("#060A0F"))
+                setPadding(10, 7, 10, 7)
+                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+                addView(TextView(ctx).apply {
+                    text = "▸  ${group.label}"
+                    textSize = 8f
+                    setTextColor(Color.parseColor(group.colorHex))
+                    typeface = Typeface.DEFAULT_BOLD
+                    alpha = 0.85f
+                })
+            })
+
+            group.threats.forEach { threat ->
+                val idx = rowIndex++
+                val row = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    setPadding(10, 14, 10, 14)
+                    setBackgroundColor(
+                        if (idx % 2 == 0) Color.parseColor("#060E16") else Color.parseColor("#040A11")
+                    )
+                    layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+                }
+
+                // Column 1: threat name + Lua module subtitle
+                val nameCol = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 3.0f)
+                }
+                nameCol.addView(TextView(ctx).apply {
+                    text = threat.name
+                    textSize = 11f
+                    setTextColor(Color.parseColor("#E8E8FF"))
+                    typeface = Typeface.DEFAULT_BOLD
+                    maxLines = 2
+                    ellipsize = TextUtils.TruncateAt.END
+                })
+                nameCol.addView(TextView(ctx).apply {
+                    text = threat.protectionLine
+                    textSize = 8f
+                    setTextColor(Color.parseColor("#334466"))
+                    setPadding(0, 3, 0, 0)
+                    maxLines = 2
+                    ellipsize = TextUtils.TruncateAt.END
+                })
+                nameCol.addView(TextView(ctx).apply {
+                    text = "${threat.threatId}  ·  ${threat.nginxPhase.label}"
+                    textSize = 7.5f
+                    setTextColor(Color.parseColor("#222E3C"))
+                    typeface = Typeface.MONOSPACE
+                    setPadding(0, 2, 0, 0)
+                })
+                row.addView(nameCol)
+
+                // Column 2: severity
+                row.addView(TextView(ctx).apply {
+                    text = threat.severity.label
+                    textSize = 8.5f
+                    setTextColor(Color.parseColor(threat.severity.colorHex))
+                    typeface = Typeface.DEFAULT_BOLD
+                    gravity = android.view.Gravity.CENTER
+                    layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 0.65f)
+                })
+
+                // Column 3: live status
+                val statusView = TextView(ctx).apply {
+                    text = "● ..."
+                    textSize = 8.5f
+                    typeface = Typeface.DEFAULT_BOLD
+                    gravity = android.view.Gravity.CENTER
+                    layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 0.95f)
+                }
+                row.addView(statusView)
+
+                // Column 4: risk score
+                val riskView = TextView(ctx).apply {
+                    text = "—"
+                    textSize = 10f
+                    typeface = Typeface.DEFAULT_BOLD
+                    gravity = android.view.Gravity.CENTER
+                    layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 0.55f)
+                }
+                row.addView(riskView)
+
+                // Column 5: decision badge
+                row.addView(TextView(ctx).apply {
+                    text = threat.decision.label
+                    textSize = 8f
+                    setTextColor(Color.parseColor(threat.decision.colorHex))
+                    typeface = Typeface.DEFAULT_BOLD
+                    gravity = android.view.Gravity.CENTER
+                    layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 0.85f)
+                })
+
+                networkRowViews[idx] = NetworkRowView(statusView, riskView, threat)
+
+                row.isClickable = true
+                row.isFocusable = true
+                row.setOnClickListener { showNetworkThreatDetail(threat) }
+
+                container.addView(row)
+                container.addView(View(ctx).apply {
+                    setBackgroundColor(Color.parseColor("#090F16"))
+                    layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 1)
+                })
+            }
+        }
+
+        // Footer
+        container.addView(View(ctx).apply {
+            setBackgroundColor(Color.parseColor("#0D3355"))
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 2)
+        })
+        container.addView(LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#050F1A"))
+            setPadding(16, 12, 16, 12)
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+            addView(TextView(ctx).apply {
+                text = "Network score: 15% of X-Edge-Risk-Level  ·  BLOCK_THRESHOLD = 60  ·  MAX_RISK_ALLOWED = 40"
+                textSize = 8.5f
+                setTextColor(Color.parseColor("#4FC3F7"))
+                typeface = Typeface.DEFAULT_BOLD
+            })
+            addView(TextView(ctx).apply {
+                text = "NGINX blocks malicious requests before they reach the bank backend or core systems."
+                textSize = 7.5f
+                setTextColor(Color.parseColor("#2A4A6A"))
+                setPadding(0, 5, 0, 0)
+            })
+        })
+
+        refreshNetworkStatuses()
+    }
+
+    private fun startNetworkSafetyNetLoop() {
+        networkSafetyNetJob = lifecycleScope.launch {
+            while (isActive) {
+                delay(30_000L)
+                refreshNetworkStatuses()
+            }
+        }
+    }
+
+    private fun refreshNetworkStatuses() {
+        NetworkThreatRegistry.ALL.forEachIndexed { index, threat ->
+            val rv = networkRowViews[index] ?: return@forEachIndexed
+            val (statusView, riskView) = rv.statusView to rv.riskView
+            val activeSignals = threat.signalTypes.filter { PayShieldEdgeInitializer.isSignalActive(it) }
+            when {
+                threat.architectureProtected -> {
+                    statusView.text = "🛡 Protected"
+                    statusView.setTextColor(Color.parseColor("#00AACC"))
+                    statusView.isClickable = false
+                    statusView.setOnClickListener(null)
+                    riskView.text = "0"
+                    riskView.setTextColor(Color.parseColor("#00AACC"))
+                }
+                activeSignals.isNotEmpty() -> {
+                    statusView.text = "● ACTIVE"
+                    statusView.setTextColor(Color.parseColor("#FF2222"))
+                    statusView.isClickable = false
+                    statusView.setOnClickListener(null)
+                    riskView.text = threat.riskScore.toString()
+                    riskView.setTextColor(Color.parseColor("#FF2222"))
+                }
+                else -> {
+                    statusView.text = "● Safe"
+                    statusView.setTextColor(Color.parseColor("#00CC55"))
+                    statusView.isClickable = false
+                    statusView.setOnClickListener(null)
+                    riskView.text = "—"
+                    riskView.setTextColor(Color.parseColor("#334455"))
+                }
+            }
+        }
+    }
+
+    private fun showNetworkThreatDetail(threat: NetworkThreatRegistry.NetworkThreat) {
+        val activeSignals = threat.signalTypes.filter { PayShieldEdgeInitializer.isSignalActive(it) }
+        val statusLine = when {
+            threat.architectureProtected -> "🛡 Protected — enforced by NGINX/OpenResty edge; always active"
+            activeSignals.isNotEmpty()   -> "● ACTIVE  —  risk score: ${threat.riskScore} / 100"
+            else                         -> "● Safe  —  no active signals"
+        }
+        val allSignals = threat.signalTypes.joinToString("\n  ") { "· $it" }.ifBlank { "(none — server-side only)" }
+
+        val msg = buildString {
+            append("━━━━━━━━━━━━━━━━━━━━━━━━\n")
+            append("${threat.name}\n")
+            append("ID: ${threat.threatId}   Severity: ${threat.severity.label}\n")
+            append("Lua module: ${threat.luaModule}   ${threat.nginxPhase.label}\n")
+            append("━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+            append("STATUS\n  $statusLine\n\n")
+            append("──── How NonaShield Stops This ────\n")
+            append(threat.detailText)
+            append("\n\n")
+            append("──── SDK Signal Correlation ────\n")
+            append("  $allSignals\n\n")
+            append("──── Risk Gate ────\n")
+            append("  Decision on threat active: ${threat.decision.label}\n")
+            append("  Risk score contribution:   ${if (threat.riskScore == 0) "N/A (architecture-protected)" else "${threat.riskScore} / 100"}\n")
+            append("  NGINX enforcement: BLOCK_THRESHOLD=60  MAX_RISK_ALLOWED=40\n\n")
+            append("──── Formula ────\n")
+            append("  Network score (15%) + RASP (60%) + Behaviour (25%) = X-Edge-Risk-Level\n")
+        }
+
+        AlertDialog.Builder(requireContext(), android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Network Defense Detail")
+            .setMessage(msg)
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     private fun showAgenticAdvisory(
