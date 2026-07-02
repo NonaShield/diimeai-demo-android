@@ -614,7 +614,7 @@ class ScenarioListFragment : Fragment() {
             typeface = Typeface.DEFAULT_BOLD
         })
         val tvBaselineInfo = TextView(ctx).apply {
-            text = "Calibrating… — interact with the app to build baseline (10 touch events)"
+            text = "Calibrating… — use the app normally; baseline locks after 15 minutes"
             textSize = 8f
             setTextColor(Color.parseColor("#6A5530"))
             setPadding(0, 4, 0, 0)
@@ -844,10 +844,11 @@ class ScenarioListFragment : Fragment() {
         behaviourChipDrift?.text   = "⚠ $driftCount Drift"
         behaviourChipAnomaly?.text = "✗ $anomalyCount Anomaly"
 
+        val minElapsed = pct * 15 / 100
         behaviourBaselineInfo?.text = if (pct < 100) {
-            "Calibrating $pct%  —  keep interacting; baseline locks after 10 touches"
+            "Calibrating $pct% ($minElapsed / 15 min)  —  baseline locks at 15 min"
         } else {
-            "Baseline locked  ·  $liveCount live sensors active  ·  refreshing every 3 s"
+            "✓ Baseline locked  ·  $liveCount live sensors active  ·  refreshing every 3 s"
         }
 
         params.forEachIndexed { i, param ->
