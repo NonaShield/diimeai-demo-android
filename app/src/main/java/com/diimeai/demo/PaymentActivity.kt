@@ -251,110 +251,6 @@ class PaymentActivity : AppCompatActivity() {
     // Live RASP threat ticker
     // ─────────────────────────────────────────────────────────────────────────
 
-    private val FRIENDLY_NAMES = mapOf(
-        // ── Emulator / virtual environment ───────────────────────────────────
-        "EMULATOR_FINGERPRINT"         to "Emulator Detected",
-        "EMULATOR_DETECTED"            to "Emulator Detected",        // FreeRASP
-        // ── Screen / display ──────────────────────────────────────────────────
-        "SCREEN_RECORDING_ACTIVE"      to "Screen Recording Active",
-        "SCREEN_RECORDING"             to "Screen Recording Active",   // FreeRASP
-        "COMPANION_SCREEN_SHARE_ACTIVE" to "Screen Shared via Companion App",  // advisory
-        "SCREEN_MIRRORING"             to "Screen Mirroring",
-        "REMOTE_DESKTOP"               to "Remote Desktop Active",
-        "SCREENSHOT"                   to "Screenshot Taken",
-        // ── Build / integrity ─────────────────────────────────────────────────
-        "ROGUE_BUILD_DETECTED"         to "Debug / Sideloaded Build",
-        "APP_REPACKAGED"               to "App Tampered (Repackaged)",
-        "APP_TAMPERING"                to "App Tampered",              // FreeRASP
-        "NATIVE_LIB_TAMPER"           to "Native Library Tampered",
-        "SDK_SELF_TAMPER"              to "SDK Integrity Failure",
-        "APP_VERSION_DOWNGRADE"        to "App Downgrade Detected",
-        // ── Root / hooking ────────────────────────────────────────────────────
-        "ROOT_OR_JAILBREAK"            to "Device Rooted",             // FreeRASP
-        "ROOT_CLOAKING"                to "Root Cloaking (Magisk)",
-        "HOOKING_FRAMEWORK"            to "Hook Framework (Frida/Xposed)",
-        "PTRACE_ATTACHED"              to "Debugger Attached",
-        "DEBUGGER_DETECTED"            to "Debugger Detected",         // FreeRASP
-        "SHELL_CHILD_PROCESS_DETECTED" to "Shell Process Spawned",
-        "SHELL_MAPPED_IN_PROCESS"      to "Shell Mapped in Process",
-        "DANGEROUS_EXECUTABLE_PRESENT" to "Dangerous Executable Found",
-        "SELINUX_DISABLED"             to "SELinux Disabled",
-        // ── Device state ──────────────────────────────────────────────────────
-        "USB_DEBUGGING_ACTIVE"         to "USB Debugging On",
-        "ADB_INSTALL"                  to "ADB Debugging On",
-        "DEVELOPER_OPTIONS_ACTIVE"     to "Developer Options On",
-        "DEVELOPER_MODE"               to "Developer Mode On",         // FreeRASP
-        "ADB_ENABLED"                  to "ADB Enabled",               // FreeRASP
-        "KEYGUARD_NOT_SECURE"          to "No Screen Lock Set",
-        "PASSCODE_NOT_SET"             to "No Passcode Set",           // FreeRASP
-        "HW_KEYSTORE_UNAVAILABLE"      to "No Hardware Keystore",      // FreeRASP
-        "ATTESTATION_NO_CHAIN"         to "Play Integrity Unavailable",
-        "ATTESTATION_UNTRUSTED"        to "Play Integrity Failed",
-        "DEVICE_ANCHOR_MISMATCH"       to "Device Identity Mismatch",
-        "DEVICE_BINDING"               to "Device Binding Changed",    // FreeRASP
-        "DEVICE_ID_CHANGED"            to "Device ID Changed",         // FreeRASP
-        "MULTI_INSTANCE"               to "Multi-Instance Detected",   // FreeRASP
-        "OBFUSCATION_RISK"             to "Obfuscation Risk",          // FreeRASP
-        // ── Network / VPN ─────────────────────────────────────────────────────
-        "VPN_CONFLICT"                 to "VPN Active",
-        "SYSTEM_VPN"                   to "VPN Detected",              // FreeRASP
-        "UNSECURE_WIFI"                to "Unsecured Wi-Fi",           // FreeRASP
-        "TLS_PIN_MISMATCH"             to "TLS Certificate Mismatch",
-        "USER_CA_CERT"                 to "User-Installed CA Cert",
-        "TIME_SPOOFING"                to "System Clock Manipulated",  // FreeRASP
-        "MOCK_LOCATION"                to "Mock GPS Location",
-        "LOCATION_SPOOFING"            to "GPS Location Spoofed",      // FreeRASP alias
-        // ── Overlay / deepfake / call ─────────────────────────────────────────
-        "OVERLAY_ATTACK_DETECTED"      to "Overlay / Tapjacking Attack",
-        "MANDATE_HIJACK_CAPABLE"       to "Overlay Mandate Hijack",
-        "DEEPFAKE_PRECONDITION_DETECTED" to "Deepfake Precondition",
-        "VIRTUAL_CAMERA_DETECTED"      to "Virtual Camera Injected",
-        "CONCURRENT_VIDEO_CALL"        to "Concurrent Video Call",
-        "CALL_MERGE_DETECTED"          to "Call Merge Attempt",
-        "BACKGROUND_CAMERA_ACTIVE"     to "Background Camera Active",
-        // ── Automation / bot ──────────────────────────────────────────────────
-        "AUTOMATION_FRAMEWORK"         to "Automation Framework",      // FreeRASP
-        "AUTO_CLICKER_DETECTED"        to "Auto-Clicker / Macro Bot",
-        "ACCESSIBILITY_ABUSE"          to "Accessibility RAT / Bot",
-        "ACCESSIBILITY_GESTURE_INJECT" to "Accessibility Gesture Inject",
-        "BEHAVIORAL_BIOMETRIC_MISMATCH" to "Biometric Mismatch",
-        "SOCIAL_ENGINEERING_BIOMETRIC" to "Coached / Social Engineering",
-        "REFLECTION_PROTECTED_PACKAGE" to "Reflection Attack",
-        "RE_TOOL_THREAD_DETECTED"      to "Reverse Engineering Thread",
-        "CLASS_COUNT_ANOMALY"          to "DEX Class Anomaly",
-        "INJECTED_DEX_IN_PROC_MAPS"    to "Injected DEX Detected",
-        "MASVS_CONTROL_FAILURE"        to "MASVS Security Control Failed",
-        // ── Malware / sideload ────────────────────────────────────────────────
-        "SIDELOAD_DETECTED"            to "Sideloaded / Trojan App",
-        "MALWARE_DETECTED"             to "Malware Detected",          // FreeRASP
-        "UNTRUSTED_INSTALL_SOURCE"     to "Untrusted Install Source",  // FreeRASP
-        "DEVICE_ADMIN_ABUSE"           to "Rogue Device Admin",
-        "SMS_INTERCEPT_CAPABLE"        to "SMS OTP Interception Risk",
-        "APP_CLONE_DETECTED"           to "App Cloned",
-        "APP_CLONE_MALICIOUS"          to "Malicious App Clone",
-        "ROMANCE_SOCIAL_APP_INSTALLED" to "Romance Scam App Installed",
-        "PREDATORY_LOAN_APP"           to "Predatory Loan App",
-        "PREDATORY_LOAN_APP_FULL"      to "Predatory Loan App (High Risk)",
-        // ── NFC / payments ────────────────────────────────────────────────────
-        "ROGUE_HCE_APP"                to "Rogue NFC Payment App",
-        "NFC_RELAY_DETECTED"           to "NFC Relay Attack",
-        "NFC_NO_KEYGUARD"              to "NFC Without Screen Lock",
-        // ── IME / clipboard ───────────────────────────────────────────────────
-        "UNTRUSTED_IME"                to "Untrusted Keyboard",
-        "CLIPBOARD_SCRAPING_RISK"      to "Clipboard Scraping Risk",
-        // ── SIM / identity ────────────────────────────────────────────────────
-        "SIM_DEACTIVATED"              to "SIM Deactivated",
-        "ESIM_OTA_SWAP"                to "eSIM Swap Attack",
-        "ESIM_MANAGER_APP_DETECTED"    to "Suspicious eSIM App",
-        // ── Agentic / scam ────────────────────────────────────────────────────
-        "MESSAGING_APP_PRE_SESSION"    to "Scam Messaging App Active",
-        "NOTIFICATION_TRIGGERED_SESSION" to "Notification-Triggered Session",
-        // ── Storage / misc ────────────────────────────────────────────────────
-        "LOCAL_STORAGE_TAMPERED"       to "Local Storage Tampered",
-        "HIGH_RISK_PERMISSIONS"        to "High-Risk Permissions Active",
-        "ENROLLMENT_BURST"             to "Enrollment Burst (Bot Risk)",
-        "FREERASP_INIT_FAILED"         to "RASP Layer Unavailable",
-    )
 
     // Track last rendered set to avoid rebuilding the list on every 500ms tick
     private var lastRenderedThreatTypes: List<String> = emptyList()
@@ -390,7 +286,7 @@ class PaymentActivity : AppCompatActivity() {
                 "MEDIUM"   -> "🟡"
                 else       -> "🟡"
             }
-            val name = FRIENDLY_NAMES[signal.type] ?: signal.type
+            val name = PayShieldEdgeInitializer.getSignalDisplayName(signal.type)
             val tv = android.widget.TextView(this).apply {
                 text = "$icon  $name"
                 textSize = 12f

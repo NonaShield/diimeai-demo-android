@@ -17,6 +17,7 @@ import androidx.lifecycle.lifecycleScope
 import com.diimeai.demo.network.DiimeApiClient
 import com.diimeai.demo.network.ScenarioResult
 import com.google.android.material.button.MaterialButton
+import com.payshield.sdk.BehaviourCategory
 import com.payshield.sdk.BehaviourParam
 import com.payshield.sdk.BehaviourStatus
 import com.payshield.sdk.PayShieldEdgeInitializer
@@ -619,10 +620,41 @@ class ScenarioListFragment : Fragment() {
 
     // ── Tab 2: live 40-parameter Behavioural Biometrics baseline vs. actual table ─
 
+    // ── UI-only presentation helpers for BehaviourStatus / BehaviourCategory ──
+    // These map SDK enum values to display colors and symbols.
+    // They are pure presentation — no security or detection logic.
+    private fun BehaviourStatus.colorHex() = when (this) {
+        BehaviourStatus.ANOMALY -> "#FF3333"
+        BehaviourStatus.DRIFT   -> "#FFAA00"
+        else                    -> "#00CC55"
+    }
+    private fun BehaviourStatus.symbol() = when (this) {
+        BehaviourStatus.ANOMALY -> "✗"
+        BehaviourStatus.DRIFT   -> "⚠"
+        else                    -> "✓"
+    }
+    private fun BehaviourStatus.displayLabel() = when (this) {
+        BehaviourStatus.ANOMALY -> "Anomaly"
+        BehaviourStatus.DRIFT   -> "Drift"
+        else                    -> "Match"
+    }
+    private fun BehaviourCategory.colorHex() = when (this) {
+        BehaviourCategory.TOUCH     -> "#4FC3F7"
+        BehaviourCategory.KEYSTROKE -> "#CE93D8"
+        BehaviourCategory.MOTION    -> "#80CBC4"
+        BehaviourCategory.SESSION   -> "#FFCC80"
+        BehaviourCategory.CONTEXT   -> "#A5D6A7"
+    }
+
     private fun buildBehaviourBiometricsTable(container: LinearLayout) {
         behaviourRowViews.clear()
         val ctx = requireContext()
-        val reg = BehaviourBiometricsRegistry
+
+        // Pull live data from the SDK — no hardcoded baselines or actual values.
+        val params       = PayShieldEdgeInitializer.getBehaviourParams()
+        val matchCount   = params.count { it.status == BehaviourStatus.MATCH }
+        val driftCount   = params.count { it.status == BehaviourStatus.DRIFT }
+        val anomalyCount = params.count { it.status == BehaviourStatus.ANOMALY }
 
         // ── Summary banner ────────────────────────────────────────────────────────
         val banner = LinearLayout(ctx).apply {
@@ -658,16 +690,18 @@ class ScenarioListFragment : Fragment() {
             typeface = Typeface.DEFAULT_BOLD
             setPadding(0, 0, 20, 0)
         }
-        val cMatch   = chip("✓ ${reg.matchCount} Match",    "#00CC55")
-        val cDrift   = chip("⚠ ${reg.driftCount} Drift",    "#FFAA00")
-        val cAnomaly = chip("✗ ${reg.anomalyCount} Anomaly", "#FF3333")
+        val cMatch   = chip("✓ $matchCount Match",    "#00CC55")
+        val cDrift   = chip("⚠ $driftCount Drift",    "#FFAA00")
+        val cAnomaly = chip("✗ $anomalyCount Anomaly", "#FF3333")
         behaviourChipMatch   = cMatch
         behaviourChipDrift   = cDrift
         behaviourChipAnomaly = cAnomaly
         chipRow.addView(cMatch)
         chipRow.addView(cDrift)
         chipRow.addView(cAnomaly)
-        chipRow.addView(chip("→ Risk: 25 / 100", "#4FC3F7"))
+        val behaviourScore = if (params.isEmpty()) 0
+            else (params.map { it.deviationScore }.average() * 100).toInt()
+        chipRow.addView(chip("→ Risk: $behaviourScore / 100", "#4FC3F7"))
         banner.addView(chipRow)
         container.addView(banner)
 
@@ -704,11 +738,11 @@ class ScenarioListFragment : Fragment() {
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 1)
         })
 
-        // ── Data rows grouped by category ─────────────────────────────────────────
-        var lastCategory: BehaviourBiometricsRegistry.Category? = null
+        // ── Data rows grouped by category — all data from SDK ─────────────────────
+        var lastCategory: BehaviourCategory? = null
         var globalIndex = 0
 
-        BehaviourBiometricsRegistry.ALL.forEach { param ->
+        params.forEach { param ->
             // Category divider row when category changes
             if (param.category != lastCategory) {
                 lastCategory = param.category
@@ -720,7 +754,7 @@ class ScenarioListFragment : Fragment() {
                     addView(TextView(ctx).apply {
                         text = "▸  ${param.category.label}"
                         textSize = 8f
-                        setTextColor(Color.parseColor(param.category.colorHex))
+                        setTextColor(Color.parseColor(param.category.colorHex()))
                         typeface = Typeface.DEFAULT_BOLD
                         alpha = 0.85f
                     })
@@ -729,8 +763,8 @@ class ScenarioListFragment : Fragment() {
 
             globalIndex++
             val rowBg = when (param.status) {
-                BehaviourBiometricsRegistry.Status.ANOMALY -> Color.parseColor("#1A0000")
-                BehaviourBiometricsRegistry.Status.DRIFT   -> Color.parseColor("#12100A")
+                BehaviourStatus.ANOMALY -> Color.parseColor("#1A0000")
+                BehaviourStatus.DRIFT   -> Color.parseColor("#12100A")
                 else -> if (globalIndex % 2 == 0) Color.parseColor("#060E16")
                         else Color.parseColor("#040A11")
             }
@@ -753,7 +787,7 @@ class ScenarioListFragment : Fragment() {
                 layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 0.28f)
             })
 
-            // Parameter name + category dot
+            // Parameter name
             val nameCol = LinearLayout(ctx).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 2.1f)
@@ -762,7 +796,7 @@ class ScenarioListFragment : Fragment() {
                 text = param.name
                 textSize = 10.5f
                 setTextColor(
-                    if (param.status == BehaviourBiometricsRegistry.Status.ANOMALY)
+                    if (param.status == BehaviourStatus.ANOMALY)
                         Color.parseColor("#FF6666")
                     else Color.parseColor("#CCDDEE")
                 )
@@ -785,9 +819,9 @@ class ScenarioListFragment : Fragment() {
             val tvActual = TextView(ctx).apply {
                 text = param.actual
                 textSize = 9.5f
-                setTextColor(Color.parseColor(param.status.colorHex))
+                setTextColor(Color.parseColor(param.status.colorHex()))
                 gravity = android.view.Gravity.CENTER
-                typeface = if (param.status != BehaviourBiometricsRegistry.Status.MATCH)
+                typeface = if (param.status != BehaviourStatus.MATCH)
                     Typeface.DEFAULT_BOLD else Typeface.MONOSPACE
                 layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1.1f)
             }
@@ -795,9 +829,9 @@ class ScenarioListFragment : Fragment() {
 
             // Status
             val tvStatus = TextView(ctx).apply {
-                text = "${param.status.symbol} ${param.status.label}"
+                text = "${param.status.symbol()} ${param.status.displayLabel()}"
                 textSize = 9f
-                setTextColor(Color.parseColor(param.status.colorHex))
+                setTextColor(Color.parseColor(param.status.colorHex()))
                 gravity = android.view.Gravity.CENTER
                 typeface = Typeface.DEFAULT_BOLD
                 layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 0.8f)
@@ -824,17 +858,21 @@ class ScenarioListFragment : Fragment() {
             setPadding(16, 12, 16, 12)
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
             addView(TextView(ctx).apply {
-                text = "Behaviour score: 25 / 100  ·  Contributes 25% to X-Edge-Risk-Level"
+                text = "Behaviour score: $behaviourScore / 100  ·  Contributes 25% to X-Edge-Risk-Level"
                 textSize = 8.5f
                 setTextColor(Color.parseColor("#FFCC80"))
                 typeface = Typeface.DEFAULT_BOLD
             })
-            addView(TextView(ctx).apply {
-                text = "Anomalies flagged: Clipboard spike (16× baseline) · App-switch rate (5× baseline)"
-                textSize = 7.5f
-                setTextColor(Color.parseColor("#AA4444"))
-                setPadding(0, 5, 0, 0)
-            })
+            val anomalyNames = params.filter { it.status == BehaviourStatus.ANOMALY }
+                .joinToString(" · ") { it.name }
+            if (anomalyNames.isNotEmpty()) {
+                addView(TextView(ctx).apply {
+                    text = "Anomalies flagged: $anomalyNames"
+                    textSize = 7.5f
+                    setTextColor(Color.parseColor("#AA4444"))
+                    setPadding(0, 5, 0, 0)
+                })
+            }
             addView(TextView(ctx).apply {
                 text = "Risk formula: RASP (60%) + Behaviour (25%) + Network (15%) → X-Edge-Risk-Level"
                 textSize = 7f
