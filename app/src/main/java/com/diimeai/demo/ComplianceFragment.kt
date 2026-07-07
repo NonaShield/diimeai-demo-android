@@ -63,7 +63,6 @@ class ComplianceFragment : Fragment() {
         )
     }
 
-    private lateinit var api: DiimeApiClient
     private var pollJob: Job? = null
     private var verifyJob: Job? = null
 
@@ -79,8 +78,6 @@ class ComplianceFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?,
     ): View {
-        api = DiimeApiClient(requireContext())
-
         val root = ScrollView(requireContext()).apply {
             layoutParams = ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT)
             setBackgroundColor(0xFFF8F9FA.toInt())
@@ -263,7 +260,7 @@ class ComplianceFragment : Fragment() {
             // Uses PayShieldEdgeInitializer.signIngestPayload() — SDK public interface only.
             // Session JWT is already set by LoginActivity; no login added here.
             val result = withContext(Dispatchers.IO) {
-                api.ingestScenario(scenarioId = 1)
+                DiimeApiClient.ingestScenario(scenarioId = 1)
             }
 
             if (!isActive) return@launch
@@ -287,7 +284,7 @@ class ComplianceFragment : Fragment() {
             btnVerify.isEnabled = true
 
             // Immediate compliance refresh — don't wait for the 5s poll
-            val status = withContext(Dispatchers.IO) { api.getComplianceStatus() }
+            val status = withContext(Dispatchers.IO) { DiimeApiClient.getComplianceStatus() }
             if (isActive) renderStatus(status)
         }
     }
@@ -309,7 +306,7 @@ class ComplianceFragment : Fragment() {
         pollJob?.cancel()
         pollJob = lifecycleScope.launch {
             while (isActive) {
-                val status = withContext(Dispatchers.IO) { api.getComplianceStatus() }
+                val status = withContext(Dispatchers.IO) { DiimeApiClient.getComplianceStatus() }
                 if (isActive) renderStatus(status)
                 delay(POLL_INTERVAL_MS)
             }
