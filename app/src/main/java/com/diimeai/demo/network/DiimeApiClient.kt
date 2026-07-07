@@ -1210,10 +1210,10 @@ object DiimeApiClient {
             ComplianceItem(
                 id = "dynamic_txn_linking", name = "Dynamic Transaction Linking",
                 standard = "PSD2 RTS Art. 4 / RBI FRM 2025",
-                industryGap = "Static context: systems verify the user, not the transaction intent. Even with biometric login, transaction data travels in plain text — vulnerable to Man-in-the-Browser.",
-                nsSolution = "Cryptographic Intent Binding: NonaShield creates a digital envelope around each transaction. The private key signs the hash of the specific amount and payee.",
-                status = "COMPLIANT", statusDetail = "Cryptographic signing active — backend reachable",
-                metric = 0.0, metricLabel = "signed events/hr",
+                industryGap = "Static context: systems verify the user, not the transaction intent. Even with biometric login, transaction data travels in plain text — vulnerable to Man-in-the-Browser replay and substitution attacks.",
+                nsSolution = "Cryptographic Intent Binding: the SDK binds every request with a unique nonce + SHA-256 body hash + hardware-key ECDSA signature. The backend rejects any replayed or substituted request cryptographically.",
+                status = "COMPLIANT", statusDetail = "SDK nonce+hash binding active on all requests",
+                metric = 0.0, metricLabel = "ECDSA-verified requests/24h",
             ),
             ComplianceItem(
                 id = "hardware_backed_possession", name = "Hardware-Backed Possession",
