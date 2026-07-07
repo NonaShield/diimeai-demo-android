@@ -1,6 +1,5 @@
 package com.diimeai.demo
 
-import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
@@ -17,6 +16,7 @@ import androidx.lifecycle.lifecycleScope
 import com.diimeai.demo.network.ComplianceItem
 import com.diimeai.demo.network.ComplianceStatus
 import com.diimeai.demo.network.DiimeApiClient
+import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -27,8 +27,14 @@ import kotlinx.coroutines.withContext
 /**
  * Real-time compliance tab — replaces the old "Platform" tab.
  *
- * Polls GET /api/v1/dashboard/compliance every 5 s and renders 5 compliance
- * requirement cards with live status badges derived from backend telemetry.
+ * Shows 5 compliance requirement cards, each polling GET /api/v1/dashboard/compliance
+ * every 5 s.  A "Verify Now" button sends a real SDK-signed request through the full
+ * backend pipeline (ingestScenario(1) — Hardware Possession, SESSION_CREATE, ALLOW).
+ * This creates a fresh EvidenceRecord so the compliance counts update immediately.
+ *
+ * No login is added here — the user is already authenticated via LoginActivity
+ * before ScenarioHubActivity is launched. The SDK's public interface
+ * (PayShieldEdgeInitializer.signIngestPayload) does all signing.
  */
 class ComplianceFragment : Fragment() {
 
@@ -38,10 +44,10 @@ class ComplianceFragment : Fragment() {
         private const val POLL_INTERVAL_MS = 5_000L
 
         private val STATUS_COLOR = mapOf(
-            "COMPLIANT"     to 0xFF1B5E20.toInt(),   // deep green
-            "PARTIAL"       to 0xFFE65100.toInt(),   // deep orange
-            "NON_COMPLIANT" to 0xFFB71C1C.toInt(),   // deep red
-            "UNKNOWN"       to 0xFF424242.toInt(),   // grey
+            "COMPLIANT"     to 0xFF1B5E20.toInt(),
+            "PARTIAL"       to 0xFFE65100.toInt(),
+            "NON_COMPLIANT" to 0xFFB71C1C.toInt(),
+            "UNKNOWN"       to 0xFF424242.toInt(),
         )
         private val STATUS_BG = mapOf(
             "COMPLIANT"     to 0xFFE8F5E9.toInt(),
@@ -59,12 +65,14 @@ class ComplianceFragment : Fragment() {
 
     private lateinit var api: DiimeApiClient
     private var pollJob: Job? = null
+    private var verifyJob: Job? = null
 
-    // View references — rebuilt on each poll
-    private lateinit var tvOverallBadge: TextView
-    private lateinit var tvLastUpdated:  TextView
-    private lateinit var tvDataSource:   TextView
-    private lateinit var cardsContainer: LinearLayout
+    private lateinit var tvOverallBadge:  TextView
+    private lateinit var tvLastUpdated:   TextView
+    private lateinit var tvDataSource:    TextView
+    private lateinit var cardsContainer:  LinearLayout
+    private lateinit var tvVerifyResult:  TextView
+    private lateinit var btnVerify:       MaterialButton
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -85,11 +93,26 @@ class ComplianceFragment : Fragment() {
             setPadding(p, p, p, p)
         }
 
-        // ── Header ────────────────────────────────────────────────────────────
+        page.addView(buildHeader())
+        page.addView(buildVerifyCard())
+
+        cardsContainer = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+        }
+        page.addView(cardsContainer)
+
+        root.addView(page)
+        return root
+    }
+
+    // ── Header (dark card: title + overall status) ────────────────────────────
+
+    private fun buildHeader(): LinearLayout {
         val header = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
-                it.bottomMargin = dp(16)
+                it.bottomMargin = dp(12)
             }
             setBackgroundColor(0xFF0D1117.toInt())
             val p = dp(16)
@@ -168,18 +191,108 @@ class ComplianceFragment : Fragment() {
         header.addView(tvSubtitle)
         header.addView(overallRow)
         header.addView(tvDataSource)
+        return header
+    }
 
-        // ── Cards container ───────────────────────────────────────────────────
-        cardsContainer = LinearLayout(requireContext()).apply {
+    // ── Live Payment Demo card ────────────────────────────────────────────────
+
+    private fun buildVerifyCard(): LinearLayout {
+        val card = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
+                it.bottomMargin = dp(12)
+            }
+            setBackgroundColor(0xFF0D1117.toInt())
+            elevation = dp(3).toFloat()
+            val p = dp(16)
+            setPadding(p, p, p, p)
+        }
+
+        val tvCardTitle = TextView(requireContext()).apply {
+            text = "Live Payment Demo"
+            textSize = 15f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(0xFFFFFFFF.toInt())
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
+                it.bottomMargin = dp(6)
+            }
+        }
+
+        val tvDesc = TextView(requireContext()).apply {
+            text = "Tap to send a real payment through the NonaShield cryptographic pipeline. Your device's hardware key seals the payment — the backend verifies the seal before approving. Watch all 5 compliance indicators update live."
+            textSize = 13f
+            setTextColor(0xFFBDBDBD.toInt())
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
+                it.bottomMargin = dp(14)
+            }
+        }
+
+        btnVerify = MaterialButton(requireContext()).apply {
+            text = "Send Secure Payment"
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
+                it.bottomMargin = dp(10)
+            }
+            setOnClickListener { onVerifyClicked() }
+        }
+
+        tvVerifyResult = TextView(requireContext()).apply {
+            text = ""
+            textSize = 13f
+            setTypeface(null, Typeface.BOLD)
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
         }
 
-        page.addView(header)
-        page.addView(cardsContainer)
-        root.addView(page)
-        return root
+        card.addView(tvCardTitle)
+        card.addView(tvDesc)
+        card.addView(btnVerify)
+        card.addView(tvVerifyResult)
+        return card
     }
+
+    private fun onVerifyClicked() {
+        verifyJob?.cancel()
+        verifyJob = lifecycleScope.launch {
+            btnVerify.isEnabled = false
+            btnVerify.text = "Processing payment…"
+            tvVerifyResult.text = "Sealing with hardware key…"
+            tvVerifyResult.setTextColor(0xFF9E9E9E.toInt())
+
+            // ingestScenario(1) = Hardware Possession, SESSION_CREATE, ALLOW, risk=5.
+            // Uses PayShieldEdgeInitializer.signIngestPayload() — SDK public interface only.
+            // Session JWT is already set by LoginActivity; no login added here.
+            val result = withContext(Dispatchers.IO) {
+                api.ingestScenario(scenarioId = 1)
+            }
+
+            if (!isActive) return@launch
+
+            if (result.fromSimulation) {
+                // Fallback — SDK couldn't sign (SDK not initialized or device issue)
+                tvVerifyResult.text = "⚠ Could not complete — ensure SDK is initialized"
+                tvVerifyResult.setTextColor(0xFFE65100.toInt())
+            } else {
+                val approved = result.decision == "ALLOW"
+                tvVerifyResult.text = if (approved)
+                    "✓  Payment Approved  —  Sealed & Verified in ${result.rttMs}ms"
+                else
+                    "✗  Payment ${result.decision}  —  ${result.rttMs}ms"
+                tvVerifyResult.setTextColor(
+                    if (approved) 0xFF4CAF50.toInt() else 0xFFEF5350.toInt()
+                )
+            }
+
+            btnVerify.text = "Send Secure Payment"
+            btnVerify.isEnabled = true
+
+            // Immediate compliance refresh — don't wait for the 5s poll
+            val status = withContext(Dispatchers.IO) { api.getComplianceStatus() }
+            if (isActive) renderStatus(status)
+        }
+    }
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     override fun onResume() {
         super.onResume()
@@ -189,6 +302,7 @@ class ComplianceFragment : Fragment() {
     override fun onPause() {
         super.onPause()
         pollJob?.cancel()
+        verifyJob?.cancel()
     }
 
     private fun startPolling() {
@@ -202,10 +316,11 @@ class ComplianceFragment : Fragment() {
         }
     }
 
-    private fun renderStatus(status: ComplianceStatus) {
-        val ctx = context ?: return
+    // ── Render ────────────────────────────────────────────────────────────────
 
-        // Update header badges
+    private fun renderStatus(status: ComplianceStatus) {
+        context ?: return
+
         val oc = STATUS_COLOR[status.overallStatus] ?: STATUS_COLOR["UNKNOWN"]!!
         tvOverallBadge.text = STATUS_LABEL[status.overallStatus] ?: status.overallStatus
         tvOverallBadge.setBackgroundColor(oc)
@@ -213,10 +328,8 @@ class ComplianceFragment : Fragment() {
         tvDataSource.text = if (status.dataSource == "live") "● Live data" else "○ ${status.dataSource}"
         tvDataSource.setTextColor(if (status.dataSource == "live") 0xFF4CAF50.toInt() else 0xFFFF9800.toInt())
 
-        // Rebuild all cards
         cardsContainer.removeAllViews()
-
-        status.items.forEachIndexed { idx, item ->
+        status.items.forEach { item ->
             val card = buildCard(item)
             val params = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
                 it.bottomMargin = dp(12)
@@ -224,6 +337,8 @@ class ComplianceFragment : Fragment() {
             cardsContainer.addView(card, params)
         }
     }
+
+    // ── Compliance card ───────────────────────────────────────────────────────
 
     private fun buildCard(item: ComplianceItem): LinearLayout {
         val statusColor = STATUS_COLOR[item.status] ?: STATUS_COLOR["UNKNOWN"]!!
@@ -238,7 +353,7 @@ class ComplianceFragment : Fragment() {
             setPadding(p, p, p, p)
         }
 
-        // ── Card header row ───────────────────────────────────────────────────
+        // Name row + status badge
         val headerRow = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
@@ -267,7 +382,7 @@ class ComplianceFragment : Fragment() {
         headerRow.addView(tvName)
         headerRow.addView(tvStatus)
 
-        // ── Standard badge ────────────────────────────────────────────────────
+        // Regulatory standard
         val tvStandard = TextView(requireContext()).apply {
             text = item.standard
             textSize = 11f
@@ -277,25 +392,21 @@ class ComplianceFragment : Fragment() {
             }
         }
 
-        // ── Industry gap section ──────────────────────────────────────────────
+        // Problem / Solution sections
         val gapSection = buildSectionBox(
-            label       = "THE PROBLEM",
-            labelColor  = 0xFFB71C1C.toInt(),
-            bgColor     = 0xFFFFF8F8.toInt(),
-            borderColor = 0xFFEF9A9A.toInt(),
-            body        = item.industryGap,
+            label      = "THE PROBLEM",
+            labelColor = 0xFFB71C1C.toInt(),
+            bgColor    = 0xFFFFF8F8.toInt(),
+            body       = item.industryGap,
         )
-
-        // ── NS solution section ───────────────────────────────────────────────
         val solSection = buildSectionBox(
-            label       = "HOW NONASHIELD FIXES IT",
-            labelColor  = 0xFF1B5E20.toInt(),
-            bgColor     = 0xFFF1F8E9.toInt(),
-            borderColor = 0xFF81C784.toInt(),
-            body        = item.nsSolution,
+            label      = "HOW NONASHIELD FIXES IT",
+            labelColor = 0xFF1B5E20.toInt(),
+            bgColor    = 0xFFF1F8E9.toInt(),
+            body       = item.nsSolution,
         )
 
-        // ── Metric row ────────────────────────────────────────────────────────
+        // Metric row
         val metricRow = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
@@ -336,16 +447,14 @@ class ComplianceFragment : Fragment() {
         card.addView(gapSection)
         card.addView(solSection)
         card.addView(metricRow)
-
         return card
     }
 
     private fun buildSectionBox(
-        label:       String,
-        labelColor:  Int,
-        bgColor:     Int,
-        borderColor: Int,
-        body:        String,
+        label:      String,
+        labelColor: Int,
+        bgColor:    Int,
+        body:       String,
     ): LinearLayout {
         val box = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
