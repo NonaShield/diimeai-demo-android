@@ -279,7 +279,7 @@ class ComplianceFragment : Fragment() {
 
         // ── Industry gap section ──────────────────────────────────────────────
         val gapSection = buildSectionBox(
-            label       = "WHY CURRENT METHODS FAIL",
+            label       = "THE PROBLEM",
             labelColor  = 0xFFB71C1C.toInt(),
             bgColor     = 0xFFFFF8F8.toInt(),
             borderColor = 0xFFEF9A9A.toInt(),
@@ -288,7 +288,7 @@ class ComplianceFragment : Fragment() {
 
         // ── NS solution section ───────────────────────────────────────────────
         val solSection = buildSectionBox(
-            label       = "NONASHIELD CRYPTOGRAPHIC SOLUTION",
+            label       = "HOW NONASHIELD FIXES IT",
             labelColor  = 0xFF1B5E20.toInt(),
             bgColor     = 0xFFF1F8E9.toInt(),
             borderColor = 0xFF81C784.toInt(),
