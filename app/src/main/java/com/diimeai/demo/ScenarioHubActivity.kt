@@ -16,9 +16,9 @@ import com.payshield.sdk.PayShieldEdgeInitializer
  *   1. Identity & Account Fraud
  *   2. Behavioral & Biometric Fraud
  *   3. Network / Transaction Fraud
- *   4. Platform Verification
+ *   4. Compliance (live cryptographic compliance from backend telemetry)
  *
- * Each tab is a [ScenarioListFragment] receiving its tab index.
+ * Tabs 0-3 use [ScenarioListFragment]; tab 4 uses [ComplianceFragment].
  * Fragments are created once and shown/hidden to preserve scroll position.
  */
 class ScenarioHubActivity : AppCompatActivity() {
@@ -29,7 +29,7 @@ class ScenarioHubActivity : AppCompatActivity() {
             "Identity & Account Fraud",
             "Behavioral & Biometric Fraud",
             "Network / Transaction Fraud",
-            "Platform Verification",
+            "Compliance",
         )
 
         private val TAB_MENU_IDS = listOf(
@@ -75,7 +75,8 @@ class ScenarioHubActivity : AppCompatActivity() {
         tvCategoryTitle.text = TAB_TITLES[tabIndex]
 
         val fragment = fragmentCache.getOrPut(tabIndex) {
-            ScenarioListFragment.newInstance(tabIndex)
+            if (tabIndex == 4) ComplianceFragment.newInstance()
+            else ScenarioListFragment.newInstance(tabIndex)
         }
 
         val tx = supportFragmentManager.beginTransaction()

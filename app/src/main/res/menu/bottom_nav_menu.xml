@@ -24,6 +24,6 @@
     <item
         android:id="@+id/tab_platform"
         android:icon="@drawable/ic_tab_trust"
-        android:title="Platform" />
+        android:title="Compliance" />
 
 </menu>
