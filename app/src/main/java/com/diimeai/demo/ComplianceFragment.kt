@@ -20,6 +20,7 @@ import androidx.lifecycle.lifecycleScope
 import com.diimeai.demo.network.ComplianceItem
 import com.diimeai.demo.network.ComplianceStatus
 import com.diimeai.demo.network.DiimeApiClient
+import com.diimeai.demo.network.SealRecord
 import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -489,6 +490,15 @@ Continue to simulate the payment approval flow?
             }
             cardsContainer.addView(card, params)
         }
+
+        // Sealed evidence ledger — shown when backend returns real seal records
+        if (status.recentSeals.isNotEmpty()) {
+            val sealPanel = buildSealPanel(status.recentSeals)
+            val params = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
+                it.bottomMargin = dp(12)
+            }
+            cardsContainer.addView(sealPanel, params)
+        }
     }
 
     // ── Compliance card ───────────────────────────────────────────────────────
@@ -639,6 +649,98 @@ Continue to simulate the payment approval flow?
         box.addView(tvLabel)
         box.addView(tvBody)
         return box
+    }
+
+    private fun buildSealPanel(seals: List<SealRecord>): LinearLayout {
+        val panel = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(0xFF0D1B2A.toInt())
+            val p = dp(14)
+            setPadding(p, p, p, p)
+        }
+
+        val tvHeader = TextView(requireContext()).apply {
+            text = "🔐  Cryptographic Evidence Ledger"
+            textSize = 13f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(0xFF00E5FF.toInt())
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
+                it.bottomMargin = dp(2)
+            }
+        }
+        val tvSub = TextView(requireContext()).apply {
+            text = "Live sealed records from this device — tamper-evident chain"
+            textSize = 11f
+            setTextColor(0xFF78909C.toInt())
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
+                it.bottomMargin = dp(10)
+            }
+        }
+        panel.addView(tvHeader)
+        panel.addView(tvSub)
+
+        seals.forEach { seal ->
+            val row = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.VERTICAL
+                setBackgroundColor(0xFF122030.toInt())
+                val p = dp(10)
+                setPadding(p, p, p, p)
+                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
+                    it.bottomMargin = dp(6)
+                }
+            }
+
+            val statusIcon = if (seal.signatureStatus == "VERIFIED") "✅" else "⬜"
+            val statusColor = if (seal.signatureStatus == "VERIFIED") 0xFF4CAF50.toInt() else 0xFF78909C.toInt()
+
+            val tvStatus = TextView(requireContext()).apply {
+                text = "$statusIcon  ${seal.signatureStatus}  ·  ${seal.algorithm}"
+                textSize = 11f
+                setTypeface(null, Typeface.BOLD)
+                setTextColor(statusColor)
+                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
+                    it.bottomMargin = dp(4)
+                }
+            }
+
+            val tvHash = TextView(requireContext()).apply {
+                text = "Chain hash  ${seal.recordHash}"
+                textSize = 10f
+                setTextColor(0xFFB0BEC5.toInt())
+                typeface = Typeface.MONOSPACE
+                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
+                    it.bottomMargin = dp(2)
+                }
+            }
+
+            val tvSig = TextView(requireContext()).apply {
+                text = if (seal.serverSignature.isNotEmpty())
+                    "Server seal  ${seal.serverSignature}"
+                else
+                    "Server seal  —  (unsigned)"
+                textSize = 10f
+                setTextColor(0xFF90A4AE.toInt())
+                typeface = Typeface.MONOSPACE
+                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
+                    it.bottomMargin = dp(2)
+                }
+            }
+
+            val sealedAtFormatted = seal.sealedAt.replace("T", "  ").replace("Z", "  UTC")
+            val tvTime = TextView(requireContext()).apply {
+                text = "Sealed  $sealedAtFormatted  ·  risk ${seal.riskScore}/100"
+                textSize = 10f
+                setTextColor(0xFF546E7A.toInt())
+            }
+
+            row.addView(tvStatus)
+            row.addView(tvHash)
+            row.addView(tvSig)
+            row.addView(tvTime)
+            panel.addView(row)
+        }
+
+        return panel
     }
 
     private fun dp(value: Int): Int =

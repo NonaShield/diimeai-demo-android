@@ -1191,11 +1191,29 @@ object DiimeApiClient {
                         metricLabel   = it.optString("metric_label"),
                     )
                 }
+                val sealsArr = j.optJSONArray("recent_seals")
+                val recentSeals = if (sealsArr != null) {
+                    (0 until sealsArr.length()).map { i ->
+                        val s = sealsArr.getJSONObject(i)
+                        SealRecord(
+                            id              = s.optInt("id"),
+                            sealedAt        = s.optString("sealed_at"),
+                            recordHash      = s.optString("record_hash"),
+                            recordHashFull  = s.optString("record_hash_full"),
+                            serverSignature = s.optString("server_signature"),
+                            signatureStatus = s.optString("signature_status", "UNSIGNED"),
+                            algorithm       = s.optString("algorithm", "ECDSA_P256_SHA256"),
+                            threatId        = s.optString("threat_id"),
+                            riskScore       = s.optInt("risk_score"),
+                        )
+                    }
+                } else emptyList()
                 ComplianceStatus(
                     overallStatus = j.optString("overall_status", "UNKNOWN"),
                     lastUpdated   = j.optString("last_updated", "now"),
                     dataSource    = j.optString("data_source", "live"),
                     items         = items,
+                    recentSeals   = recentSeals,
                 )
             }
         } catch (e: Exception) {
@@ -1817,11 +1835,24 @@ data class ComplianceItem(
     val metricLabel:  String,
 )
 
+data class SealRecord(
+    val id:              Int,
+    val sealedAt:        String,
+    val recordHash:      String,
+    val recordHashFull:  String,
+    val serverSignature: String,
+    val signatureStatus: String,   // VERIFIED | UNSIGNED
+    val algorithm:       String,
+    val threatId:        String,
+    val riskScore:       Int,
+)
+
 data class ComplianceStatus(
     val overallStatus: String,
     val lastUpdated:   String,
     val dataSource:    String,  // "live" | "fallback" | "db_error"
     val items:         List<ComplianceItem>,
+    val recentSeals:   List<SealRecord> = emptyList(),
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
