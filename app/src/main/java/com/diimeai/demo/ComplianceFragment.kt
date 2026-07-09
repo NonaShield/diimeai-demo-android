@@ -74,10 +74,11 @@ class ComplianceFragment : Fragment() {
     private lateinit var tvLastUpdated:   TextView
     private lateinit var tvDataSource:    TextView
     private lateinit var cardsContainer:  LinearLayout
-    private lateinit var tvVerifyResult:  TextView
-    private lateinit var btnVerify:       MaterialButton
-    private lateinit var etAmount:        EditText
+    private lateinit var tvVerifyResult:   TextView
+    private lateinit var btnVerify:        MaterialButton
+    private lateinit var etAmount:         EditText
     private lateinit var etDescription:   EditText
+    private lateinit var tvAdvisoryBanner: TextView
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -97,6 +98,8 @@ class ComplianceFragment : Fragment() {
         }
 
         page.addView(buildHeader())
+        tvAdvisoryBanner = buildAdvisoryBanner()
+        page.addView(tvAdvisoryBanner)
         page.addView(buildVerifyCard())
 
         cardsContainer = LinearLayout(requireContext()).apply {
@@ -196,6 +199,25 @@ class ComplianceFragment : Fragment() {
         header.addView(tvDataSource)
         return header
     }
+
+    // ── Screen-mirroring advisory banner ─────────────────────────────────────
+
+    private fun buildAdvisoryBanner(): TextView =
+        TextView(requireContext()).apply {
+            text = "⚠  Screen Mirroring Active — WhatsApp Web or display cast detected. " +
+                   "Payment data may be visible to third parties."
+            textSize = 13f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(0xFF4E2600.toInt())
+            setBackgroundColor(0xFFFF8F00.toInt())
+            val ph = dp(14)
+            val pv = dp(10)
+            setPadding(ph, pv, ph, pv)
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
+                it.bottomMargin = dp(12)
+            }
+            visibility = View.GONE
+        }
 
     // ── Live Payment Demo card ────────────────────────────────────────────────
 
@@ -435,6 +457,11 @@ Continue to simulate the payment approval flow?
         pollJob?.cancel()
         pollJob = lifecycleScope.launch {
             while (isActive) {
+                val hasMirroring = synchronized(DiimeApp.recentRaspSignals) {
+                    DiimeApp.recentRaspSignals.any { it.type == "SCREEN_MIRRORING" }
+                }
+                tvAdvisoryBanner.visibility = if (hasMirroring) View.VISIBLE else View.GONE
+
                 val status = withContext(Dispatchers.IO) { DiimeApiClient.getComplianceStatus() }
                 if (isActive) renderStatus(status)
                 delay(POLL_INTERVAL_MS)
