@@ -258,27 +258,30 @@ object DiimeApiClient {
     /**
      * PRODUCTION — exchange a bank-issued JWT for a NonaShield session JWT.
      *
-     * In a real customer integration, call this after the bank IdP login completes:
+     * **Deprecated.** Use [com.payshield.sdk.PayShieldSDK.establishSession] instead —
+     * the SDK now owns this exchange and derives deviceId internally from
+     * [com.payshield.sdk.crypto.DeviceKeyManager], eliminating the need for the
+     * customer app to pass it:
      *
      * ```kotlin
-     * val bankJwt = bankIdp.login(username, password)   // customer's own auth
-     * val result  = DiimeApiClient.establishSession(
-     *     customerJwt = bankJwt,
-     *     userId      = authenticatedUser.id,
-     *     deviceId    = DeviceKeyManager().getStableDeviceId().toString(),
-     *     tenantId    = "your-tenant-id",
-     * )
-     * if (result is SessionResult.Success) {
-     *     PayShieldSDK.setSession(
-     *         userId    = result.userId,
-     *         sessionId = result.sessionId,
-     *         jwt       = result.jwt,   // NonaShield session JWT, NOT the bank JWT
-     *     )
+     * // New single-call production pattern (Dispatchers.IO):
+     * when (val r = PayShieldSDK.establishSession(bankJwt = bankJwt, userId = userId)) {
+     *     is SessionEstablishResult.Success -> { /* proceed */ }
+     *     is SessionEstablishResult.Failure -> { /* show error */ }
      * }
+     * // On token refresh, call it again — SDK atomically replaces the session.
      * ```
      *
-     * This method is a no-op in the demo app (demo uses [login] instead).
+     * This method is a no-op in the demo app (demo uses [login] instead) and is
+     * kept only for reference until integrators have migrated to the SDK method.
      */
+    @Deprecated(
+        message = "Use PayShieldSDK.establishSession(bankJwt, userId) — the SDK derives deviceId automatically.",
+        replaceWith = ReplaceWith(
+            "PayShieldSDK.establishSession(bankJwt = customerJwt, userId = userId)",
+            "com.payshield.sdk.PayShieldSDK"
+        )
+    )
     fun establishSession(
         customerJwt: String,
         userId:      String,
