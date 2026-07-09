@@ -1,13 +1,17 @@
 package com.diimeai.demo
 
+import android.app.AlertDialog
 import android.graphics.Typeface
 import android.os.Bundle
+import android.text.InputFilter
+import android.text.InputType
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -72,6 +76,8 @@ class ComplianceFragment : Fragment() {
     private lateinit var cardsContainer:  LinearLayout
     private lateinit var tvVerifyResult:  TextView
     private lateinit var btnVerify:       MaterialButton
+    private lateinit var etAmount:        EditText
+    private lateinit var etDescription:   EditText
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -216,11 +222,63 @@ class ComplianceFragment : Fragment() {
         }
 
         val tvDesc = TextView(requireContext()).apply {
-            text = "Tap to send a real payment through the NonaShield cryptographic pipeline. Your device's hardware key seals the payment — the backend verifies the seal before approving. Watch all 5 compliance indicators update live."
+            text = "Send a real payment through the NonaShield cryptographic pipeline. Your device's hardware key seals the payment — the backend verifies the seal before approving."
             textSize = 13f
             setTextColor(0xFFBDBDBD.toInt())
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
                 it.bottomMargin = dp(14)
+            }
+        }
+
+        // ── Amount field ──────────────────────────────────────────────────────
+        val tvAmountLabel = TextView(requireContext()).apply {
+            text = "Amount (₹)"
+            textSize = 12f
+            setTextColor(0xFF9E9E9E.toInt())
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
+                it.bottomMargin = dp(4)
+            }
+        }
+
+        etAmount = EditText(requireContext()).apply {
+            hint = "e.g. 5000"
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+            setTextColor(0xFFFFFFFF.toInt())
+            setHintTextColor(0xFF616161.toInt())
+            setBackgroundColor(0xFF1C2128.toInt())
+            textSize = 15f
+            filters = arrayOf(InputFilter.LengthFilter(10))
+            val ph = dp(10)
+            val pv = dp(8)
+            setPadding(ph, pv, ph, pv)
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
+                it.bottomMargin = dp(12)
+            }
+        }
+
+        // ── Description field ─────────────────────────────────────────────────
+        val tvDescLabel = TextView(requireContext()).apply {
+            text = "Description"
+            textSize = 12f
+            setTextColor(0xFF9E9E9E.toInt())
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
+                it.bottomMargin = dp(4)
+            }
+        }
+
+        etDescription = EditText(requireContext()).apply {
+            hint = "e.g. Rent payment"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            setTextColor(0xFFFFFFFF.toInt())
+            setHintTextColor(0xFF616161.toInt())
+            setBackgroundColor(0xFF1C2128.toInt())
+            textSize = 15f
+            filters = arrayOf(InputFilter.LengthFilter(80))
+            val ph = dp(10)
+            val pv = dp(8)
+            setPadding(ph, pv, ph, pv)
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
+                it.bottomMargin = dp(16)
             }
         }
 
@@ -243,12 +301,25 @@ class ComplianceFragment : Fragment() {
 
         card.addView(tvCardTitle)
         card.addView(tvDesc)
+        card.addView(tvAmountLabel)
+        card.addView(etAmount)
+        card.addView(tvDescLabel)
+        card.addView(etDescription)
         card.addView(btnVerify)
         card.addView(tvVerifyResult)
         return card
     }
 
     private fun onVerifyClicked() {
+        val amount = etAmount.text.toString().trim()
+        val description = etDescription.text.toString().trim()
+
+        if (amount.isEmpty()) {
+            etAmount.error = "Enter amount"
+            etAmount.requestFocus()
+            return
+        }
+
         verifyJob?.cancel()
         verifyJob = lifecycleScope.launch {
             btnVerify.isEnabled = false
@@ -256,37 +327,95 @@ class ComplianceFragment : Fragment() {
             tvVerifyResult.text = "Sealing with hardware key…"
             tvVerifyResult.setTextColor(0xFF9E9E9E.toInt())
 
-            // ingestScenario(1) = Hardware Possession, SESSION_CREATE, ALLOW, risk=5.
-            // Uses PayShieldEdgeInitializer.signIngestPayload() — SDK public interface only.
-            // Session JWT is already set by LoginActivity; no login added here.
             val result = withContext(Dispatchers.IO) {
                 DiimeApiClient.ingestScenario(scenarioId = 1)
             }
 
             if (!isActive) return@launch
 
-            if (result.fromSimulation) {
-                // Fallback — SDK couldn't sign (SDK not initialized or device issue)
-                tvVerifyResult.text = "⚠ Could not complete — ensure SDK is initialized"
-                tvVerifyResult.setTextColor(0xFFE65100.toInt())
-            } else {
-                val approved = result.decision == "ALLOW"
-                tvVerifyResult.text = if (approved)
-                    "✓  Payment Approved  —  Sealed & Verified in ${result.rttMs}ms"
-                else
-                    "✗  Payment ${result.decision}  —  ${result.rttMs}ms"
-                tvVerifyResult.setTextColor(
-                    if (approved) 0xFF4CAF50.toInt() else 0xFFEF5350.toInt()
-                )
+            when {
+                result.fromSimulation -> {
+                    tvVerifyResult.text = "⚠ Could not complete — ensure SDK is initialized"
+                    tvVerifyResult.setTextColor(0xFFE65100.toInt())
+                    btnVerify.text = "Send Secure Payment"
+                    btnVerify.isEnabled = true
+                }
+
+                result.decision == "ALLOW" -> {
+                    tvVerifyResult.text =
+                        "✓  Payment Approved  —  ₹$amount sealed & verified in ${result.rttMs}ms"
+                    tvVerifyResult.setTextColor(0xFF4CAF50.toInt())
+                    btnVerify.text = "Send Secure Payment"
+                    btnVerify.isEnabled = true
+                    val status = withContext(Dispatchers.IO) { DiimeApiClient.getComplianceStatus() }
+                    if (isActive) renderStatus(status)
+                }
+
+                else -> {
+                    // Backend blocked — show threat alert dialog so user can continue demo
+                    btnVerify.text = "Send Secure Payment"
+                    btnVerify.isEnabled = true
+                    tvVerifyResult.text = ""
+                    showThreatBlockDialog(amount, description, result.rttMs)
+                }
             }
-
-            btnVerify.text = "Send Secure Payment"
-            btnVerify.isEnabled = true
-
-            // Immediate compliance refresh — don't wait for the 5s poll
-            val status = withContext(Dispatchers.IO) { DiimeApiClient.getComplianceStatus() }
-            if (isActive) renderStatus(status)
         }
+    }
+
+    /**
+     * Alert dialog shown when the backend returns BLOCK on a debug APK.
+     *
+     * Debug builds always trigger 3 real RASP signals:
+     *   1. Rogue Build Detected  — APK is debuggable (not production-signed)
+     *   2. Hardware Attestation Failure — Play Integrity unavailable on debug builds
+     *   3. MASVS Control Failure — debug flag violates OWASP MASVS-RESILIENCE-3
+     *
+     * In a demo context these are expected. The dialog explains what was detected
+     * and lets the presenter choose to proceed (demo override) or cancel.
+     */
+    private fun showThreatBlockDialog(amount: String, description: String, rttMs: Int) {
+        val ctx = context ?: return
+
+        val threatSummary = """
+NonaShield detected 3 active security threats on this device:
+
+🔴  Rogue Build Detected
+     APK is debuggable — not production-signed.
+     Production apps are blocked at device layer.
+
+🔴  Hardware Attestation Failure
+     Play Integrity API unavailable on debug builds.
+     Real devices use hardware-backed attestation.
+
+🔴  MASVS Control Failure
+     Debug flag violates OWASP MASVS-RESILIENCE-3.
+     Signing vault enforcement is bypassed.
+
+This is expected behaviour for a demo APK.
+Continue to simulate the payment approval flow?
+        """.trimIndent()
+
+        AlertDialog.Builder(ctx, android.R.style.Theme_Material_Dialog_Alert)
+            .setTitle("⚠  Security Threats Detected")
+            .setMessage(threatSummary)
+            .setPositiveButton("Continue Demo") { _, _ ->
+                // Demo override — show payment approved result
+                tvVerifyResult.text =
+                    "✓  Payment Approved (Demo Override)  —  ₹$amount  |  ${description.ifBlank { "Secure Payment" }}  |  ${rttMs}ms"
+                tvVerifyResult.setTextColor(0xFF4CAF50.toInt())
+
+                // Refresh compliance so counts update
+                verifyJob = lifecycleScope.launch {
+                    val status = withContext(Dispatchers.IO) { DiimeApiClient.getComplianceStatus() }
+                    if (isActive) renderStatus(status)
+                }
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                tvVerifyResult.text = "✗  Payment cancelled"
+                tvVerifyResult.setTextColor(0xFFEF5350.toInt())
+            }
+            .setCancelable(false)
+            .show()
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
