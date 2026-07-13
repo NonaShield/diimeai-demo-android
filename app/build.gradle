@@ -147,10 +147,11 @@ android {
 dependencies {
     // ── NonaShield SDK ────────────────────────────────────────────────────────
     // CI-built AAR bundled at app/libs/ (from NonaShield/nonashield-sdk CI artifact).
-    // Also declared in mavenLocal() so IDE resolution works when building locally
-    // after running: cd ../payshield-kmp-sdk && ./gradlew :android-sdk:publishToMavenLocal
-    // Resolved via libs/ fileTree first (settings.gradle flatDir), then mavenLocal().
-    implementation(name: 'payshield-android-sdk-1.0.0', ext: 'aar')
+    // fileTree forces content-based cache invalidation — Gradle hashes the file on
+    // every build, so replacing the AAR without renaming it is picked up correctly.
+    // (The old name+ext declaration cached by version string in ~/.gradle/caches/modules-2/
+    // causing stale AAR to be used even after the file on disk was updated.)
+    implementation fileTree(dir: 'libs', include: ['*.aar'])
 
     // No freeRASP-KMP dependency needed — the SDK exposes PayShieldRaspConfig (its own type)
     // at the API boundary. freeRASP-KMP is an internal implementation detail of the SDK AAR.
