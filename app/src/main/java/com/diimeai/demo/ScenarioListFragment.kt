@@ -670,7 +670,7 @@ class ScenarioListFragment : Fragment() {
             typeface = Typeface.DEFAULT_BOLD
         })
         val tvBaselineInfo = TextView(ctx).apply {
-            text = "Calibrating… — use the app normally; baseline locks after 15 minutes"
+            text = "Calibrating… — use the app normally; baseline locks after 1 minute"
             textSize = 8f
             setTextColor(Color.parseColor("#6A5530"))
             setPadding(0, 4, 0, 0)
@@ -728,7 +728,7 @@ class ScenarioListFragment : Fragment() {
             }
         header.addView(hCell("#", 0.28f, android.view.Gravity.CENTER))
         header.addView(hCell("PARAMETER", 2.1f))
-        header.addView(hCell("BASELINE (15 min enrol)", 1.35f, android.view.Gravity.CENTER))
+        header.addView(hCell("BASELINE (1 min enrol)", 1.35f, android.view.Gravity.CENTER))
         header.addView(hCell("ACTUAL", 1.1f, android.view.Gravity.CENTER))
         header.addView(hCell("STATUS", 0.8f, android.view.Gravity.CENTER))
         container.addView(header)
@@ -906,9 +906,9 @@ class ScenarioListFragment : Fragment() {
         behaviourChipDrift?.text   = "⚠ $driftCount Drift"
         behaviourChipAnomaly?.text = "✗ $anomalyCount Anomaly"
 
-        val minElapsed = pct * 15 / 100
+        val minElapsed = pct / 100
         behaviourBaselineInfo?.text = if (pct < 100) {
-            "Calibrating $pct% ($minElapsed / 15 min)  —  baseline locks at 15 min"
+            "Calibrating $pct% ($minElapsed / 1 min)  —  baseline locks at 1 min"
         } else {
             "✓ Baseline locked  ·  $liveCount live sensors active  ·  refreshing every 3 s"
         }
