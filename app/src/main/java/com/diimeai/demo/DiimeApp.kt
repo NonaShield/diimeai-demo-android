@@ -15,7 +15,7 @@ import com.payshield.sdk.behavioral.BehavioralTelemetrySender
 import com.payshield.sdk.PayShieldEdgeInitializer
 import com.payshield.sdk.PayShieldSDK
 import com.payshield.sdk.SdkEnvironment
-import com.payshield.sdk.rasp.PayShieldRaspConfig
+
 import com.payshield.sdk.state.SdkState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -270,11 +270,6 @@ class DiimeApp : Application() {
             backendBaseUrl = BuildConfig.NONASHIELD_BASE_URL,
             environment    = sdkEnvironment,
             tenantId       = "default",
-            freeRaspConfig = PayShieldRaspConfig(
-                watcherMail = "security@diimeai.com",
-                // androidConfig omitted â€” SDK auto-derives packageName + cert hashes
-                isProd      = sdkEnvironment != SdkEnvironment.DEVELOPMENT,
-            ),
         )
 
         // Mark PayShieldSDK as initialized so evaluateAtCheckpoint() works in
