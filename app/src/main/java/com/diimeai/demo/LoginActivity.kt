@@ -1,4 +1,4 @@
-﻿package com.diimeai.demo
+package com.diimeai.demo
 
 import android.content.Intent
 import android.content.res.Configuration
@@ -22,18 +22,18 @@ import kotlinx.coroutines.withContext
  * Login screen.
  *
  * On success:
- *   1. Calls DiimeApiClient.setSession() â€” injects user identity into SessionHolder.
+ *   1. Calls DiimeApiClient.setSession() — injects user identity into SessionHolder.
  *   2. PinningInterceptor now builds X-PayShield-Token with real uid/did/sid.
  *   3. Routes to PaymentActivity.
  *
  * In production: replace the mock login call with your real auth endpoint.
- * The NonaShield SDK is auth-agnostic â€” it protects calls AFTER you have a session.
+ * The NonaShield SDK is auth-agnostic — it protects calls AFTER you have a session.
  *
- * â”€â”€â”€ Behavioral integration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+ * ─── Behavioral integration ───────────────────────────────────────────────────
  *
  * [KeystrokeDynamicsCapture] is attached to all EditText fields in [onResume] and
  * detached in [onPause].  It records timing intervals between keystrokes on the
- * username and password fields â€” capturing typing rhythm that feeds into the
+ * username and password fields — capturing typing rhythm that feeds into the
  * social-engineering (Digital Arrest / Romance Fraud) detection pipeline.
  *
  * [BehavioralCaptureManager] is attached to the root view in [onResume] so every
@@ -43,14 +43,14 @@ import kotlinx.coroutines.withContext
  * to increment the screen_orientation_changes counter in [BehavioralFeatures].
  *
  * Back-press calls [SessionFlowAnalyzer.onBackNavigation] to increment the
- * back_navigation_count counter â€” elevated back navigation correlates with coached
+ * back_navigation_count counter — elevated back navigation correlates with coached
  * / confused users (Romance Fraud scenario).
  */
 class LoginActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLoginBinding
 
-    // â”€â”€ Behavioral SDK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Behavioral SDK ────────────────────────────────────────────────────────
 
     /**
      * Captures keystroke dynamics on the username + password fields.
@@ -59,7 +59,7 @@ class LoginActivity : AppCompatActivity() {
     private val keystrokeDynamics = KeystrokeDynamicsCapture()
 
     /**
-     * Touch capture manager â€” records pressure, velocity, hesitation per gesture.
+     * Touch capture manager — records pressure, velocity, hesitation per gesture.
      * SessionFlowAnalyzer inside tracks inter-gesture intervals and navigation.
      *
      * Session ID uses a pre-login timestamp; the payload is tagged with the real
@@ -89,9 +89,9 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ─────────────────────────────────────────────────────────────────────────
     // Lifecycle
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ─────────────────────────────────────────────────────────────────────────
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -104,26 +104,26 @@ class LoginActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // â”€â”€ Behavioral: attach keystroke and touch capture â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Behavioral: attach keystroke and touch capture ─────────────────────
         // attachToRoot recursively wraps all EditText descendants with timing
-        // listeners â€” captures username and password field typing dynamics.
+        // listeners — captures username and password field typing dynamics.
         keystrokeDynamics.attachToRoot(binding.root)
         // attachTo wraps the root view's OnTouchListener transparently.
         captureManager.attachTo(binding.root)
-        // Mark screen entry â€” starts dwell-time measurement for this screen.
+        // Mark screen entry — starts dwell-time measurement for this screen.
         captureManager.sessionFlowAnalyzer.onScreenTransition()
     }
 
     override fun onPause() {
         super.onPause()
-        // â”€â”€ Behavioral: detach to avoid leaking listeners after screen exit â”€â”€â”€â”€
+        // ── Behavioral: detach to avoid leaking listeners after screen exit ────
         keystrokeDynamics.detachFromRoot()
         captureManager.detachFrom(binding.root)
     }
 
     /**
      * Called when the device is rotated (requires android:configChanges="orientation|screenSize"
-     * in AndroidManifest.xml â€” the activity is NOT recreated on rotation).
+     * in AndroidManifest.xml — the activity is NOT recreated on rotation).
      *
      * Increments [BehavioralFeatures.screenOrientationChanges] which feeds into the
      * backend's orientation_change_count field in BehavioralFeaturesPayload.
@@ -136,7 +136,7 @@ class LoginActivity : AppCompatActivity() {
     /**
      * Intercept system back press to record it in SessionFlowAnalyzer.
      *
-     * [BehavioralFeatures.backtrackCount] is incremented â€” elevated backtracking
+     * [BehavioralFeatures.backtrackCount] is incremented — elevated backtracking
      * on the login screen correlates with hesitant / coached user behaviour.
      */
     @Deprecated("Deprecated in Java")
@@ -146,9 +146,9 @@ class LoginActivity : AppCompatActivity() {
         super.onBackPressed()
     }
 
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ─────────────────────────────────────────────────────────────────────────
     // Login flow
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ─────────────────────────────────────────────────────────────────────────
 
     private fun attemptLogin() {
         val username = binding.etUsername.text.toString().trim()
@@ -166,7 +166,7 @@ class LoginActivity : AppCompatActivity() {
         try {
             EdgeRiskEnforcer.assertAllowed()
         } catch (e: SecurityException) {
-            Toast.makeText(this, "â›” Login blocked â€” security risk detected", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "⛔ Login blocked — security risk detected", Toast.LENGTH_LONG).show()
             return
         }
 
@@ -198,7 +198,7 @@ class LoginActivity : AppCompatActivity() {
         val deviceId = DiimeApp.enrollmentState?.deviceId
             ?: PayShieldSDK.getStableDeviceId()
 
-        // Inject session into NonaShield â€” PinningInterceptor picks it up immediately.
+        // Inject session into NonaShield — PinningInterceptor picks it up immediately.
         DiimeApiClient.setSession(
             userId    = result.userId,
             deviceId  = deviceId,
@@ -208,7 +208,7 @@ class LoginActivity : AppCompatActivity() {
 
         Toast.makeText(this, "Welcome, ${result.userId}!", Toast.LENGTH_SHORT).show()
 
-        // â”€â”€ Behavioral: record screen transition (Login â†’ Payment) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Behavioral: record screen transition (Login → Payment) ─────────────
         // Records the dwell time on the login screen in SessionFlowAnalyzer.
         captureManager.sessionFlowAnalyzer.onScreenTransition()
 

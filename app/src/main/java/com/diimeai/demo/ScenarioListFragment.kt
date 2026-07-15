@@ -1,4 +1,4 @@
-﻿package com.diimeai.demo
+package com.diimeai.demo
 
 import android.graphics.Color
 import android.graphics.Typeface
@@ -52,118 +52,118 @@ class ScenarioListFragment : Fragment() {
         )
 
         val ALL_SCENARIOS: Map<Int, ScenarioMeta> = mapOf(
-            1  to ScenarioMeta(1,  "ðŸ”", "Hardware Possession",
+            1  to ScenarioMeta(1,  "🔐", "Hardware Possession",
                 "DEVICE_ATTESTATION",
-                "Play Integrity hardware attestation â€” proves the enrolled physical device",
+                "Play Integrity hardware attestation — proves the enrolled physical device",
                 5, "ALLOW", "SESSION_CREATE"),
 
-            2  to ScenarioMeta(2,  "ðŸ“œ", "Non-Repudiation Receipt",
+            2  to ScenarioMeta(2,  "📜", "Non-Repudiation Receipt",
                 "EVIDENCE_CHAIN_VERIFY",
-                "Full audit chain â€” device key signs transaction, evidence stored in S3",
+                "Full audit chain — device key signs transaction, evidence stored in S3",
                 5, "ALLOW", "SESSION_CREATE"),
 
-            3  to ScenarioMeta(3,  "ðŸ“º", "Screen Mirroring Attack",
+            3  to ScenarioMeta(3,  "📺", "Screen Mirroring Attack",
                 "SCREEN_MIRROR_DETECTED",
                 "Unauthorized screen capture / sharing while app is in foreground",
                 87, "BLOCK", "PAYMENT"),
 
-            4  to ScenarioMeta(4,  "ðŸ§ ", "Behavioral Biometrics",
+            4  to ScenarioMeta(4,  "🧠", "Behavioral Biometrics",
                 "BIOMETRIC_ANOMALY",
-                "Typing rhythm, swipe pressure, touch size â€” anomaly against enrolled baseline",
+                "Typing rhythm, swipe pressure, touch size — anomaly against enrolled baseline",
                 55, "STEP_UP", "PAYMENT"),
 
-            5  to ScenarioMeta(5,  "ðŸ›¡", "Device RASP (38 sensors)",
+            5  to ScenarioMeta(5,  "🛡", "Device RASP (38 sensors)",
                 "RASP_THREAT_DETECTED",
                 "Root/jailbreak, hook frameworks (Frida/Xposed), debugger, emulator, Magisk",
                 100, "BLOCK", "PAYMENT"),
 
-            6  to ScenarioMeta(6,  "ðŸ•¸", "Mule Account Network",
+            6  to ScenarioMeta(6,  "🕸", "Mule Account Network",
                 "MULE_ACCOUNT_SIGNAL",
-                "Graph-based detection â€” recipient account part of known mule network",
+                "Graph-based detection — recipient account part of known mule network",
                 82, "BLOCK", "PAYMENT"),
 
-            7  to ScenarioMeta(7,  "ðŸ¤–", "Bot Attack / Emulator",
+            7  to ScenarioMeta(7,  "🤖", "Bot Attack / Emulator",
                 "BOT_EMULATOR_DETECTED",
                 "Google Play Integrity CTS failure, emulator fingerprint, automated touch injection",
                 98, "BLOCK", "LOGIN"),
 
-            8  to ScenarioMeta(8,  "ðŸ“±", "SIM Swap Fraud",
+            8  to ScenarioMeta(8,  "📱", "SIM Swap Fraud",
                 "SIM_SWAP_SIGNAL",
                 "SIM operator/IMSI change detected since last session; triggers step-up auth",
                 95, "BLOCK", "OTP"),
 
-            9  to ScenarioMeta(9,  "ðŸš”", "Digital Arrest Scam",
+            9  to ScenarioMeta(9,  "🚔", "Digital Arrest Scam",
                 "DIGITAL_ARREST_SIGNAL",
-                "Victim coerced by fake authority â€” active video call + prolonged session",
+                "Victim coerced by fake authority — active video call + prolonged session",
                 100, "BLOCK", "PAYMENT"),
 
-            10 to ScenarioMeta(10, "ðŸ’°", "Fake Loan App Extortion",
+            10 to ScenarioMeta(10, "💰", "Fake Loan App Extortion",
                 "PREDATORY_LOAN_SIGNAL",
-                "Accessibility abuse by predatory app â€” SMS/contacts/call-log permissions cluster",
+                "Accessibility abuse by predatory app — SMS/contacts/call-log permissions cluster",
                 68, "STEP_UP", "KYC"),
 
-            11 to ScenarioMeta(11, "ðŸ“¡", "Ghost Tapping / NFC Abuse",
+            11 to ScenarioMeta(11, "📡", "Ghost Tapping / NFC Abuse",
                 "NFC_FRAUD_SIGNAL",
-                "Relay attack via NFC proxy â€” transaction origin doesn't match physical location",
+                "Relay attack via NFC proxy — transaction origin doesn't match physical location",
                 83, "BLOCK", "PAYMENT"),
 
-            12 to ScenarioMeta(12, "â˜£", "Malicious APK Injection",
+            12 to ScenarioMeta(12, "☣", "Malicious APK Injection",
                 "MALICIOUS_APK_SIGNAL",
                 "Repackaged/side-loaded APK, certificate mismatch, overlay abuse",
                 100, "BLOCK", "PAYMENT"),
 
-            13 to ScenarioMeta(13, "ðŸŽ­", "Deepfake KYC Bypass",
+            13 to ScenarioMeta(13, "🎭", "Deepfake KYC Bypass",
                 "DEEPFAKE_KYC_SIGNAL",
-                "AI-generated face during KYC â€” virtual camera, OBS package, frame-rate anomaly",
+                "AI-generated face during KYC — virtual camera, OBS package, frame-rate anomaly",
                 96, "BLOCK", "KYC"),
 
-            14 to ScenarioMeta(14, "ðŸ¦", "NBFC Insider Burst",
+            14 to ScenarioMeta(14, "🏦", "NBFC Insider Burst",
                 "INSIDER_BURST_SIGNAL",
-                "High-velocity approval burst by a single operator â€” insider threat pattern",
+                "High-velocity approval burst by a single operator — insider threat pattern",
                 78, "BLOCK", "PAYMENT"),
 
-            15 to ScenarioMeta(15, "ðŸ’”", "Investment / Romance Scam",
+            15 to ScenarioMeta(15, "💔", "Investment / Romance Scam",
                 "INVESTMENT_SCAM_SIGNAL",
-                "Social engineering pattern â€” victim initiating large transfer to unknown account",
+                "Social engineering pattern — victim initiating large transfer to unknown account",
                 72, "STEP_UP", "PAYMENT"),
 
-            16 to ScenarioMeta(16, "ðŸ¦¹", "Organized Crime Ring",
+            16 to ScenarioMeta(16, "🦹", "Organized Crime Ring",
                 "ORG_CRIME_RING_SIGNAL",
-                "Cross-account graph cluster â€” coordinated fraud ring detected via Neo4j",
+                "Cross-account graph cluster — coordinated fraud ring detected via Neo4j",
                 90, "BLOCK", "PAYMENT"),
 
-            17 to ScenarioMeta(17, "âš¡", "ATL-2027 Autonomous Trust",
+            17 to ScenarioMeta(17, "⚡", "ATL-2027 Autonomous Trust",
                 "ATL_AUTONOMOUS_SIGNAL",
-                "Composite Decision Token â€” all 5 trust layers scored simultaneously",
+                "Composite Decision Token — all 5 trust layers scored simultaneously",
                 0, "ALLOW", "SESSION_CREATE"),
 
-            18 to ScenarioMeta(18, "ðŸ”", "Device Fingerprinting / ATO",
+            18 to ScenarioMeta(18, "🔍", "Device Fingerprinting / ATO",
                 "DEVICE_FINGERPRINT_RISK",
-                "Composite risk: emulator HW, new-device ATO, outdated OS (API 26), VPN â€” " +
+                "Composite risk: emulator HW, new-device ATO, outdated OS (API 26), VPN — " +
                 "Attestation enforced in STAGING/PRODUCTION (Play Integrity + iOS App Attest)",
                 88, "BLOCK", "LOGIN"),
 
-            19 to ScenarioMeta(19, "ðŸ’¸", "Real-time Payment Risk Scoring",
+            19 to ScenarioMeta(19, "💸", "Real-time Payment Risk Scoring",
                 "PAYMENT_RISK_SIGNAL",
-                "â‚¹5L UPI to new beneficiary + geo-velocity 609 km/h (Mumbaiâ†’Delhi) + " +
-                "device trust 42 + 8 payments/7d â€” SDK calls evaluateAtCheckpoint(PAYMENT) " +
+                "₹5L UPI to new beneficiary + geo-velocity 609 km/h (Mumbai→Delhi) + " +
+                "device trust 42 + 8 payments/7d — SDK calls evaluateAtCheckpoint(PAYMENT) " +
                 "automatically; no risk logic in customer app. RBI: 4h hold on first high-value UPI.",
                 72, "STEP_UP", "PAYMENT"),
         )
 
-        // Tab â†’ scenario IDs mapping.
-        // Tab 0 â€” live RASP sensor table (buildLiveSensorTable); no simulated cards.
-        // Tab 1 â€” live Identity threat defense table (buildIdentityThreatTable); no simulated cards.
+        // Tab → scenario IDs mapping.
+        // Tab 0 — live RASP sensor table (buildLiveSensorTable); no simulated cards.
+        // Tab 1 — live Identity threat defense table (buildIdentityThreatTable); no simulated cards.
         val TAB_SCENARIOS: List<List<Int>> = listOf(
-            emptyList(),                   // 0: Device / Runtime Integrity â€” live sensor table
-            emptyList(),                   // 1: Identity & Account Fraud â€” live identity table
-            emptyList(),                   // 2: Behavioral & Biometric â€” live 40-param baseline table
-            emptyList(),                   // 3: Network / Transaction Fraud â€” live NGINX threat table
+            emptyList(),                   // 0: Device / Runtime Integrity — live sensor table
+            emptyList(),                   // 1: Identity & Account Fraud — live identity table
+            emptyList(),                   // 2: Behavioral & Biometric — live 40-param baseline table
+            emptyList(),                   // 3: Network / Transaction Fraud — live NGINX threat table
             listOf(1, 2, 17),              // 4: Platform Verification
         )
     }
 
-    // Safety-net poll interval â€” covers silent TTL expiry only (a transient signal aging
+    // Safety-net poll interval — covers silent TTL expiry only (a transient signal aging
     // out without an explicit clear() call). The push listener below handles every actual
     // fire/clear transition instantly; this loop just catches the rare case where a TTL
     // lapses with no corresponding OS callback. 30s is far below user-perceptible staleness
@@ -187,7 +187,7 @@ class ScenarioListFragment : Fragment() {
     private val networkRowViews = mutableMapOf<Int, NetworkRowView>()
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
-    // â”€â”€ Tab 2: behavioural biometrics live refresh â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Tab 2: behavioural biometrics live refresh ────────────────────────────
     private var behaviourRefreshJob: Job? = null
     private data class BehaviourRowView(
         val rowLayout: LinearLayout,
@@ -203,7 +203,7 @@ class ScenarioListFragment : Fragment() {
     private var behaviourBaselineInfo: TextView? = null
 
     /**
-     * Pushed by the SDK the instant any RASP signal fires or clears â€” see
+     * Pushed by the SDK the instant any RASP signal fires or clears — see
      * PayShieldSDK.addSignalStateListener(). Runs on whatever thread the
      * triggering signal evaluation happened on, so UI work is marshalled to main.
      */
@@ -302,7 +302,7 @@ class ScenarioListFragment : Fragment() {
         behaviourBaselineInfo = null
     }
 
-    // â”€â”€ Tab 0: live 3-column RASP sensor table (real data, no simulation, no cards) â”€â”€
+    // ── Tab 0: live 3-column RASP sensor table (real data, no simulation, no cards) ──
 
     private fun buildLiveSensorTable(container: LinearLayout) {
         sensorStatusViews.clear()
@@ -396,16 +396,16 @@ class ScenarioListFragment : Fragment() {
             val view = sensorStatusViews[index] ?: return@forEachIndexed
             val active = sensor.signalTypes.any { PayShieldSDK.isSignalActive(it) }
             if (active) {
-                view.text = "â— ACTIVE"
+                view.text = "● ACTIVE"
                 view.setTextColor(Color.parseColor("#FF3333"))
             } else {
-                view.text = "â— Inactive"
+                view.text = "● Inactive"
                 view.setTextColor(Color.parseColor("#00CC55"))
             }
         }
     }
 
-    // â”€â”€ Tab 1: live 5-column Identity threat defense table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Tab 1: live 5-column Identity threat defense table ──────────────────────
 
     private fun buildIdentityThreatTable(container: LinearLayout) {
         identityRowViews.clear()
@@ -425,9 +425,9 @@ class ScenarioListFragment : Fragment() {
             typeface = Typeface.DEFAULT_BOLD
         })
         banner.addView(TextView(ctx).apply {
-            text = "ðŸ”‘ Hardware-bound public key (AndroidKeyStore TEE)" +
-                   "  Â·  ðŸ“‹ Signed headers: X-PS-Nonce, X-PS-Timestamp, X-PS-Request-Hash" +
-                   "  Â·  ðŸ” Runtime threat signals â†’ X-Edge-Risk-Level at NGINX"
+            text = "🔑 Hardware-bound public key (AndroidKeyStore TEE)" +
+                   "  ·  📋 Signed headers: X-PS-Nonce, X-PS-Timestamp, X-PS-Request-Hash" +
+                   "  ·  🔍 Runtime threat signals → X-Edge-Risk-Level at NGINX"
             textSize = 8f
             setTextColor(Color.parseColor("#4A7A8A"))
             setPadding(0, 5, 0, 0)
@@ -524,7 +524,7 @@ class ScenarioListFragment : Fragment() {
 
             // Column 3: status (live, updated by refreshIdentityStatuses)
             val statusView = TextView(ctx).apply {
-                text = "â— ..."
+                text = "● ..."
                 textSize = 8.5f
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = android.view.Gravity.CENTER
@@ -534,7 +534,7 @@ class ScenarioListFragment : Fragment() {
 
             // Column 4: risk score (shown when active)
             val riskView = TextView(ctx).apply {
-                text = "â€”"
+                text = "—"
                 textSize = 10f
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = android.view.Gravity.CENTER
@@ -554,7 +554,7 @@ class ScenarioListFragment : Fragment() {
 
             identityRowViews[index] = IdentityRowView(statusView, riskView, threat)
 
-            // Tap row â†’ show full detail dialog
+            // Tap row → show full detail dialog
             row.isClickable = true
             row.isFocusable = true
             row.setOnClickListener { showIdentityThreatDetail(threat) }
@@ -587,9 +587,9 @@ class ScenarioListFragment : Fragment() {
             val activeSignals = threat.signalTypes.filter { PayShieldSDK.isSignalActive(it) }
             when {
                 threat.architectureProtected -> {
-                    // Protection is structural (KeyStore TEE / NGINX gateway headers) â€”
+                    // Protection is structural (KeyStore TEE / NGINX gateway headers) —
                     // always active regardless of device signal state.
-                    statusView.text = "ðŸ›¡ Protected"
+                    statusView.text = "🛡 Protected"
                     statusView.setTextColor(Color.parseColor("#00AACC"))
                     statusView.isClickable = false
                     statusView.setOnClickListener(null)
@@ -597,9 +597,9 @@ class ScenarioListFragment : Fragment() {
                     riskView.setTextColor(Color.parseColor("#00AACC"))
                 }
                 activeSignals.isNotEmpty() -> {
-                    statusView.text = "â— ACTIVE â–¶"
+                    statusView.text = "● ACTIVE ▶"
                     statusView.setTextColor(Color.parseColor("#FF2222"))
-                    // Tap ACTIVE label â†’ Agentic AI Root Cause Advisory
+                    // Tap ACTIVE label → Agentic AI Root Cause Advisory
                     statusView.isClickable = true
                     statusView.isFocusable = true
                     statusView.setOnClickListener { showAgenticAdvisory(threat, activeSignals) }
@@ -607,31 +607,31 @@ class ScenarioListFragment : Fragment() {
                     riskView.setTextColor(Color.parseColor("#FF2222"))
                 }
                 else -> {
-                    statusView.text = "â— Safe"
+                    statusView.text = "● Safe"
                     statusView.setTextColor(Color.parseColor("#00CC55"))
                     statusView.isClickable = false
                     statusView.setOnClickListener(null)
-                    riskView.text = "â€”"
+                    riskView.text = "—"
                     riskView.setTextColor(Color.parseColor("#334455"))
                 }
             }
         }
     }
 
-    // â”€â”€ Tab 2: live 40-parameter Behavioural Biometrics baseline vs. actual table â”€
+    // ── Tab 2: live 40-parameter Behavioural Biometrics baseline vs. actual table ─
 
-    // â”€â”€ UI-only presentation helpers for BehaviourStatus / BehaviourCategory â”€â”€
+    // ── UI-only presentation helpers for BehaviourStatus / BehaviourCategory ──
     // These map SDK enum values to display colors and symbols.
-    // They are pure presentation â€” no security or detection logic.
+    // They are pure presentation — no security or detection logic.
     private fun BehaviourStatus.colorHex() = when (this) {
         BehaviourStatus.ANOMALY -> "#FF3333"
         BehaviourStatus.DRIFT   -> "#FFAA00"
         else                    -> "#00CC55"
     }
     private fun BehaviourStatus.symbol() = when (this) {
-        BehaviourStatus.ANOMALY -> "âœ—"
-        BehaviourStatus.DRIFT   -> "âš "
-        else                    -> "âœ“"
+        BehaviourStatus.ANOMALY -> "✗"
+        BehaviourStatus.DRIFT   -> "⚠"
+        else                    -> "✓"
     }
     private fun BehaviourStatus.displayLabel() = when (this) {
         BehaviourStatus.ANOMALY -> "Anomaly"
@@ -650,13 +650,13 @@ class ScenarioListFragment : Fragment() {
         behaviourRowViews.clear()
         val ctx = requireContext()
 
-        // Pull live data from the SDK â€” no hardcoded baselines or actual values.
+        // Pull live data from the SDK — no hardcoded baselines or actual values.
         val params       = PayShieldSDK.getBehaviourParams()
         val matchCount   = params.count { it.status == BehaviourStatus.MATCH }
         val driftCount   = params.count { it.status == BehaviourStatus.DRIFT }
         val anomalyCount = params.count { it.status == BehaviourStatus.ANOMALY }
 
-        // â”€â”€ Summary banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Summary banner ────────────────────────────────────────────────────────
         val banner = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#050F1A"))
@@ -670,7 +670,7 @@ class ScenarioListFragment : Fragment() {
             typeface = Typeface.DEFAULT_BOLD
         })
         val tvBaselineInfo = TextView(ctx).apply {
-            text = "Calibratingâ€¦ â€” use the app normally; baseline locks after 1 minute"
+            text = "Calibrating… — use the app normally; baseline locks after 1 minute"
             textSize = 8f
             setTextColor(Color.parseColor("#6A5530"))
             setPadding(0, 4, 0, 0)
@@ -690,9 +690,9 @@ class ScenarioListFragment : Fragment() {
             typeface = Typeface.DEFAULT_BOLD
             setPadding(0, 0, 20, 0)
         }
-        val cMatch   = chip("âœ“ $matchCount Match",    "#00CC55")
-        val cDrift   = chip("âš  $driftCount Drift",    "#FFAA00")
-        val cAnomaly = chip("âœ— $anomalyCount Anomaly", "#FF3333")
+        val cMatch   = chip("✓ $matchCount Match",    "#00CC55")
+        val cDrift   = chip("⚠ $driftCount Drift",    "#FFAA00")
+        val cAnomaly = chip("✗ $anomalyCount Anomaly", "#FF3333")
         behaviourChipMatch   = cMatch
         behaviourChipDrift   = cDrift
         behaviourChipAnomaly = cAnomaly
@@ -701,7 +701,7 @@ class ScenarioListFragment : Fragment() {
         chipRow.addView(cAnomaly)
         val behaviourScore = if (params.isEmpty()) 0
             else (params.map { it.deviationScore }.average() * 100).toInt()
-        chipRow.addView(chip("â†’ Risk: $behaviourScore / 100", "#4FC3F7"))
+        chipRow.addView(chip("→ Risk: $behaviourScore / 100", "#4FC3F7"))
         banner.addView(chipRow)
         container.addView(banner)
 
@@ -710,7 +710,7 @@ class ScenarioListFragment : Fragment() {
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 2)
         })
 
-        // â”€â”€ Column header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Column header ─────────────────────────────────────────────────────────
         val header = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(Color.parseColor("#040D14"))
@@ -738,7 +738,7 @@ class ScenarioListFragment : Fragment() {
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 1)
         })
 
-        // â”€â”€ Data rows grouped by category â€” all data from SDK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Data rows grouped by category — all data from SDK ─────────────────────
         var lastCategory: BehaviourCategory? = null
         var globalIndex = 0
 
@@ -752,7 +752,7 @@ class ScenarioListFragment : Fragment() {
                     setPadding(10, 6, 10, 6)
                     layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
                     addView(TextView(ctx).apply {
-                        text = "â–¸  ${param.category.label}"
+                        text = "▸  ${param.category.label}"
                         textSize = 8f
                         setTextColor(Color.parseColor(param.category.colorHex()))
                         typeface = Typeface.DEFAULT_BOLD
@@ -847,7 +847,7 @@ class ScenarioListFragment : Fragment() {
             })
         }
 
-        // â”€â”€ Footer: behaviour score contribution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Footer: behaviour score contribution ──────────────────────────────────
         container.addView(View(ctx).apply {
             setBackgroundColor(Color.parseColor("#3A2800"))
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 2)
@@ -858,13 +858,13 @@ class ScenarioListFragment : Fragment() {
             setPadding(16, 12, 16, 12)
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
             addView(TextView(ctx).apply {
-                text = "Behaviour score: $behaviourScore / 100  Â·  Contributes 25% to X-Edge-Risk-Level"
+                text = "Behaviour score: $behaviourScore / 100  ·  Contributes 25% to X-Edge-Risk-Level"
                 textSize = 8.5f
                 setTextColor(Color.parseColor("#FFCC80"))
                 typeface = Typeface.DEFAULT_BOLD
             })
             val anomalyNames = params.filter { it.status == BehaviourStatus.ANOMALY }
-                .joinToString(" Â· ") { it.name }
+                .joinToString(" · ") { it.name }
             if (anomalyNames.isNotEmpty()) {
                 addView(TextView(ctx).apply {
                     text = "Anomalies flagged: $anomalyNames"
@@ -874,7 +874,7 @@ class ScenarioListFragment : Fragment() {
                 })
             }
             addView(TextView(ctx).apply {
-                text = "Risk formula: RASP (60%) + Behaviour (25%) + Network (15%) â†’ X-Edge-Risk-Level"
+                text = "Risk formula: RASP (60%) + Behaviour (25%) + Network (15%) → X-Edge-Risk-Level"
                 textSize = 7f
                 setTextColor(Color.parseColor("#445566"))
                 setPadding(0, 4, 0, 0)
@@ -902,15 +902,15 @@ class ScenarioListFragment : Fragment() {
         val anomalyCount = params.count { it.status == BehaviourStatus.ANOMALY }
         val liveCount    = params.count { it.isLive }
 
-        behaviourChipMatch?.text   = "âœ“ $matchCount Match"
-        behaviourChipDrift?.text   = "âš  $driftCount Drift"
-        behaviourChipAnomaly?.text = "âœ— $anomalyCount Anomaly"
+        behaviourChipMatch?.text   = "✓ $matchCount Match"
+        behaviourChipDrift?.text   = "⚠ $driftCount Drift"
+        behaviourChipAnomaly?.text = "✗ $anomalyCount Anomaly"
 
         val minElapsed = pct / 100
         behaviourBaselineInfo?.text = if (pct < 100) {
-            "Calibrating $pct% ($minElapsed / 1 min)  â€”  baseline locks at 1 min"
+            "Calibrating $pct% ($minElapsed / 1 min)  —  baseline locks at 1 min"
         } else {
-            "âœ“ Baseline locked  Â·  $liveCount live sensors active  Â·  refreshing every 3 s"
+            "✓ Baseline locked  ·  $liveCount live sensors active  ·  refreshing every 3 s"
         }
 
         params.forEachIndexed { i, param ->
@@ -919,9 +919,9 @@ class ScenarioListFragment : Fragment() {
             rv.actualView.text   = param.actual
 
             val (statusText, colorHex) = when (param.status) {
-                BehaviourStatus.ANOMALY -> ("âœ— Anomaly" to "#FF3333")
-                BehaviourStatus.DRIFT   -> ("âš  Drift"   to "#FFAA00")
-                else                    -> ("âœ“ Match"   to "#00CC55")
+                BehaviourStatus.ANOMALY -> ("✗ Anomaly" to "#FF3333")
+                BehaviourStatus.DRIFT   -> ("⚠ Drift"   to "#FFAA00")
+                else                    -> ("✓ Match"   to "#00CC55")
             }
             val color = Color.parseColor(colorHex)
             rv.statusView.text = statusText
@@ -943,7 +943,7 @@ class ScenarioListFragment : Fragment() {
         }
     }
 
-    // â”€â”€ Tab 3: live 5-column Network threat table (NGINX Lua pipeline) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Tab 3: live 5-column Network threat table (NGINX Lua pipeline) ──────────
 
     private fun buildNetworkThreatTable(container: LinearLayout) {
         networkRowViews.clear()
@@ -963,8 +963,8 @@ class ScenarioListFragment : Fragment() {
             typeface = Typeface.DEFAULT_BOLD
         })
         banner.addView(TextView(ctx).apply {
-            text = "5-phase NGINX/OpenResty pipeline  Â·  17 Lua enforcement modules" +
-                   "  Â·  Redis nonce dedup  Â·  MaxMind GeoIP2"
+            text = "5-phase NGINX/OpenResty pipeline  ·  17 Lua enforcement modules" +
+                   "  ·  Redis nonce dedup  ·  MaxMind GeoIP2"
             textSize = 8f
             setTextColor(Color.parseColor("#1A4A6A"))
             setPadding(0, 5, 0, 0)
@@ -1014,7 +1014,7 @@ class ScenarioListFragment : Fragment() {
                 setPadding(10, 7, 10, 7)
                 layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
                 addView(TextView(ctx).apply {
-                    text = "â–¸  ${group.label}"
+                    text = "▸  ${group.label}"
                     textSize = 8f
                     setTextColor(Color.parseColor(group.colorHex))
                     typeface = Typeface.DEFAULT_BOLD
@@ -1056,7 +1056,7 @@ class ScenarioListFragment : Fragment() {
                     ellipsize = TextUtils.TruncateAt.END
                 })
                 nameCol.addView(TextView(ctx).apply {
-                    text = "${threat.threatId}  Â·  ${threat.nginxPhase.label}"
+                    text = "${threat.threatId}  ·  ${threat.nginxPhase.label}"
                     textSize = 7.5f
                     setTextColor(Color.parseColor("#222E3C"))
                     typeface = Typeface.MONOSPACE
@@ -1076,7 +1076,7 @@ class ScenarioListFragment : Fragment() {
 
                 // Column 3: live status
                 val statusView = TextView(ctx).apply {
-                    text = "â— ..."
+                    text = "● ..."
                     textSize = 8.5f
                     typeface = Typeface.DEFAULT_BOLD
                     gravity = android.view.Gravity.CENTER
@@ -1086,7 +1086,7 @@ class ScenarioListFragment : Fragment() {
 
                 // Column 4: risk score
                 val riskView = TextView(ctx).apply {
-                    text = "â€”"
+                    text = "—"
                     textSize = 10f
                     typeface = Typeface.DEFAULT_BOLD
                     gravity = android.view.Gravity.CENTER
@@ -1129,7 +1129,7 @@ class ScenarioListFragment : Fragment() {
             setPadding(16, 12, 16, 12)
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
             addView(TextView(ctx).apply {
-                text = "Network score: 15% of X-Edge-Risk-Level  Â·  BLOCK_THRESHOLD = 60  Â·  MAX_RISK_ALLOWED = 40"
+                text = "Network score: 15% of X-Edge-Risk-Level  ·  BLOCK_THRESHOLD = 60  ·  MAX_RISK_ALLOWED = 40"
                 textSize = 8.5f
                 setTextColor(Color.parseColor("#4FC3F7"))
                 typeface = Typeface.DEFAULT_BOLD
@@ -1161,7 +1161,7 @@ class ScenarioListFragment : Fragment() {
             val activeSignals = threat.signalTypes.filter { PayShieldSDK.isSignalActive(it) }
             when {
                 threat.architectureProtected -> {
-                    statusView.text = "ðŸ›¡ Protected"
+                    statusView.text = "🛡 Protected"
                     statusView.setTextColor(Color.parseColor("#00AACC"))
                     statusView.isClickable = false
                     statusView.setOnClickListener(null)
@@ -1169,7 +1169,7 @@ class ScenarioListFragment : Fragment() {
                     riskView.setTextColor(Color.parseColor("#00AACC"))
                 }
                 activeSignals.isNotEmpty() -> {
-                    statusView.text = "â— ACTIVE"
+                    statusView.text = "● ACTIVE"
                     statusView.setTextColor(Color.parseColor("#FF2222"))
                     statusView.isClickable = false
                     statusView.setOnClickListener(null)
@@ -1177,11 +1177,11 @@ class ScenarioListFragment : Fragment() {
                     riskView.setTextColor(Color.parseColor("#FF2222"))
                 }
                 else -> {
-                    statusView.text = "â— Safe"
+                    statusView.text = "● Safe"
                     statusView.setTextColor(Color.parseColor("#00CC55"))
                     statusView.isClickable = false
                     statusView.setOnClickListener(null)
-                    riskView.text = "â€”"
+                    riskView.text = "—"
                     riskView.setTextColor(Color.parseColor("#334455"))
                 }
             }
@@ -1191,29 +1191,29 @@ class ScenarioListFragment : Fragment() {
     private fun showNetworkThreatDetail(threat: NetworkThreatRegistry.NetworkThreat) {
         val activeSignals = threat.signalTypes.filter { PayShieldSDK.isSignalActive(it) }
         val statusLine = when {
-            threat.architectureProtected -> "ðŸ›¡ Protected â€” enforced by NGINX/OpenResty edge; always active"
-            activeSignals.isNotEmpty()   -> "â— ACTIVE  â€”  risk score: ${threat.riskScore} / 100"
-            else                         -> "â— Safe  â€”  no active signals"
+            threat.architectureProtected -> "🛡 Protected — enforced by NGINX/OpenResty edge; always active"
+            activeSignals.isNotEmpty()   -> "● ACTIVE  —  risk score: ${threat.riskScore} / 100"
+            else                         -> "● Safe  —  no active signals"
         }
-        val allSignals = threat.signalTypes.joinToString("\n  ") { "Â· $it" }.ifBlank { "(none â€” server-side only)" }
+        val allSignals = threat.signalTypes.joinToString("\n  ") { "· $it" }.ifBlank { "(none — server-side only)" }
 
         val msg = buildString {
-            append("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n")
+            append("━━━━━━━━━━━━━━━━━━━━━━━━\n")
             append("${threat.name}\n")
             append("ID: ${threat.threatId}   Severity: ${threat.severity.label}\n")
             append("Lua module: ${threat.luaModule}   ${threat.nginxPhase.label}\n")
-            append("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n\n")
+            append("━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
             append("STATUS\n  $statusLine\n\n")
-            append("â”€â”€â”€â”€ How NonaShield Stops This â”€â”€â”€â”€\n")
+            append("──── How NonaShield Stops This ────\n")
             append(threat.detailText)
             append("\n\n")
-            append("â”€â”€â”€â”€ SDK Signal Correlation â”€â”€â”€â”€\n")
+            append("──── SDK Signal Correlation ────\n")
             append("  $allSignals\n\n")
-            append("â”€â”€â”€â”€ Risk Gate â”€â”€â”€â”€\n")
+            append("──── Risk Gate ────\n")
             append("  Decision on threat active: ${threat.decision.label}\n")
             append("  Risk score contribution:   ${if (threat.riskScore == 0) "N/A (architecture-protected)" else "${threat.riskScore} / 100"}\n")
             append("  NGINX enforcement: BLOCK_THRESHOLD=60  MAX_RISK_ALLOWED=40\n\n")
-            append("â”€â”€â”€â”€ Formula â”€â”€â”€â”€\n")
+            append("──── Formula ────\n")
             append("  Network score (15%) + RASP (60%) + Behaviour (25%) = X-Edge-Risk-Level\n")
         }
 
@@ -1230,7 +1230,7 @@ class ScenarioListFragment : Fragment() {
     ) {
         val msg = AgenticAdvisory.buildAdvisory(threat, activeSignals)
         AlertDialog.Builder(requireContext(), android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("ðŸ¤– Agentic AI Root Cause Advisory")
+            .setTitle("🤖 Agentic AI Root Cause Advisory")
             .setMessage(msg)
             .setPositiveButton("Dismiss", null)
             .setNeutralButton("Full Detail") { _, _ -> showIdentityThreatDetail(threat) }
@@ -1240,61 +1240,61 @@ class ScenarioListFragment : Fragment() {
     private fun showIdentityThreatDetail(threat: IdentityThreatRegistry.Threat) {
         val active = threat.signalTypes.any { PayShieldSDK.isSignalActive(it) }
         val statusLine = when {
-            threat.architectureProtected -> "ðŸ›¡ Protected â€” guaranteed by architecture (KeyStore TEE / NGINX gateway)"
-            active                       -> "â— ACTIVE  â€”  risk score: ${threat.riskScore} / 100"
-            else                         -> "â— Safe  â€”  no active signals"
+            threat.architectureProtected -> "🛡 Protected — guaranteed by architecture (KeyStore TEE / NGINX gateway)"
+            active                       -> "● ACTIVE  —  risk score: ${threat.riskScore} / 100"
+            else                         -> "● Safe  —  no active signals"
         }
         val activeSignals = threat.signalTypes
             .filter { PayShieldSDK.isSignalActive(it) }
-            .joinToString("\n  ") { "â— $it" }
+            .joinToString("\n  ") { "● $it" }
             .ifBlank { "(none)" }
-        val allSignals = threat.signalTypes.joinToString("\n  ") { "Â· $it" }
+        val allSignals = threat.signalTypes.joinToString("\n  ") { "· $it" }
 
         val nonce     = java.util.UUID.randomUUID().toString()
         val tsEpoch   = System.currentTimeMillis() / 1000L
         val hashSample = "SHA-256(METHOD|path|body)"
 
         val msg = buildString {
-            append("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n")
+            append("━━━━━━━━━━━━━━━━━━━━━━━━\n")
             append("${threat.name}\n")
             append("ID: ${threat.threatId}   Severity: ${threat.severity.label}\n")
-            append("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n\n")
+            append("━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
 
             append("STATUS\n  $statusLine\n\n")
 
-            append("â”€â”€â”€â”€ How NonaShield Stops This â”€â”€â”€â”€\n")
+            append("──── How NonaShield Stops This ────\n")
             append(threat.detailText)
             append("\n\n")
 
-            append("â”€â”€â”€â”€ Hardware-Bound Identity â”€â”€â”€â”€\n")
+            append("──── Hardware-Bound Identity ────\n")
             append("  Key alias:   payshield_device_key\n")
             append("  Storage:     AndroidKeyStore TEE (hardware-backed)\n")
             append("  Algorithm:   HMAC-SHA256\n")
-            append("  Properties:  Non-exportable Â· device-bound Â· never in heap\n")
+            append("  Properties:  Non-exportable · device-bound · never in heap\n")
             append("  Guarantee:   Cloned APK = no key = gateway HTTP 401\n\n")
 
-            append("â”€â”€â”€â”€ NonaShield Request Headers â”€â”€â”€â”€\n")
+            append("──── NonaShield Request Headers ────\n")
             append("  X-PS-Nonce:         $nonce\n")
-            append("                      (per-request UUID â€” 60 s validity)\n")
+            append("                      (per-request UUID — 60 s validity)\n")
             append("  X-PS-Timestamp:     $tsEpoch\n")
-            append("                      (epoch sec â€” rejects requests > Â±30 s old)\n")
+            append("                      (epoch sec — rejects requests > ±30 s old)\n")
             append("  X-PS-Request-Hash:  $hashSample\n")
-            append("                      (tampered body â†’ hash mismatch â†’ HTTP 400)\n")
-            append("  X-Edge-Risk-Level:  [0â€“100 fused RASP score]\n")
-            append("                      â‰¥ 70  â†’  NGINX enforces BLOCK\n")
-            append("                      40â€“69 â†’  NGINX enforces STEP_UP\n")
-            append("                      < 40  â†’  ALLOW\n\n")
+            append("                      (tampered body → hash mismatch → HTTP 400)\n")
+            append("  X-Edge-Risk-Level:  [0–100 fused RASP score]\n")
+            append("                      ≥ 70  →  NGINX enforces BLOCK\n")
+            append("                      40–69 →  NGINX enforces STEP_UP\n")
+            append("                      < 40  →  ALLOW\n\n")
 
-            append("â”€â”€â”€â”€ Risk Score Formula â”€â”€â”€â”€\n")
+            append("──── Risk Score Formula ────\n")
             append("  RASP signals (60%) + Behaviour (25%) + Network (15%)\n")
             append("  This threat's peak score: ${threat.riskScore} / 100\n")
             append("  Enforcement when active:  ${threat.decision.label}\n\n")
 
-            append("â”€â”€â”€â”€ Signals Monitored â”€â”€â”€â”€\n")
+            append("──── Signals Monitored ────\n")
             append("  $allSignals\n\n")
 
             if (active) {
-                append("â”€â”€â”€â”€ Currently Firing â”€â”€â”€â”€\n")
+                append("──── Currently Firing ────\n")
                 append("  $activeSignals\n")
             }
         }
@@ -1306,7 +1306,7 @@ class ScenarioListFragment : Fragment() {
             .show()
     }
 
-    // â”€â”€ Tabs 2-4: simulated attack cards (backend ingest demo) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Tabs 2-4: simulated attack cards (backend ingest demo) ──────────────────
 
     private fun buildCards(tabIndex: Int, container: LinearLayout) {
         val inflater = LayoutInflater.from(requireContext())
@@ -1315,18 +1315,18 @@ class ScenarioListFragment : Fragment() {
         // Tab 4 (Platform Verification): add Live Payment card at the top
         if (tabIndex == 4) {
             val payCard = inflater.inflate(R.layout.item_scenario_card, container, false)
-            payCard.findViewById<TextView>(R.id.tvScenarioEmoji).text = "ðŸ’³"
+            payCard.findViewById<TextView>(R.id.tvScenarioEmoji).text = "💳"
             payCard.findViewById<TextView>(R.id.tvScenarioName).text = "Live Payment Test"
             payCard.findViewById<TextView>(R.id.tvSignalType).text = "PAYMENT_INITIATED"
             payCard.findViewById<TextView>(R.id.tvScenarioDesc).text =
                 "Real end-to-end payment with 5-phase CDT scoring, behavioral telemetry, and evidence receipt"
-            payCard.findViewById<TextView>(R.id.tvRiskScore).text = "â€”"
+            payCard.findViewById<TextView>(R.id.tvRiskScore).text = "—"
             payCard.findViewById<TextView>(R.id.tvActionContext).text = "PAYMENT"
             val decisionView = payCard.findViewById<TextView>(R.id.tvDecisionBadge)
             decisionView.text = "LIVE"
             decisionView.setBackgroundColor(0xFF0088FF.toInt())
             payCard.findViewById<MaterialButton>(R.id.btnSimulate).apply {
-                text = "ðŸ’³  Open Payment Screen"
+                text = "💳  Open Payment Screen"
                 setOnClickListener {
                     startActivity(
                         android.content.Intent(requireContext(), PaymentActivity::class.java)
@@ -1346,7 +1346,7 @@ class ScenarioListFragment : Fragment() {
             cardView.findViewById<TextView>(R.id.tvSignalType).text = meta.signal
             cardView.findViewById<TextView>(R.id.tvScenarioDesc).text = meta.description
             cardView.findViewById<TextView>(R.id.tvRiskScore).apply {
-                text = if (meta.riskScore == 0) "â€”" else meta.riskScore.toString()
+                text = if (meta.riskScore == 0) "—" else meta.riskScore.toString()
                 setTextColor(decisionColor(meta.decision))
             }
             cardView.findViewById<TextView>(R.id.tvActionContext).text = meta.action
@@ -1364,13 +1364,13 @@ class ScenarioListFragment : Fragment() {
 
     private fun runScenario(id: Int, meta: ScenarioMeta, btn: MaterialButton) {
         btn.isEnabled = false
-        btn.text = "â³  Runningâ€¦"
+        btn.text = "⏳  Running…"
 
         lifecycleScope.launch(Dispatchers.IO) {
             val result = runCatching { DiimeApiClient.ingestScenario(id) }.getOrNull()
             withContext(Dispatchers.Main) {
                 btn.isEnabled = true
-                btn.text = "âš¡  Simulate Attack"
+                btn.text = "⚡  Simulate Attack"
                 if (result != null) showResultDialog(meta, result)
                 else showErrorDialog(meta.name)
             }
@@ -1380,9 +1380,9 @@ class ScenarioListFragment : Fragment() {
     private fun showResultDialog(meta: ScenarioMeta, r: ScenarioResult) {
         val sim = if (r.fromSimulation) " (simulated)" else ""
         val msg = buildString {
-            append("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n")
+            append("━━━━━━━━━━━━━━━━━━━━━━━━\n")
             append("${meta.emoji}  ${meta.name}\n")
-            append("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n\n")
+            append("━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
             append("Decision:\n  ${r.decision}$sim\n\n")
             append("Trust Level:\n  ${r.trustLevel}\n\n")
             append("Risk Score:\n  ${r.riskScore} / 100\n\n")
@@ -1394,7 +1394,7 @@ class ScenarioListFragment : Fragment() {
                 append("Modules Hit:\n  ${r.modulesHit.joinToString(", ")}\n\n")
             }
             if (r.evidenceHash.isNotBlank()) {
-                append("Evidence Hash:\n  ${r.evidenceHash.take(32)}â€¦\n\n")
+                append("Evidence Hash:\n  ${r.evidenceHash.take(32)}…\n\n")
             }
             append("Signal:\n  ${meta.signal}\n")
             append("Action Context:\n  ${meta.action}")

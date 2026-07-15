@@ -1,4 +1,4 @@
-﻿package com.diimeai.demo
+package com.diimeai.demo
 
 import android.os.Bundle
 import android.view.MotionEvent
@@ -9,9 +9,9 @@ import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.payshield.sdk.PayShieldSDK
 
 /**
- * Main hub after login â€” 5-tab fraud scenario dashboard.
+ * Main hub after login — 5-tab fraud scenario dashboard.
  *
- * Tab â†’ Category mapping:
+ * Tab → Category mapping:
  *   0. Device / Runtime Integrity (RASP)
  *   1. Identity & Account Fraud
  *   2. Behavioral & Biometric Fraud

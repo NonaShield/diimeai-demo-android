@@ -1,4 +1,4 @@
-﻿package com.diimeai.demo
+package com.diimeai.demo
 
 import android.app.AlertDialog
 import android.graphics.Typeface
@@ -30,14 +30,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Real-time compliance tab â€” replaces the old "Platform" tab.
+ * Real-time compliance tab — replaces the old "Platform" tab.
  *
  * Shows 5 compliance requirement cards, each polling GET /api/v1/dashboard/compliance
  * every 5 s.  A "Verify Now" button sends a real SDK-signed request through the full
- * backend pipeline (ingestScenario(1) â€” Hardware Possession, SESSION_CREATE, ALLOW).
+ * backend pipeline (ingestScenario(1) — Hardware Possession, SESSION_CREATE, ALLOW).
  * This creates a fresh EvidenceRecord so the compliance counts update immediately.
  *
- * No login is added here â€” the user is already authenticated via LoginActivity
+ * No login is added here — the user is already authenticated via LoginActivity
  * before ScenarioHubActivity is launched. The SDK's public interface
  * (PayShieldSDK.signIngestPayload) does all signing.
  */
@@ -113,7 +113,7 @@ class ComplianceFragment : Fragment() {
         return root
     }
 
-    // â”€â”€ Header (dark card: title + overall status) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Header (dark card: title + overall status) ────────────────────────────
 
     private fun buildHeader(): LinearLayout {
         val header = LinearLayout(requireContext()).apply {
@@ -138,7 +138,7 @@ class ComplianceFragment : Fragment() {
         }
 
         val tvSubtitle = TextView(requireContext()).apply {
-            text = "Live telemetry â€” 5 regulatory requirements"
+            text = "Live telemetry — 5 regulatory requirements"
             textSize = 12f
             setTextColor(0xFF9E9E9E.toInt())
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
@@ -162,7 +162,7 @@ class ComplianceFragment : Fragment() {
         }
 
         tvOverallBadge = TextView(requireContext()).apply {
-            text = "Loadingâ€¦"
+            text = "Loading…"
             textSize = 12f
             setTypeface(null, Typeface.BOLD)
             setTextColor(0xFFFFFFFF.toInt())
@@ -201,11 +201,11 @@ class ComplianceFragment : Fragment() {
         return header
     }
 
-    // â”€â”€ Screen-mirroring advisory banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Screen-mirroring advisory banner ─────────────────────────────────────
 
     private fun buildAdvisoryBanner(): TextView =
         TextView(requireContext()).apply {
-            text = "âš   Screen Mirroring Active â€” WhatsApp Web or display cast detected. " +
+            text = "⚠  Screen Mirroring Active — WhatsApp Web or display cast detected. " +
                    "Payment data may be visible to third parties."
             textSize = 13f
             setTypeface(null, Typeface.BOLD)
@@ -220,7 +220,7 @@ class ComplianceFragment : Fragment() {
             visibility = View.GONE
         }
 
-    // â”€â”€ Live Payment Demo card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Live Payment Demo card ────────────────────────────────────────────────
 
     private fun buildVerifyCard(): LinearLayout {
         val card = LinearLayout(requireContext()).apply {
@@ -245,7 +245,7 @@ class ComplianceFragment : Fragment() {
         }
 
         val tvDesc = TextView(requireContext()).apply {
-            text = "Send a real payment through the NonaShield cryptographic pipeline. Your device's hardware key seals the payment â€” the backend verifies the seal before approving."
+            text = "Send a real payment through the NonaShield cryptographic pipeline. Your device's hardware key seals the payment — the backend verifies the seal before approving."
             textSize = 13f
             setTextColor(0xFFBDBDBD.toInt())
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
@@ -253,9 +253,9 @@ class ComplianceFragment : Fragment() {
             }
         }
 
-        // â”€â”€ Amount field â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Amount field ──────────────────────────────────────────────────────
         val tvAmountLabel = TextView(requireContext()).apply {
-            text = "Amount (â‚¹)"
+            text = "Amount (₹)"
             textSize = 12f
             setTextColor(0xFF9E9E9E.toInt())
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
@@ -279,7 +279,7 @@ class ComplianceFragment : Fragment() {
             }
         }
 
-        // â”€â”€ Description field â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Description field ─────────────────────────────────────────────────
         val tvDescLabel = TextView(requireContext()).apply {
             text = "Description"
             textSize = 12f
@@ -346,8 +346,8 @@ class ComplianceFragment : Fragment() {
         verifyJob?.cancel()
         verifyJob = lifecycleScope.launch {
             btnVerify.isEnabled = false
-            btnVerify.text = "Processing paymentâ€¦"
-            tvVerifyResult.text = "Sealing with hardware keyâ€¦"
+            btnVerify.text = "Processing payment…"
+            tvVerifyResult.text = "Sealing with hardware key…"
             tvVerifyResult.setTextColor(0xFF9E9E9E.toInt())
 
             val result = withContext(Dispatchers.IO) {
@@ -358,7 +358,7 @@ class ComplianceFragment : Fragment() {
 
             when {
                 result.fromSimulation -> {
-                    tvVerifyResult.text = "âš  Could not complete â€” ensure SDK is initialized"
+                    tvVerifyResult.text = "⚠ Could not complete — ensure SDK is initialized"
                     tvVerifyResult.setTextColor(0xFFE65100.toInt())
                     btnVerify.text = "Send Secure Payment"
                     btnVerify.isEnabled = true
@@ -366,7 +366,7 @@ class ComplianceFragment : Fragment() {
 
                 result.decision == "ALLOW" -> {
                     tvVerifyResult.text =
-                        "âœ“  Payment Approved  â€”  â‚¹$amount sealed & verified in ${result.rttMs}ms"
+                        "✓  Payment Approved  —  ₹$amount sealed & verified in ${result.rttMs}ms"
                     tvVerifyResult.setTextColor(0xFF4CAF50.toInt())
                     btnVerify.text = "Send Secure Payment"
                     btnVerify.isEnabled = true
@@ -375,7 +375,7 @@ class ComplianceFragment : Fragment() {
                 }
 
                 else -> {
-                    // Backend blocked â€” show threat alert dialog so user can continue demo
+                    // Backend blocked — show threat alert dialog so user can continue demo
                     btnVerify.text = "Send Secure Payment"
                     btnVerify.isEnabled = true
                     tvVerifyResult.text = ""
@@ -389,9 +389,9 @@ class ComplianceFragment : Fragment() {
      * Alert dialog shown when the backend returns BLOCK on a debug APK.
      *
      * Debug builds always trigger 3 real RASP signals:
-     *   1. Rogue Build Detected  â€” APK is debuggable (not production-signed)
-     *   2. Hardware Attestation Failure â€” Play Integrity unavailable on debug builds
-     *   3. MASVS Control Failure â€” debug flag violates OWASP MASVS-RESILIENCE-3
+     *   1. Rogue Build Detected  — APK is debuggable (not production-signed)
+     *   2. Hardware Attestation Failure — Play Integrity unavailable on debug builds
+     *   3. MASVS Control Failure — debug flag violates OWASP MASVS-RESILIENCE-3
      *
      * In a demo context these are expected. The dialog explains what was detected
      * and lets the presenter choose to proceed (demo override) or cancel.
@@ -402,15 +402,15 @@ class ComplianceFragment : Fragment() {
         val threatSummary = """
 NonaShield detected 3 active security threats on this device:
 
-ðŸ”´  Rogue Build Detected
-     APK is debuggable â€” not production-signed.
+🔴  Rogue Build Detected
+     APK is debuggable — not production-signed.
      Production apps are blocked at device layer.
 
-ðŸ”´  Hardware Attestation Failure
+🔴  Hardware Attestation Failure
      Play Integrity API unavailable on debug builds.
      Real devices use hardware-backed attestation.
 
-ðŸ”´  MASVS Control Failure
+🔴  MASVS Control Failure
      Debug flag violates OWASP MASVS-RESILIENCE-3.
      Signing vault enforcement is bypassed.
 
@@ -419,12 +419,12 @@ Continue to simulate the payment approval flow?
         """.trimIndent()
 
         AlertDialog.Builder(ctx, android.R.style.Theme_Material_Dialog_Alert)
-            .setTitle("âš   Security Threats Detected")
+            .setTitle("⚠  Security Threats Detected")
             .setMessage(threatSummary)
             .setPositiveButton("Continue Demo") { _, _ ->
-                // Demo override â€” show payment approved result
+                // Demo override — show payment approved result
                 tvVerifyResult.text =
-                    "âœ“  Payment Approved (Demo Override)  â€”  â‚¹$amount  |  ${description.ifBlank { "Secure Payment" }}  |  ${rttMs}ms"
+                    "✓  Payment Approved (Demo Override)  —  ₹$amount  |  ${description.ifBlank { "Secure Payment" }}  |  ${rttMs}ms"
                 tvVerifyResult.setTextColor(0xFF4CAF50.toInt())
 
                 // Refresh compliance so counts update
@@ -434,14 +434,14 @@ Continue to simulate the payment approval flow?
                 }
             }
             .setNegativeButton("Cancel") { _, _ ->
-                tvVerifyResult.text = "âœ—  Payment cancelled"
+                tvVerifyResult.text = "✗  Payment cancelled"
                 tvVerifyResult.setTextColor(0xFFEF5350.toInt())
             }
             .setCancelable(false)
             .show()
     }
 
-    // â”€â”€ Lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     override fun onResume() {
         super.onResume()
@@ -470,7 +470,7 @@ Continue to simulate the payment approval flow?
         }
     }
 
-    // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Render ────────────────────────────────────────────────────────────────
 
     private fun renderStatus(status: ComplianceStatus) {
         context ?: return
@@ -479,7 +479,7 @@ Continue to simulate the payment approval flow?
         tvOverallBadge.text = STATUS_LABEL[status.overallStatus] ?: status.overallStatus
         tvOverallBadge.setBackgroundColor(oc)
         tvLastUpdated.text = status.lastUpdated
-        tvDataSource.text = if (status.dataSource == "live") "â— Live data" else "â—‹ ${status.dataSource}"
+        tvDataSource.text = if (status.dataSource == "live") "● Live data" else "○ ${status.dataSource}"
         tvDataSource.setTextColor(if (status.dataSource == "live") 0xFF4CAF50.toInt() else 0xFFFF9800.toInt())
 
         cardsContainer.removeAllViews()
@@ -491,7 +491,7 @@ Continue to simulate the payment approval flow?
             cardsContainer.addView(card, params)
         }
 
-        // Sealed evidence ledger â€” shown when backend returns real seal records
+        // Sealed evidence ledger — shown when backend returns real seal records
         if (status.recentSeals.isNotEmpty()) {
             val sealPanel = buildSealPanel(status.recentSeals)
             val params = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
@@ -501,7 +501,7 @@ Continue to simulate the payment approval flow?
         }
     }
 
-    // â”€â”€ Compliance card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Compliance card ───────────────────────────────────────────────────────
 
     private fun buildCard(item: ComplianceItem): LinearLayout {
         val statusColor = STATUS_COLOR[item.status] ?: STATUS_COLOR["UNKNOWN"]!!
@@ -660,7 +660,7 @@ Continue to simulate the payment approval flow?
         }
 
         val tvHeader = TextView(requireContext()).apply {
-            text = "ðŸ”  Cryptographic Evidence Ledger"
+            text = "🔐  Cryptographic Evidence Ledger"
             textSize = 13f
             setTypeface(null, Typeface.BOLD)
             setTextColor(0xFF00E5FF.toInt())
@@ -669,7 +669,7 @@ Continue to simulate the payment approval flow?
             }
         }
         val tvSub = TextView(requireContext()).apply {
-            text = "Live sealed records from this device â€” tamper-evident chain"
+            text = "Live sealed records from this device — tamper-evident chain"
             textSize = 11f
             setTextColor(0xFF78909C.toInt())
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).also {
@@ -690,11 +690,11 @@ Continue to simulate the payment approval flow?
                 }
             }
 
-            val statusIcon = if (seal.signatureStatus == "VERIFIED") "âœ…" else "â¬œ"
+            val statusIcon = if (seal.signatureStatus == "VERIFIED") "✅" else "⬜"
             val statusColor = if (seal.signatureStatus == "VERIFIED") 0xFF4CAF50.toInt() else 0xFF78909C.toInt()
 
             val tvStatus = TextView(requireContext()).apply {
-                text = "$statusIcon  ${seal.signatureStatus}  Â·  ${seal.algorithm}"
+                text = "$statusIcon  ${seal.signatureStatus}  ·  ${seal.algorithm}"
                 textSize = 11f
                 setTypeface(null, Typeface.BOLD)
                 setTextColor(statusColor)
@@ -717,7 +717,7 @@ Continue to simulate the payment approval flow?
                 text = if (seal.serverSignature.isNotEmpty())
                     "Server seal  ${seal.serverSignature}"
                 else
-                    "Server seal  â€”  (unsigned)"
+                    "Server seal  —  (unsigned)"
                 textSize = 10f
                 setTextColor(0xFF90A4AE.toInt())
                 typeface = Typeface.MONOSPACE
@@ -728,7 +728,7 @@ Continue to simulate the payment approval flow?
 
             val sealedAtFormatted = seal.sealedAt.replace("T", "  ").replace("Z", "  UTC")
             val tvTime = TextView(requireContext()).apply {
-                text = "Sealed  $sealedAtFormatted  Â·  risk ${seal.riskScore}/100"
+                text = "Sealed  $sealedAtFormatted  ·  risk ${seal.riskScore}/100"
                 textSize = 10f
                 setTextColor(0xFF546E7A.toInt())
             }
