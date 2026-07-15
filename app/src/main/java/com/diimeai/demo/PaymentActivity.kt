@@ -1,4 +1,4 @@
-package com.diimeai.demo
+﻿package com.diimeai.demo
 
 import android.content.Context
 import android.content.Intent
@@ -20,7 +20,6 @@ import com.diimeai.demo.network.DiimeApiClient
 import com.diimeai.demo.network.EvidenceReceipt
 import com.diimeai.demo.network.PaymentResult
 import com.payshield.android.edge.EdgeRiskEnforcer
-import com.payshield.sdk.PayShieldEdgeInitializer
 import com.payshield.sdk.PayShieldSDK
 import com.payshield.sdk.policy.PolicyDecision
 import com.payshield.sdk.behavioral.BehavioralCaptureManager
@@ -37,7 +36,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Banking home screen — real-time RASP protection active throughout.
+ * Banking home screen â€” real-time RASP protection active throughout.
  *
  * Passive protection layers (zero UX friction):
  *   - Behavioral biometrics: 6-channel passive capture on every touch
@@ -63,7 +62,7 @@ class PaymentActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityPaymentBinding
 
-    // ── Behavioral SDK (NonaShield 11-field telemetry) ────────────────────────
+    // â”€â”€ Behavioral SDK (NonaShield 11-field telemetry) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     //
     // [keystrokeDynamics] captures typing rhythm on amount, recipient, note fields.
     // [captureManager]    captures touch pressure, velocity, hesitation, scroll
@@ -99,11 +98,11 @@ class PaymentActivity : AppCompatActivity() {
         runCatching { SessionHolder.requireSession().sessionId }
             .getOrElse { "payment_${System.currentTimeMillis()}" }
 
-    // ── Session state ─────────────────────────────────────────────────────────
+    // â”€â”€ Session state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     private var currentUserId:  String = ""
     private var previousUserId: String? = null
 
-    // ── Demo 2 ────────────────────────────────────────────────────────────────
+    // â”€â”€ Demo 2 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     private var lastReceiptUrl: String = ""
     private var lastDecisionId: String = ""
 
@@ -117,13 +116,13 @@ class PaymentActivity : AppCompatActivity() {
     // the flag is cleared when initiatePayment() is called again.
     private var companionShareAcknowledged = false
 
-    // ── Biometric baseline: locked after BASELINE_PAYMENTS payment taps ───────
+    // â”€â”€ Biometric baseline: locked after BASELINE_PAYMENTS payment taps â”€â”€â”€â”€â”€â”€â”€
     // Counter increments on every Send Payment tap regardless of validation result.
     // At tap #BASELINE_PAYMENTS the profile is saved and comparison mode activates.
     // Reset to 0 on logout/fullReset.
     private var paymentTapCount = 0
 
-    // ── Biometric panel refresh ───────────────────────────────────────────────
+    // â”€â”€ Biometric panel refresh â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     private val handler = Handler(Looper.getMainLooper())
     private val bioRefreshRunnable = object : Runnable {
         override fun run() {
@@ -133,9 +132,9 @@ class PaymentActivity : AppCompatActivity() {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Lifecycle
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -146,18 +145,18 @@ class PaymentActivity : AppCompatActivity() {
         previousUserId = intent.getStringExtra(EXTRA_PREV_USER)
 
         binding.tvWelcome.text = "Welcome, $currentUserId"
-        EnrollmentState.load()?.let { binding.tvDeviceId.text = "Device: ${it.deviceId.take(16)}…" }
+        EnrollmentState.load()?.let { binding.tvDeviceId.text = "Device: ${it.deviceId.take(16)}â€¦" }
         updateRiskBadge()
 
-        // ── Demo 5: Start behavioral biometrics session ───────────────────────
+        // â”€â”€ Demo 5: Start behavioral biometrics session â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (previousUserId != null) {
-            // Session B — score against Session A baseline.  Wire sink so that
+            // Session B â€” score against Session A baseline.  Wire sink so that
             // BEHAVIORAL_BIOMETRIC_MISMATCH / SOCIAL_ENGINEERING_BIOMETRIC appear in ticker.
             BehavioralSessionManager.enterComparisonMode(behavioralSink)
             showSocialEngineeringWarning(previousUserId!!)
             binding.rowDeviationBar.visibility = View.VISIBLE
         } else {
-            // Session A — build user baseline.  Wire sink so per-channel MEDIUM signals
+            // Session A â€” build user baseline.  Wire sink so per-channel MEDIUM signals
             // are also emitted once comparison mode kicks in after 5 payments.
             BehavioralSessionManager.start(this, behavioralSink)
         }
@@ -180,17 +179,17 @@ class PaymentActivity : AppCompatActivity() {
         updateKycButtonLabel()
         handler.post(bioRefreshRunnable)
 
-        // ── Behavioral: attach capture on every screen entry ───────────────────
+        // â”€â”€ Behavioral: attach capture on every screen entry â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         // keystrokeDynamics wraps amount / recipient / note EditText fields.
         // captureManager transparently intercepts all touch events on the root view.
         keystrokeDynamics.attachToRoot(binding.root)
         captureManager.attachTo(binding.root)
-        // Record this screen entry as a transition — dwell-time measurement starts.
+        // Record this screen entry as a transition â€” dwell-time measurement starts.
         captureManager.sessionFlowAnalyzer.onScreenTransition()
     }
 
     private fun updateKycButtonLabel() {
-        binding.btnEnrollKyc.text = "🪪  Verify Identity"
+        binding.btnEnrollKyc.text = "ðŸªª  Verify Identity"
     }
 
     override fun onPause() {
@@ -210,9 +209,9 @@ class PaymentActivity : AppCompatActivity() {
 
     /**
      * Called when device is rotated (requires android:configChanges="orientation|screenSize"
-     * in AndroidManifest.xml — the activity is NOT recreated on rotation).
+     * in AndroidManifest.xml â€” the activity is NOT recreated on rotation).
      *
-     * Increments [BehavioralFeatures.screenOrientationChanges] — backend field
+     * Increments [BehavioralFeatures.screenOrientationChanges] â€” backend field
      * [screen_orientation_changes] in BehavioralFeaturesPayload.
      */
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -223,7 +222,7 @@ class PaymentActivity : AppCompatActivity() {
     /**
      * Intercept system back press to record it in SessionFlowAnalyzer.
      *
-     * [BehavioralFeatures.backtrackCount] is incremented — elevated back navigation
+     * [BehavioralFeatures.backtrackCount] is incremented â€” elevated back navigation
      * during payment correlates with hesitant / coached user behaviour (Romance Fraud).
      */
     @Deprecated("Deprecated in Java")
@@ -233,12 +232,12 @@ class PaymentActivity : AppCompatActivity() {
         super.onBackPressed()
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Touch routing → BehavioralBiometricsCollector + BehavioralCaptureManager
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Touch routing â†’ BehavioralBiometricsCollector + BehavioralCaptureManager
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        // Feed every touch event to the behavioral engine (passive — no UX impact)
+        // Feed every touch event to the behavioral engine (passive â€” no UX impact)
         BehavioralSessionManager.record(event)
         // Refresh panel immediately on UP events (gesture completed)
         if (event.actionMasked == MotionEvent.ACTION_UP) {
@@ -247,9 +246,9 @@ class PaymentActivity : AppCompatActivity() {
         return super.dispatchTouchEvent(event)
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Live RASP threat ticker
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
     // Track last rendered set to avoid rebuilding the list on every 500ms tick
@@ -259,14 +258,14 @@ class PaymentActivity : AppCompatActivity() {
         val signals = synchronized(DiimeApp.recentRaspSignals) {
             // Prune signals whose condition has resolved (TTL expired or OS clear callback fired).
             // Without this, the ticker keeps showing WhatsApp screen-share signals indefinitely
-            // after the WhatsApp session closes — SignalStateManager knows they're gone but the
+            // after the WhatsApp session closes â€” SignalStateManager knows they're gone but the
             // display buffer never removes them.
             DiimeApp.recentRaspSignals.removeAll { signal ->
-                !PayShieldEdgeInitializer.isSignalActive(signal.type)
+                !PayShieldSDK.isSignalActive(signal.type)
             }
             DiimeApp.recentRaspSignals.toList()
         }
-        // Newest last → show newest at top
+        // Newest last â†’ show newest at top
         val ordered = signals.reversed()
         val types = ordered.map { it.type }
         if (types == lastRenderedThreatTypes) return   // nothing changed
@@ -281,12 +280,12 @@ class PaymentActivity : AppCompatActivity() {
         binding.llRaspAlertList.removeAllViews()
         ordered.forEach { signal ->
             val icon = when (signal.severity.name) {
-                "CRITICAL" -> "🔴"
-                "HIGH"     -> "🟠"
-                "MEDIUM"   -> "🟡"
-                else       -> "🟡"
+                "CRITICAL" -> "ðŸ”´"
+                "HIGH"     -> "ðŸŸ "
+                "MEDIUM"   -> "ðŸŸ¡"
+                else       -> "ðŸŸ¡"
             }
-            val name = PayShieldEdgeInitializer.getSignalDisplayName(signal.type)
+            val name = PayShieldSDK.getSignalDisplayName(signal.type)
             val tv = android.widget.TextView(this).apply {
                 text = "$icon  $name"
                 textSize = 12f
@@ -304,13 +303,13 @@ class PaymentActivity : AppCompatActivity() {
     }
 
     // Behavioral biometrics panel
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private fun refreshBiometricPanel() {
         val summary = BehavioralSessionManager.buildDeviationSummary()
         val inCompare = BehavioralSessionManager.isComparisonMode
 
-        // Calibration progress bar — show until BASELINE_PAYMENTS taps are done
+        // Calibration progress bar â€” show until BASELINE_PAYMENTS taps are done
         val baselineLocked = inCompare || BehavioralSessionManager.savedBaseline != null
         if (baselineLocked) {
             binding.rowCalibration.visibility = View.GONE
@@ -331,14 +330,14 @@ class PaymentActivity : AppCompatActivity() {
                 binding.tvBioHint.visibility = View.GONE
             }
             baselineLocked -> {
-                // Baseline saved, not yet in comparison mode (transitional — shouldn't linger)
-                binding.tvBioRiskBadge.text = "ENROLLED USER ✓"
+                // Baseline saved, not yet in comparison mode (transitional â€” shouldn't linger)
+                binding.tvBioRiskBadge.text = "ENROLLED USER âœ“"
                 binding.tvBioRiskBadge.setBackgroundColor(0xFF00AA44.toInt())
                 binding.tvBioHint.visibility = View.GONE
             }
             paymentTapCount >= BASELINE_PAYMENTS -> {
                 // 5 taps done but sensor calibration not complete yet (very unlikely)
-                binding.tvBioRiskBadge.text = "ENROLLING…  touch screen"
+                binding.tvBioRiskBadge.text = "ENROLLINGâ€¦  touch screen"
                 binding.tvBioRiskBadge.setBackgroundColor(0xFF334455.toInt())
                 binding.tvBioHint.visibility = View.VISIBLE
             }
@@ -353,52 +352,52 @@ class PaymentActivity : AppCompatActivity() {
             }
         }
 
-        // 7 sensor channels — always 🟢 for enrolled user; show deviation only in comparison mode
+        // 7 sensor channels â€” always ðŸŸ¢ for enrolled user; show deviation only in comparison mode
         binding.tvBioPressure.text   = formatChannel(summary.pressure, inCompare)
         binding.tvBioFingerSize.text = formatChannel(summary.fingerSize, inCompare, "px")
         binding.tvBioSwipe.text      = formatChannel(summary.swipe, inCompare, "px/ms")
         binding.tvBioHesitation.text = run {
-            val icon = if (inCompare) summary.hesitation.statusIcon else "🟢"
+            val icon = if (inCompare) summary.hesitation.statusIcon else "ðŸŸ¢"
             val v = "${summary.hesitation.value.toLong()}ms"
-            if (inCompare && summary.hesitation.deviation > 0) "$icon $v  Δ${summary.hesitation.deviationPct}%"
+            if (inCompare && summary.hesitation.deviation > 0) "$icon $v  Î”${summary.hesitation.deviationPct}%"
             else "$icon $v"
         }
         binding.tvBioPosture.text = run {
-            val icon = if (inCompare) summary.posture.statusIcon else "🟢"
-            val v = "${"%.1f".format(summary.posture.value)}°"
-            if (inCompare && summary.posture.deviation > 0) "$icon $v  Δ${summary.posture.deviationPct}%"
+            val icon = if (inCompare) summary.posture.statusIcon else "ðŸŸ¢"
+            val v = "${"%.1f".format(summary.posture.value)}Â°"
+            if (inCompare && summary.posture.deviation > 0) "$icon $v  Î”${summary.posture.deviationPct}%"
             else "$icon $v"
         }
         binding.tvBioGrip.text     = formatChannel(summary.grip, inCompare)
-        // Ch 7: Micro-tremor ZCR — shown in crossings/s
+        // Ch 7: Micro-tremor ZCR â€” shown in crossings/s
         binding.tvBioTremorZcr.text = run {
-            val icon = if (inCompare) summary.tremorZcr.statusIcon else "🟢"
+            val icon = if (inCompare) summary.tremorZcr.statusIcon else "ðŸŸ¢"
             val v    = "${"%.0f".format(summary.tremorZcr.value)} zc/s"
             if (inCompare && summary.tremorZcr.deviation > 0)
-                "$icon $v  Δ${summary.tremorZcr.deviationPct}%"
+                "$icon $v  Î”${summary.tremorZcr.deviationPct}%"
             else "$icon $v"
         }
 
-        // 2 ML channels — 🟢 for enrolled user; bot-detection icons only in comparison mode
+        // 2 ML channels â€” ðŸŸ¢ for enrolled user; bot-detection icons only in comparison mode
         val mlFeatures = captureManager.getLatestFeatures()
         if (mlFeatures != null) {
-            val jitterIcon = if (!inCompare) "🟢" else when {
-                mlFeatures.jitterScore < 0.001f -> "🔴"
-                mlFeatures.jitterScore < 0.01f  -> "🟡"
-                else                            -> "🟢"
+            val jitterIcon = if (!inCompare) "ðŸŸ¢" else when {
+                mlFeatures.jitterScore < 0.001f -> "ðŸ”´"
+                mlFeatures.jitterScore < 0.01f  -> "ðŸŸ¡"
+                else                            -> "ðŸŸ¢"
             }
             binding.tvBioJitter.text = "$jitterIcon ${"%.4f".format(mlFeatures.jitterScore)}"
 
-            val entropyIcon = if (!inCompare) "🟢" else when {
-                mlFeatures.curvatureEntropy < 0.3f -> "🔴"
-                mlFeatures.curvatureEntropy < 1.0f -> "🟡"
-                else                               -> "🟢"
+            val entropyIcon = if (!inCompare) "ðŸŸ¢" else when {
+                mlFeatures.curvatureEntropy < 0.3f -> "ðŸ”´"
+                mlFeatures.curvatureEntropy < 1.0f -> "ðŸŸ¡"
+                else                               -> "ðŸŸ¢"
             }
             binding.tvBioCurvature.text = "$entropyIcon ${"%.2f".format(mlFeatures.curvatureEntropy)}"
         } else {
             // No touch gesture processed yet
-            binding.tvBioJitter.text    = "🟢 –"
-            binding.tvBioCurvature.text = "🟢 –"
+            binding.tvBioJitter.text    = "ðŸŸ¢ â€“"
+            binding.tvBioCurvature.text = "ðŸŸ¢ â€“"
         }
 
         // Deviation bar (comparison mode only)
@@ -411,14 +410,14 @@ class PaymentActivity : AppCompatActivity() {
             binding.tvDeviationPct.setTextColor(summary.riskColor)
 
             // Channel breakdown
-            val deviatingNames = summary.deviatingChannels.joinToString(" · ") {
+            val deviatingNames = summary.deviatingChannels.joinToString(" Â· ") {
                 "${it.statusIcon} ${it.name} (+${it.deviationPct}%)"
             }
             binding.tvDeviationChannels.text =
                 if (deviatingNames.isNotBlank()) deviatingNames
                 else "  All channels within normal range"
 
-            // Prominent "DIFFERENT USER" alarm: show banner when ≥ 65% deviation
+            // Prominent "DIFFERENT USER" alarm: show banner when â‰¥ 65% deviation
             val isHighDeviation = summary.composite >= 0.65f
             binding.rowUserMismatchAlarm.visibility =
                 if (isHighDeviation) View.VISIBLE else View.GONE
@@ -428,11 +427,11 @@ class PaymentActivity : AppCompatActivity() {
                     listOf(it.jitterScore < 0.001f, it.curvatureEntropy < 0.3f).count { f -> f }
                 } ?: 0
                 binding.tvUserMismatchDetail.text =
-                    "Biometric deviation: ${summary.compositePct}%  •  " +
+                    "Biometric deviation: ${summary.compositePct}%  â€¢  " +
                     "${summary.deviatingChannels.size + mlFlagged}/9 channels flagged"
             }
 
-            // Auto-show full alert dialog when ≥3 channels deviate (once per session)
+            // Auto-show full alert dialog when â‰¥3 channels deviate (once per session)
             if (summary.deviatingChannels.size >= 3 && !socialEngAlertShown) {
                 socialEngAlertShown = true
                 showBiometricSocialEngAlert(summary)
@@ -447,14 +446,14 @@ class PaymentActivity : AppCompatActivity() {
     private fun formatChannel(ch: BiometricChannelStatus, inCompare: Boolean, unit: String = ""): String {
         val value = "${"%.2f".format(ch.value)}$unit"
         return if (inCompare && ch.deviation > 0)
-            "${ch.statusIcon} $value  Δ${ch.deviationPct}%"
+            "${ch.statusIcon} $value  Î”${ch.deviationPct}%"
         else
-            "🟢 $value"
+            "ðŸŸ¢ $value"
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Payment flow
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private fun initiatePayment() {
         val amount    = binding.etAmount.text.toString().toDoubleOrNull()
@@ -473,7 +472,7 @@ class PaymentActivity : AppCompatActivity() {
                 BehavioralSessionManager.saveBaseline()
                 BehavioralSessionManager.enterComparisonMode(behavioralSink)
                 Toast.makeText(this,
-                    "✅ Biometric profile locked — comparison active",
+                    "âœ… Biometric profile locked â€” comparison active",
                     Toast.LENGTH_SHORT).show()
                 handler.post { refreshBiometricPanel() }
             }
@@ -484,39 +483,39 @@ class PaymentActivity : AppCompatActivity() {
         val isAttestation = isDemoAttestationMode
 
         if (!isAttestation) {
-            // ── Screen capture check ──────────────────────────────────────────
+            // â”€â”€ Screen capture check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             // Three-tier logic based on who owns the virtual display:
             //
             //   COMPANION_SCREEN_SHARE_ACTIVE (MEDIUM, advisory):
             //     A verified companion app (WhatsApp Web, Telegram Desktop) is mirroring
-            //     the screen.  Screen IS at risk but source is known — show a graceful
+            //     the screen.  Screen IS at risk but source is known â€” show a graceful
             //     "please pause sharing" prompt rather than a hard block.
             //
             //   hasScreenCaptureThreat() (HIGH, hard block):
             //     Unknown recorder app, hardware mirroring (Chromecast/HDMI), or
-            //     multiple virtual displays — cannot determine ownership.
+            //     multiple virtual displays â€” cannot determine ownership.
             //
             //   dm.displays.size > 1 without any SDK signal:
             //     SDK may not have had time to evaluate the new display yet (race).
-            //     Fall through to the screen capture threat check — the next
+            //     Fall through to the screen capture threat check â€” the next
             //     evaluateNow() triggered by onDisplayAdded will update the signal.
             val skipCompanionCheck = companionShareAcknowledged.also { companionShareAcknowledged = false }
-            if (!skipCompanionCheck && PayShieldEdgeInitializer.hasCompanionScreenShare()) {
-                Log.w(TAG, "[RASP] Companion screen share active — showing advisory")
+            if (!skipCompanionCheck && PayShieldSDK.hasCompanionScreenShare()) {
+                Log.w(TAG, "[RASP] Companion screen share active â€” showing advisory")
                 showCompanionShareAdvisory()
                 return
             }
-            if (PayShieldEdgeInitializer.hasScreenCaptureThreat()) {
+            if (PayShieldSDK.hasScreenCaptureThreat()) {
                 Log.w(TAG, "[RASP] Screen capture threat active (RASP_DEV_051)")
                 showThreatBlockedDialog("RASP_DEV_051")
                 return
             }
-            // Raw display-count fallback — guards the race window between onDisplayAdded()
+            // Raw display-count fallback â€” guards the race window between onDisplayAdded()
             // and evaluateNow() completing.  Skip entirely when the companion display was
             // acknowledged ("Proceed Anyway") or is still signalled as active: the extra
             // display IS the companion virtual display and blocking it here would contradict
             // the advisory acknowledgment and prevent payment from executing (Scenario 3).
-            val companionDisplayActive = skipCompanionCheck || PayShieldEdgeInitializer.hasCompanionScreenShare()
+            val companionDisplayActive = skipCompanionCheck || PayShieldSDK.hasCompanionScreenShare()
             if (!companionDisplayActive) {
                 val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
                 if (dm.displays.size > 1) {
@@ -526,14 +525,14 @@ class PaymentActivity : AppCompatActivity() {
                 }
             }
 
-            // ── UC-08 LIVE: SIM swap check ────────────────────────────────────
-            val simSwapSuspected = PayShieldEdgeInitializer.isSimSwapSuspected() == true
+            // â”€â”€ UC-08 LIVE: SIM swap check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            val simSwapSuspected = PayShieldSDK.isSimSwapSuspected() == true
             val bioDev = BehavioralSessionManager.deviationScore()
             if (simSwapSuspected) {
-                Log.w(TAG, "[UC-08] SIM swap suspected — bioDev=${(bioDev * 100).toInt()}%")
+                Log.w(TAG, "[UC-08] SIM swap suspected â€” bioDev=${(bioDev * 100).toInt()}%")
                 showSimSwapDialog(iccidChanged = true, biometricDeviation = bioDev)
                 val deviceId = DiimeApp.enrollmentState?.deviceId
-                    ?: PayShieldEdgeInitializer.getStableDeviceId()
+                    ?: PayShieldSDK.getStableDeviceId()
                 lifecycleScope.launch(Dispatchers.IO) {
                     runCatching { DiimeApiClient.ingestLiveSimSwap(deviceId, bioDev, iccidChanged = true) }
                         .also { Log.i(TAG, "[UC-08] live ingest result: ${it.getOrNull()?.decision}") }
@@ -541,7 +540,7 @@ class PaymentActivity : AppCompatActivity() {
                 return
             }
 
-            // ── Demo 5: Behavioral mismatch gate ──────────────────────────────
+            // â”€â”€ Demo 5: Behavioral mismatch gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if (BehavioralSessionManager.isComparisonMode) {
                 val dev = BehavioralSessionManager.deviationScore()
                 if (dev > 0.55f) {
@@ -550,7 +549,7 @@ class PaymentActivity : AppCompatActivity() {
                 }
             }
 
-            // ── Local RASP gate ────────────────────────────────────────────────
+            // â”€â”€ Local RASP gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             try {
                 EdgeRiskEnforcer.assertAllowed()
             } catch (e: SecurityException) {
@@ -566,7 +565,7 @@ class PaymentActivity : AppCompatActivity() {
         val noteText = binding.etNote.text.toString().trim()
 
         lifecycleScope.launch(Dispatchers.IO) {
-            // ── Behavioral telemetry: fail-open, never blocks the payment ─────
+            // â”€â”€ Behavioral telemetry: fail-open, never blocks the payment â”€â”€â”€â”€â”€
             val behavioralFeatures = captureManager.getLatestFeatures()
             if (behavioralFeatures != null) {
                 val sessionId = resolveSessionId()
@@ -587,7 +586,7 @@ class PaymentActivity : AppCompatActivity() {
                 }
             }
 
-            // ── SDK checkpoint gate — skipped in attestation mode ─────────────
+            // â”€â”€ SDK checkpoint gate â€” skipped in attestation mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             // Attestation demo is specifically for showing telemetry proof even
             // when the SDK would normally gate the payment.
             if (!isAttestation) {
@@ -627,7 +626,7 @@ class PaymentActivity : AppCompatActivity() {
                 note        = noteText
             )
 
-            // Always clear the bypass — never leave it open after the request.
+            // Always clear the bypass â€” never leave it open after the request.
             if (isAttestation) EdgeRiskEnforcer.demoAttestationMode = false
 
             withContext(Dispatchers.Main) {
@@ -646,22 +645,22 @@ class PaymentActivity : AppCompatActivity() {
         lastReceiptUrl = result.receiptUrl
         lastDecisionId = result.decisionId
 
-        val nonceShort  = result.nonce.take(32).let { if (result.nonce.length > 32) "$it…" else it }
-        val hashShort   = result.requestHash.take(32).let { if (result.requestHash.length > 32) "$it…" else it }
-        val keyShort    = result.deviceKeyId.take(24).let { if (result.deviceKeyId.length > 24) "$it…" else it }
+        val nonceShort  = result.nonce.take(32).let { if (result.nonce.length > 32) "$itâ€¦" else it }
+        val hashShort   = result.requestHash.take(32).let { if (result.requestHash.length > 32) "$itâ€¦" else it }
+        val keyShort    = result.deviceKeyId.take(24).let { if (result.deviceKeyId.length > 24) "$itâ€¦" else it }
         val iso = if (result.timestampEpoch > 0L)
             java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
                 .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
                 .format(java.util.Date(result.timestampEpoch * 1000L))
-        else "—"
+        else "â€”"
 
         val msg = buildString {
-            append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+            append("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n")
             append("IMMUTABLE AUDIT PROOF\n")
-            append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+            append("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n\n")
             append("Txn ID :  ${result.transactionId}\n")
-            append("Status :  ${result.status} — AUTHORISED\n\n")
-            append("── Cryptographic Attestation ──\n\n")
+            append("Status :  ${result.status} â€” AUTHORISED\n\n")
+            append("â”€â”€ Cryptographic Attestation â”€â”€\n\n")
             append("Nonce (anti-replay 256-bit):\n")
             append("  $nonceShort\n\n")
             append("Device Key (hw-bound):\n")
@@ -674,7 +673,7 @@ class PaymentActivity : AppCompatActivity() {
             append("Request Hash (SHA-256):\n")
             append("  $hashShort\n\n")
             append("Signing Algorithm:  ECDSA_P256\n\n")
-            append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+            append("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n")
             append("Every field above is ECDSA-signed\n")
             append("by the device hardware key before\n")
             append("leaving the device. A replayed or\n")
@@ -692,14 +691,14 @@ class PaymentActivity : AppCompatActivity() {
 
         binding.tvResult.apply {
             text = buildString {
-                append("PAYMENT AUTHORISED — Attestation Demo\n\n")
+                append("PAYMENT AUTHORISED â€” Attestation Demo\n\n")
                 append("Txn ID  : ${result.transactionId}\n")
-                append("Nonce   : ${result.nonce.take(16)}…\n")
+                append("Nonce   : ${result.nonce.take(16)}â€¦\n")
                 append("HW Key  : ${result.hwLevel}\n")
                 append("Signed  : $iso\n\n")
                 append("Cryptographic proof shown above.\n")
                 append("Nonce, key, timestamp are ECDSA-\n")
-                append("signed — unspoofable + immutable.")
+                append("signed â€” unspoofable + immutable.")
             }
             setTextColor(getColor(android.R.color.holo_green_dark))
             visibility = View.VISIBLE
@@ -715,11 +714,11 @@ class PaymentActivity : AppCompatActivity() {
                 lastDecisionId = result.decisionId
                 binding.tvResult.apply {
                     text = buildString {
-                        append("✅  Payment Authorised\n\n")
+                        append("âœ…  Payment Authorised\n\n")
                         append("Txn ID   :  ${result.transactionId}\n")
                         append("Status   :  ${result.status}\n")
                         if (result.decisionId.isNotBlank())
-                            append("Decision :  ${result.decisionId.take(18)}…\n")
+                            append("Decision :  ${result.decisionId.take(18)}â€¦\n")
                         append("\nNonaShield 5-phase pipeline: PASSED\n")
                         if (BehavioralSessionManager.isComparisonMode) {
                             val dev = BehavioralSessionManager.deviationScore()
@@ -731,7 +730,7 @@ class PaymentActivity : AppCompatActivity() {
                 }
                 if (result.receiptUrl.isNotBlank() || result.decisionId.isNotBlank())
                     binding.btnViewProof.visibility = View.VISIBLE
-                Toast.makeText(this, "Payment authorised ✓", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Payment authorised âœ“", Toast.LENGTH_SHORT).show()
             }
 
             is PaymentResult.StepUpRequired -> showStepUpDialog(result.challengeType)
@@ -739,14 +738,14 @@ class PaymentActivity : AppCompatActivity() {
             is PaymentResult.Blocked -> {
                 val threatMsg = when {
                     result.threatType.contains("RASP_DEV_025", ignoreCase = true) ->
-                        "🖥️  Screen Mirroring Detected\n\nNonashield RASP_DEV_025 detected screen casting to another device. Payment blocked."
+                        "ðŸ–¥ï¸  Screen Mirroring Detected\n\nNonashield RASP_DEV_025 detected screen casting to another device. Payment blocked."
                     result.threatType.contains("ROOT", ignoreCase = true) ->
-                        "⚠️  Rooted Device\n\nPayments disabled on rooted devices."
+                        "âš ï¸  Rooted Device\n\nPayments disabled on rooted devices."
                     result.threatType.contains("HOOK", ignoreCase = true) ->
-                        "⚠️  Runtime Hook Detected\n\nCode injection framework is active."
+                        "âš ï¸  Runtime Hook Detected\n\nCode injection framework is active."
                     result.threatType.contains("BIO", ignoreCase = true) ->
-                        "🧬  Behavioral Identity Mismatch\n\nBiometric signals do not match enrolled user."
-                    else -> "🚫  Blocked by NonaShield\n\n${result.reason}"
+                        "ðŸ§¬  Behavioral Identity Mismatch\n\nBiometric signals do not match enrolled user."
+                    else -> "ðŸš«  Blocked by NonaShield\n\n${result.reason}"
                 }
                 binding.tvResult.apply {
                     text = threatMsg
@@ -757,7 +756,7 @@ class PaymentActivity : AppCompatActivity() {
 
             is PaymentResult.Failure -> {
                 binding.tvResult.apply {
-                    text = "⚠️  Error: ${result.reason}"
+                    text = "âš ï¸  Error: ${result.reason}"
                     setTextColor(getColor(android.R.color.holo_orange_dark))
                     visibility = View.VISIBLE
                 }
@@ -765,13 +764,13 @@ class PaymentActivity : AppCompatActivity() {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Demo 2: Non-Repudiation Receipt
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private fun openReceipt() {
         if (lastDecisionId.isBlank() && lastReceiptUrl.isBlank()) {
-            Toast.makeText(this, "No receipt — complete a payment first", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "No receipt â€” complete a payment first", Toast.LENGTH_SHORT).show()
             return
         }
         lifecycleScope.launch(Dispatchers.IO) {
@@ -789,15 +788,15 @@ class PaymentActivity : AppCompatActivity() {
     private fun showReceiptDialog(receipt: EvidenceReceipt) {
         val chain = receipt.chainOfCustody.joinToString("\n") { "  $it" }
         val msg = buildString {
-            append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-            append("🔏  NON-REPUDIATION RECEIPT\n")
-            append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
-            append("Decision:  ${receipt.decisionId.take(24)}…\n")
-            append("Device:    ${receipt.deviceId.take(20)}…\n")
-            append("Action:    ${receipt.action}  →  ALLOW ✓\n")
+            append("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n")
+            append("ðŸ”  NON-REPUDIATION RECEIPT\n")
+            append("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n\n")
+            append("Decision:  ${receipt.decisionId.take(24)}â€¦\n")
+            append("Device:    ${receipt.deviceId.take(20)}â€¦\n")
+            append("Action:    ${receipt.action}  â†’  ALLOW âœ“\n")
             append("Signed:    ${receipt.signedAtIso}\n\n")
-            append("Payload Hash:\n  ${receipt.payloadHash.take(32)}…\n\n")
-            append("Server Sig (HMAC-SHA256):\n  ${receipt.serverSignature.take(32)}…\n\n")
+            append("Payload Hash:\n  ${receipt.payloadHash.take(32)}â€¦\n\n")
+            append("Server Sig (HMAC-SHA256):\n  ${receipt.serverSignature.take(32)}â€¦\n\n")
             append("Chain of Custody:\n$chain\n\n")
             append("Algorithm: ${receipt.signingAlgorithm}")
         }
@@ -811,38 +810,38 @@ class PaymentActivity : AppCompatActivity() {
             .show()
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Demo 4: Screen capture — companion advisory + threat block dialogs
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Demo 4: Screen capture â€” companion advisory + threat block dialogs
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /**
      * Graceful advisory shown when COMPANION_SCREEN_SHARE_ACTIVE fires (MEDIUM).
      *
      * A verified companion app (WhatsApp Web, Telegram Desktop) is actively mirroring
-     * the screen.  This is NOT a hard block — the source is trusted — but financial
+     * the screen.  This is NOT a hard block â€” the source is trusted â€” but financial
      * data is visible on the external device.  We ask the user to pause sharing before
      * entering payment details.  The payment is NOT blocked; the user can dismiss and
      * proceed if they accept the risk (this matches the zero-trust advisory model: we
      * warn, the user decides, the backend records the elevated risk context).
      *
      * The companion signal clears automatically the instant they stop sharing
-     * (DisplayListener.onDisplayRemoved fires → SignalStateManager.clear()).
+     * (DisplayListener.onDisplayRemoved fires â†’ SignalStateManager.clear()).
      */
     private fun showCompanionShareAdvisory() {
         AlertDialog.Builder(this)
-            .setTitle("📡  Screen Being Shared")
+            .setTitle("ðŸ“¡  Screen Being Shared")
             .setMessage(buildString {
-                append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-                append("⚠️  ADVISORY  ·  RASP_DEV_051\n")
-                append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+                append("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n")
+                append("âš ï¸  ADVISORY  Â·  RASP_DEV_051\n")
+                append("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n\n")
                 append("NonaShield detected that your screen is currently being mirrored ")
                 append("via a trusted companion app (e.g. WhatsApp Web, Telegram Desktop).\n\n")
                 append("Risk: The external device can see everything on your screen, including:\n")
-                append("  • Payment amount and recipient\n")
-                append("  • OTP codes as they appear\n")
-                append("  • Account numbers and balances\n\n")
+                append("  â€¢ Payment amount and recipient\n")
+                append("  â€¢ OTP codes as they appear\n")
+                append("  â€¢ Account numbers and balances\n\n")
                 append("Source: Verified companion app (trusted, not blocked)\n")
-                append("Severity: MEDIUM  ·  Advisory\n\n")
+                append("Severity: MEDIUM  Â·  Advisory\n\n")
                 append("For your security, please disconnect WhatsApp Web or close the companion\n")
                 append("app before completing this payment.")
             })
@@ -854,7 +853,7 @@ class PaymentActivity : AppCompatActivity() {
                 ).show()
             }
             .setNeutralButton("Proceed Anyway") { _, _ ->
-                // User explicitly accepts the risk — proceed with payment.
+                // User explicitly accepts the risk â€” proceed with payment.
                 // Backend receives COMPANION_SCREEN_SHARE_ACTIVE signal context and can
                 // apply additional step-up or risk scoring as per its policy configuration.
                 Toast.makeText(this, "Proceeding with elevated screen-share risk context", Toast.LENGTH_SHORT).show()
@@ -868,26 +867,26 @@ class PaymentActivity : AppCompatActivity() {
     private fun showThreatBlockedDialog(threatId: String?) {
         val (title, message) = when {
             threatId?.contains("025") == true ->
-                "🖥️  Screen Mirroring Detected" to
+                "ðŸ–¥ï¸  Screen Mirroring Detected" to
                     "NonaShield RASP sensor RASP_DEV_025 detected that your screen is being cast " +
                     "to another device.\n\nFinancial data would be visible to the attacker.\n\n" +
                     "Payment blocked. Disable screen mirroring and retry."
             threatId?.contains("051") == true || threatId?.contains("SCREEN_RECORDING") == true ->
-                "📱  Screen Recording Detected" to
+                "ðŸ“±  Screen Recording Detected" to
                     "NonaShield RASP sensor RASP_DEV_051 detected active screen recording on this device.\n\n" +
                     "A recording app could capture your account details, OTP, or payment data.\n\n" +
                     "Payment blocked. Stop screen recording and retry."
             threatId?.contains("ROOT") == true ->
-                "🔓  Root Detected" to "Root access detected. Payments disabled on rooted devices."
+                "ðŸ”“  Root Detected" to "Root access detected. Payments disabled on rooted devices."
             threatId?.contains("HOOK") == true ->
-                "🪝  Runtime Hook Detected" to "A code-injection framework is active. Payment blocked."
+                "ðŸª  Runtime Hook Detected" to "A code-injection framework is active. Payment blocked."
             threatId?.contains("VPN") == true ->
-                "🔒  VPN Conflict Detected" to
+                "ðŸ”’  VPN Conflict Detected" to
                     "NonaShield RASP sensor NET_VPN_005 detected an active VPN connection.\n\n" +
                     "VPN traffic may intercept or modify payment data.\n\n" +
                     "Payment blocked. Disconnect VPN and retry."
             else ->
-                "🚫  Security Check Failed" to
+                "ðŸš«  Security Check Failed" to
                     "NonaShield detected a security violation. Restart the app after resolving it."
         }
         AlertDialog.Builder(this)
@@ -900,26 +899,26 @@ class PaymentActivity : AppCompatActivity() {
             .show()
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // UC-08: SIM Swap live detection dialog
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /**
      * Show the live SIM swap detection alert.
      *
      * This dialog is shown when the SIM fingerprint recorded at KYC enrollment
-     * does not match the current SIM fingerprint — indicating a SIM swap has
+     * does not match the current SIM fingerprint â€” indicating a SIM swap has
      * occurred since the user enrolled.
      *
      * When biometric deviation is also elevated, the dual-signal confidence
-     * reaches 1.00 (strongest possible detection — attacker physically has the
+     * reaches 1.00 (strongest possible detection â€” attacker physically has the
      * SIM AND is using a different biometric profile).
      *
      * Investor talking point:
      *   "The device just detected that the SIM card was changed since this user
      *    enrolled. In the SIM swap scenario, the attacker has ported the victim's
      *    number to their own SIM. NonaShield caught it using a cryptographic
-     *    fingerprint of the SIM captured at enrollment — no carrier API needed."
+     *    fingerprint of the SIM captured at enrollment â€” no carrier API needed."
      */
     private fun showSimSwapDialog(iccidChanged: Boolean, biometricDeviation: Float) {
         val confidence = when {
@@ -930,25 +929,25 @@ class PaymentActivity : AppCompatActivity() {
         val bioPct = (biometricDeviation * 100).toInt()
 
         AlertDialog.Builder(this)
-            .setTitle("📱  SIM Swap Detected — Payment Blocked")
+            .setTitle("ðŸ“±  SIM Swap Detected â€” Payment Blocked")
             .setMessage(buildString {
-                append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-                append("⚠️  LIVE DETECTION  ·  SCAM_SS_001\n")
-                append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+                append("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n")
+                append("âš ï¸  LIVE DETECTION  Â·  SCAM_SS_001\n")
+                append("â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n\n")
                 append("The SIM card on this device does not match the SIM that was\n")
                 append("present when this account enrolled.\n\n")
                 append("Signal sources:\n")
                 if (iccidChanged) {
-                    append("  🔴 SIM Fingerprint: CHANGED  (MCC+MNC mismatch)\n")
+                    append("  ðŸ”´ SIM Fingerprint: CHANGED  (MCC+MNC mismatch)\n")
                 }
                 if (biometricDeviation > 0.20f) {
-                    append("  🔴 Behavioral deviation: $bioPct%  (6-channel biometric)\n")
+                    append("  ðŸ”´ Behavioral deviation: $bioPct%  (6-channel biometric)\n")
                 } else {
-                    append("  🟡 Behavioral deviation: $bioPct%  (within baseline)\n")
+                    append("  ðŸŸ¡ Behavioral deviation: $bioPct%  (within baseline)\n")
                 }
                 append("\nDual-signal confidence:  ${(confidence * 100).toInt()}%\n")
-                append("Threat ID:  SCAM_SS_001  ·  sim_swap_proxy\n")
-                append("Action:  BLOCK  ·  CRITICAL\n\n")
+                append("Threat ID:  SCAM_SS_001  Â·  sim_swap_proxy\n")
+                append("Action:  BLOCK  Â·  CRITICAL\n\n")
                 append("In production: payment blocked, account flagged for\n")
                 append("manual review. Step-up re-enrollment required.")
             })
@@ -960,15 +959,15 @@ class PaymentActivity : AppCompatActivity() {
             .show()
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Behavioral Identity Mismatch / Social Engineering detection
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private fun showSocialEngineeringWarning(previousUser: String) {
         binding.cardSocialEngWarning.visibility = View.VISIBLE
         binding.tvSocialEngDetail.text =
             "Behavioral patterns do not match your enrolled profile. " +
-            "Risk elevated — additional verification may be required."
+            "Risk elevated â€” additional verification may be required."
         binding.tvRiskTier.text = "Risk: HIGH"
         binding.tvRiskTier.setBackgroundColor(getColor(android.R.color.holo_red_dark))
     }
@@ -978,20 +977,20 @@ class PaymentActivity : AppCompatActivity() {
             .joinToString("\n") { "  ${it.statusIcon} ${it.name}: +${it.deviationPct}% deviation" }
 
         AlertDialog.Builder(this)
-            .setTitle("🧬  Social Engineering Detected")
+            .setTitle("ðŸ§¬  Social Engineering Detected")
             .setMessage(buildString {
                 append("NonaShield behavioral biometrics engine has detected that the person ")
                 append("currently interacting with this device does NOT match the enrolled user.\n\n")
                 append("Composite identity deviation: ${summary.compositePct}%\n\n")
                 append("Deviating channels (${summary.deviatingChannels.size}/6):\n")
                 append(channels)
-                append("\n\nThis is a strong signal of a social engineering attack — ")
+                append("\n\nThis is a strong signal of a social engineering attack â€” ")
                 append("the device was handed to a different person who is attempting ")
                 append("to initiate a payment.\n\n")
-                append("Threat: USR_BEH_012 · SOCIAL_ENGINEERING_BIOMETRIC\n")
-                append("Risk tier: HIGH — Step-up auth required")
+                append("Threat: USR_BEH_012 Â· SOCIAL_ENGINEERING_BIOMETRIC\n")
+                append("Risk tier: HIGH â€” Step-up auth required")
             })
-            .setPositiveButton("🔐  Require Step-Up Auth") { _, _ ->
+            .setPositiveButton("ðŸ”  Require Step-Up Auth") { _, _ ->
                 Toast.makeText(this, "In production: OTP / biometric re-auth triggered", Toast.LENGTH_LONG).show()
             }
             .setCancelable(false)
@@ -1001,7 +1000,7 @@ class PaymentActivity : AppCompatActivity() {
     private fun showBiometricPaymentBlockedDialog(deviation: Float) {
         val summary = BehavioralSessionManager.buildDeviationSummary()
         AlertDialog.Builder(this)
-            .setTitle("🧬  Identity Mismatch — Payment Blocked")
+            .setTitle("ðŸ§¬  Identity Mismatch â€” Payment Blocked")
             .setMessage(buildString {
                 append("Behavioral biometrics deviation: ${"%.0f".format(deviation * 100)}%\n\n")
                 append("The person currently using this device does not match the enrolled ")
@@ -1019,19 +1018,19 @@ class PaymentActivity : AppCompatActivity() {
             .show()
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // UC-06: Identity Verification / KYC Enrollment
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private fun promptKycEnrollment() {
-        val deviceId = DiimeApp.enrollmentState?.deviceId ?: PayShieldEdgeInitializer.getStableDeviceId()
+        val deviceId = DiimeApp.enrollmentState?.deviceId ?: PayShieldSDK.getStableDeviceId()
 
         AlertDialog.Builder(this)
-            .setTitle("🪪  Identity Verification")
+            .setTitle("ðŸªª  Identity Verification")
             .setMessage(buildString {
                 append("Submit your identity documents for KYC verification.\n\n")
                 append("  Document: Aadhaar + PAN (hashed, never stored as plaintext)\n")
-                append("  Device ID: ${deviceId.take(16)}…\n\n")
+                append("  Device ID: ${deviceId.take(16)}â€¦\n\n")
                 append("Your biometric profile and SIM fingerprint will be captured " +
                     "at enrollment to protect against account takeover.")
             })
@@ -1046,7 +1045,7 @@ class PaymentActivity : AppCompatActivity() {
         try {
             EdgeRiskEnforcer.assertAllowed()
         } catch (e: SecurityException) {
-            binding.tvResult.text = "⛔ KYC blocked — security risk detected\n${e.message}"
+            binding.tvResult.text = "â›” KYC blocked â€” security risk detected\n${e.message}"
             binding.tvResult.setTextColor(getColor(android.R.color.holo_red_dark))
             binding.tvResult.visibility = View.VISIBLE
             return
@@ -1067,16 +1066,16 @@ class PaymentActivity : AppCompatActivity() {
         val degree = result.enrollmentDegree
 
         val (statusIcon, statusColor) = when (result.status) {
-            "APPROVED" -> "✅" to 0xFF00AA44.toInt()
-            "BLOCKED"  -> "🔴" to 0xFFDD2222.toInt()
-            "PENDING"  -> "⏳" to 0xFFFFAA00.toInt()
-            else       -> "⚠️" to 0xFFFF6600.toInt()
+            "APPROVED" -> "âœ…" to 0xFF00AA44.toInt()
+            "BLOCKED"  -> "ðŸ”´" to 0xFFDD2222.toInt()
+            "PENDING"  -> "â³" to 0xFFFFAA00.toInt()
+            else       -> "âš ï¸" to 0xFFFF6600.toInt()
         }
 
         binding.tvResult.apply {
             text = buildString {
                 append("$statusIcon  Identity Verification ${result.status}\n\n")
-                append("KYC ID:  ${result.kycId.take(24)}…\n")
+                append("KYC ID:  ${result.kycId.take(24)}â€¦\n")
                 if (result.riskScore > 0) append("Risk:    ${result.riskScore}\n")
                 if (result.reason.isNotBlank()) append("Reason:  ${result.reason}\n")
                 when {
@@ -1094,19 +1093,19 @@ class PaymentActivity : AppCompatActivity() {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Step-up dialog
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private fun showStepUpDialog(challengeType: String) {
         AlertDialog.Builder(this)
-            .setTitle("🔐  Additional Verification Required")
+            .setTitle("ðŸ”  Additional Verification Required")
             .setMessage(
                 "NonaShield detected elevated risk.\n\nVerification: $challengeType\n\n" +
                 "In production: OTP or biometric challenge sent to the enrolled user."
             )
             .setPositiveButton("Simulate Verify") { _, _ ->
-                Toast.makeText(this, "Step-up verification — demo mode", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Step-up verification â€” demo mode", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -1120,17 +1119,17 @@ class PaymentActivity : AppCompatActivity() {
      * customer's auth layer enforces an OTP/biometric challenge here.
      */
     private fun showPaymentRiskStepUpDialog(amount: Double, reason: String?) {
-        val amountStr = "₹${String.format("%,.0f", amount)}"
+        val amountStr = "â‚¹${String.format("%,.0f", amount)}"
         AlertDialog.Builder(this)
-            .setTitle("⚠️  Transaction Risk — Step-Up Required")
+            .setTitle("âš ï¸  Transaction Risk â€” Step-Up Required")
             .setMessage(
-                "NonaShield has flagged this ₹$amountStr payment for elevated risk.\n\n" +
+                "NonaShield has flagged this â‚¹$amountStr payment for elevated risk.\n\n" +
                 "Reason: ${reason ?: "PAYMENT_RISK_STEP_UP"}\n\n" +
                 "Risk factors evaluated by SDK:\n" +
-                "  • Transaction amount tier (HIGH ≥ ₹1L)\n" +
-                "  • Geo-velocity anomaly (impossible/high-velocity travel)\n" +
-                "  • Device trust score\n" +
-                "  • New beneficiary + payment velocity\n\n" +
+                "  â€¢ Transaction amount tier (HIGH â‰¥ â‚¹1L)\n" +
+                "  â€¢ Geo-velocity anomaly (impossible/high-velocity travel)\n" +
+                "  â€¢ Device trust score\n" +
+                "  â€¢ New beneficiary + payment velocity\n\n" +
                 "In production: OTP or biometric challenge issued before proceeding.\n" +
                 "RBI guideline: automatic hold on anomalous UPI/NEFT transactions."
             )
@@ -1150,23 +1149,23 @@ class PaymentActivity : AppCompatActivity() {
             .show()
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Helpers
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private fun updateRiskBadge() {
         val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         val isMirroring = dm.displays.size > 1
-        val simSwap     = PayShieldEdgeInitializer.isSimSwapSuspected() == true
+        val simSwap     = PayShieldSDK.isSimSwapSuspected() == true
         val tier = if (isMirroring || simSwap ||
             (BehavioralSessionManager.isComparisonMode && BehavioralSessionManager.deviationScore() > 0.55f))
             "HIGH"
         else
             EdgeRiskEnforcer.currentRiskTier()
         val label = when {
-            isMirroring -> "Risk: HIGH ⚠️ Mirror"
-            simSwap     -> "Risk: HIGH 📱 SIM Swap"
-            BehavioralSessionManager.isComparisonMode && tier == "HIGH" -> "Risk: HIGH 🧬 Bio"
+            isMirroring -> "Risk: HIGH âš ï¸ Mirror"
+            simSwap     -> "Risk: HIGH ðŸ“± SIM Swap"
+            BehavioralSessionManager.isComparisonMode && tier == "HIGH" -> "Risk: HIGH ðŸ§¬ Bio"
             else -> "Risk: $tier"
         }
         binding.tvRiskTier.apply {
@@ -1198,3 +1197,5 @@ class PaymentActivity : AppCompatActivity() {
         binding.progressBar.visibility    = if (loading) View.VISIBLE else View.GONE
     }
 }
+
+

@@ -1,4 +1,4 @@
-package com.diimeai.demo.network
+﻿package com.diimeai.demo.network
 
 import android.content.Context
 import android.util.Log
@@ -6,7 +6,6 @@ import com.diimeai.demo.BuildConfig
 import com.payshield.android.sdk.PinningInterceptor
 import com.payshield.android.sdk.SignalSink
 import com.payshield.sdk.integration.PayShieldAuthInterceptor
-import com.payshield.sdk.PayShieldEdgeInitializer
 import com.payshield.sdk.token.SessionHolder
 import okhttp3.CertificatePinner
 import okhttp3.MediaType.Companion.toMediaType
@@ -22,18 +21,18 @@ import java.util.concurrent.TimeUnit
  *
  * Wraps OkHttp with the NonaShield security interceptor stack:
  *
- *   ┌────────────────────────────────────────────────────┐
- *   │  PayShieldAuthInterceptor (outermost)              │
- *   │    — detects JWT alg:none, Basic auth, brute-force │
- *   │  PinningInterceptor (inner)                        │
- *   │    — attaches X-PayShield-Token + Signature        │
- *   │    — attaches 7 flat headers required by nginx     │
- *   │    — checks EdgeRiskEnforcer (fail-closed)         │
- *   │  HttpLoggingInterceptor (debug only)               │
- *   └────────────────────────────────────────────────────┘
+ *   â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+ *   â”‚  PayShieldAuthInterceptor (outermost)              â”‚
+ *   â”‚    â€” detects JWT alg:none, Basic auth, brute-force â”‚
+ *   â”‚  PinningInterceptor (inner)                        â”‚
+ *   â”‚    â€” attaches X-PayShield-Token + Signature        â”‚
+ *   â”‚    â€” attaches 7 flat headers required by nginx     â”‚
+ *   â”‚    â€” checks EdgeRiskEnforcer (fail-closed)         â”‚
+ *   â”‚  HttpLoggingInterceptor (debug only)               â”‚
+ *   â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
  *
  * Session lifecycle:
- *   - Before login: SessionHolder has no session — PinningInterceptor will
+ *   - Before login: SessionHolder has no session â€” PinningInterceptor will
  *     throw IllegalStateException if a protected call is attempted.
  *   - After login: call [setSession] to inject user identity.  The interceptors
  *     pick up the new session on the next request without client rebuild.
@@ -43,15 +42,15 @@ object DiimeApiClient {
     private const val TAG = "DiimeApiClient"
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
-    // ── TLS Certificate Pinning for api.diimeai.com ───────────────────────────
-    // This is the CUSTOMER APP's cert pin to its own backend — the customer's
+    // â”€â”€ TLS Certificate Pinning for api.diimeai.com â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // This is the CUSTOMER APP's cert pin to its own backend â€” the customer's
     // responsibility to update when the backend certificate rotates.
     // In production: replace "api.diimeai.com" with your bank's own API hostname
     // and update these pins whenever your backend TLS certificate is renewed.
     //
     // Current leaf cert: issued 2026-05-28, expires 2026-08-26 (Let's Encrypt YE2)
     // Intermediate pin (YE2) is included as backup so routine 90-day leaf renewals
-    // do NOT require an app update — only a key-pair rotation does.
+    // do NOT require an app update â€” only a key-pair rotation does.
     //
     // To get the current pin after a renewal:
     //   openssl s_client -connect api.diimeai.com:443 -servername api.diimeai.com \
@@ -59,7 +58,7 @@ object DiimeApiClient {
     //     | openssl pkey -pubin -outform DER | openssl dgst -sha256 -binary \
     //     | openssl enc -base64
     private val BACKEND_CERT_PINNER: CertificatePinner = CertificatePinner.Builder()
-        .add("api.diimeai.com", "sha256/1kxomJM4WNmZfPDERIy86e7hsmxV9fCaGgEexIUyZ3w=")  // leaf — expires 2026-08-26
+        .add("api.diimeai.com", "sha256/1kxomJM4WNmZfPDERIy86e7hsmxV9fCaGgEexIUyZ3w=")  // leaf â€” expires 2026-08-26
         .add("api.diimeai.com", "sha256/s/tdAOmUzd8syaTuqfgGvFcn6DzA5Cmb+Vby1ST+U3Y=")  // Let's Encrypt YE2 intermediate (backup)
         .add("diimeai.com",     "sha256/1kxomJM4WNmZfPDERIy86e7hsmxV9fCaGgEexIUyZ3w=")
         .add("diimeai.com",     "sha256/s/tdAOmUzd8syaTuqfgGvFcn6DzA5Cmb+Vby1ST+U3Y=")
@@ -71,13 +70,13 @@ object DiimeApiClient {
     private lateinit var client: OkHttpClient
 
     // Minimal client for read-only SOC dashboard calls.
-    // Dashboard stats/decisions/threats only need X-Api-Key — they must NOT go
+    // Dashboard stats/decisions/threats only need X-Api-Key â€” they must NOT go
     // through PinningInterceptor because:
     //   1. PinningInterceptor adds X-Edge-Risk-Level; if the test device's RASP tier
     //      is HIGH (emulator, rooted phone, USB-debugging device) NGINX blocks with 403.
-    //   2. EdgeRiskEnforcer.assertAllowed() is called on every intercept — unnecessary
+    //   2. EdgeRiskEnforcer.assertAllowed() is called on every intercept â€” unnecessary
     //      overhead for read-only observability endpoints.
-    //   3. RuntimeIntegrityGate.assertClean() runs before every signing — debug APK
+    //   3. RuntimeIntegrityGate.assertClean() runs before every signing â€” debug APK
     //      checks add latency and may throw on certain debug configurations.
     // Login and enrollment also skip PinningInterceptor for the same reason.
     private val statsClient: OkHttpClient by lazy {
@@ -91,7 +90,7 @@ object DiimeApiClient {
 
     /**
      * Call once from Application.onCreate() BEFORE any network calls.
-     * Signing of ingest envelopes is done via PayShieldEdgeInitializer.signIngestPayload()
+     * Signing of ingest envelopes is done via PayShieldSDK.signIngestPayload()
      * so customer app code never touches DeviceKeyManager directly.
      */
     fun init(context: Context) {
@@ -102,18 +101,18 @@ object DiimeApiClient {
                 HttpLoggingInterceptor.Level.NONE
         }
 
-        // PinningInterceptor — reads session from SessionHolder on every call.
+        // PinningInterceptor â€” reads session from SessionHolder on every call.
         // SessionHolder.setSession() is called after login (see LoginActivity).
-        // keyManager is created internally by PinningInterceptor — customer app does not
+        // keyManager is created internally by PinningInterceptor â€” customer app does not
         // hold a DeviceKeyManager reference.
         // ATL-2027: X-DPIP-Device-Hash salt is read from EnrollmentState.loadDpipSalt()
-        // (SecureStorage / AES-256-GCM + AndroidKeyStore) on every request — not passed
+        // (SecureStorage / AES-256-GCM + AndroidKeyStore) on every request â€” not passed
         // as a constructor param.  The salt is backend-issued at enrollment time.
         val pinning = PinningInterceptor(
             act = "REQUEST"    // default; overridden per-call via action-specific clients
         )
 
-        // PayShieldAuthInterceptor — wire-level auth observation.
+        // PayShieldAuthInterceptor â€” wire-level auth observation.
         // Detects JWT alg:none, Basic auth, auth-over-HTTP, brute-force patterns.
         val authMonitor = PayShieldAuthInterceptor(
             sink = object : com.payshield.sdk.signal.SignalSink {
@@ -128,9 +127,9 @@ object DiimeApiClient {
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
             .certificatePinner(BACKEND_CERT_PINNER)
-            .addInterceptor(authMonitor)    // outermost — observe before signing
+            .addInterceptor(authMonitor)    // outermost â€” observe before signing
             .addInterceptor(pinning)        // sign + attach all PayShield headers
-            .addInterceptor(logging)        // innermost — log final signed request
+            .addInterceptor(logging)        // innermost â€” log final signed request
             .build()
 
         Log.i(TAG, "DiimeApiClient initialized. baseUrl=${BuildConfig.NONASHIELD_BASE_URL}")
@@ -156,20 +155,20 @@ object DiimeApiClient {
 
     // -------------------------------------------------------------------------
     // DiimeAI API calls
-    // All calls are blocking — call from Dispatchers.IO coroutine.
+    // All calls are blocking â€” call from Dispatchers.IO coroutine.
     // -------------------------------------------------------------------------
 
     /**
-     * DEMO ONLY — authenticate using the NonaShield demo login stub.
+     * DEMO ONLY â€” authenticate using the NonaShield demo login stub.
      *
-     * Calls POST /api/v1/auth/login — a demo endpoint that simulates the
+     * Calls POST /api/v1/auth/login â€” a demo endpoint that simulates the
      * customer bank's IdP and issues a NonaShield-signed RS256 JWT directly.
      * That endpoint returns 503 in live (non-demo) environments.
      *
-     * ─────────────────────────────────────────────────────────────
+     * â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
      * PRODUCTION INTEGRATION (do NOT call this method):
      *
-     *   1. Customer app calls the bank's own IdP → receives bank JWT.
+     *   1. Customer app calls the bank's own IdP â†’ receives bank JWT.
      *   2. App calls POST /api/v1/auth/session  (NonaShield production endpoint):
      *        Authorization: Bearer <bank-jwt>
      *        X-Tenant-Id:   <tenant-id>
@@ -181,10 +180,10 @@ object DiimeApiClient {
      *   3. App calls PayShieldSDK.setSession(userId, sessionId, jwt=nonashieldJwt).
      *
      * See DiimeApiClient.establishSession() for a reference implementation.
-     * ─────────────────────────────────────────────────────────────
+     * â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
      *
      * A raw OkHttpClient is used here (no PinningInterceptor) because
-     * PinningInterceptor requires an active session — which does not exist
+     * PinningInterceptor requires an active session â€” which does not exist
      * before login completes.  All subsequent calls use the full interceptor stack.
      */
     fun login(username: String, password: String): LoginResult {
@@ -256,9 +255,9 @@ object DiimeApiClient {
     }
 
     /**
-     * PRODUCTION — exchange a bank-issued JWT for a NonaShield session JWT.
+     * PRODUCTION â€” exchange a bank-issued JWT for a NonaShield session JWT.
      *
-     * **Deprecated.** Use [com.payshield.sdk.PayShieldSDK.establishSession] instead —
+     * **Deprecated.** Use [com.payshield.sdk.PayShieldSDK.establishSession] instead â€”
      * the SDK now owns this exchange and derives deviceId internally from
      * [com.payshield.sdk.crypto.DeviceKeyManager], eliminating the need for the
      * customer app to pass it:
@@ -269,14 +268,14 @@ object DiimeApiClient {
      *     is SessionEstablishResult.Success -> { /* proceed */ }
      *     is SessionEstablishResult.Failure -> { /* show error */ }
      * }
-     * // On token refresh, call it again — SDK atomically replaces the session.
+     * // On token refresh, call it again â€” SDK atomically replaces the session.
      * ```
      *
      * This method is a no-op in the demo app (demo uses [login] instead) and is
      * kept only for reference until integrators have migrated to the SDK method.
      */
     @Deprecated(
-        message = "Use PayShieldSDK.establishSession(bankJwt, userId) — the SDK derives deviceId automatically.",
+        message = "Use PayShieldSDK.establishSession(bankJwt, userId) â€” the SDK derives deviceId automatically.",
         replaceWith = ReplaceWith(
             "PayShieldSDK.establishSession(bankJwt = customerJwt, userId = userId)",
             "com.payshield.sdk.PayShieldSDK"
@@ -334,7 +333,7 @@ object DiimeApiClient {
     }
 
     /**
-     * Initiate a payment — protected by the full NonaShield 5-phase pipeline.
+     * Initiate a payment â€” protected by the full NonaShield 5-phase pipeline.
      *
      * The request goes to the Customer API Gateway (api.diimeai.com) which:
      *   1. nginx validates X-PayShield-Token + Signature (5-phase Lua pipeline)
@@ -350,7 +349,7 @@ object DiimeApiClient {
         recipientId: String,
         note:        String
     ): PaymentResult {
-        // NonaShield is privacy-preserving — never send raw PII (amount, recipient, VPA).
+        // NonaShield is privacy-preserving â€” never send raw PII (amount, recipient, VPA).
         // Compute an opaque SHA-256 commitment from the payment details so the backend
         // can sign the decision without seeing transaction values.
         val amountPaise = (amount * 100).toLong()
@@ -367,7 +366,7 @@ object DiimeApiClient {
 
         // MISMATCH 6b fix: backend /api/v1/payment/initiate requires a valid JWT Bearer
         // token (Depends(require_jwt)) to identify the caller's session. Without it the
-        // backend returns 401 → app shows "Payment failed: HTTP 401".
+        // backend returns 401 â†’ app shows "Payment failed: HTTP 401".
         // Pattern matches verifyWithGateway() (MISMATCH 6a) and submitKyc().
         val request = Request.Builder()
             .url("${BuildConfig.DIIMEAI_API_URL}/api/v1/payment/initiate")
@@ -391,7 +390,7 @@ object DiimeApiClient {
                             .ifBlank { json.optString("status", "ALLOW") }
                         // Read attestation values captured by PinningInterceptor for this request.
                         // These are the exact nonce/timestamp/hash/hwLevel that were signed and
-                        // sent to the NGINX gateway — proof the request was device-attested.
+                        // sent to the NGINX gateway â€” proof the request was device-attested.
                         val att = com.payshield.android.sdk.LastAttestation
                         PaymentResult.Success(
                             transactionId = txnId,
@@ -427,7 +426,7 @@ object DiimeApiClient {
                 }
             }
         } catch (e: SecurityException) {
-            // EdgeRiskEnforcer.assertAllowed() threw — device is RASP-blocked
+            // EdgeRiskEnforcer.assertAllowed() threw â€” device is RASP-blocked
             Log.e(TAG, "Payment blocked by local RASP enforcer: ${e.message}")
             PaymentResult.Blocked(reason = "Device security check failed")
         } catch (e: Exception) {
@@ -437,10 +436,10 @@ object DiimeApiClient {
     }
 
     /**
-     * Fetch hardware binding proof for this device — Demo 1.
+     * Fetch hardware binding proof for this device â€” Demo 1.
      * Returns attestation level, key fingerprint, enrolled date.
      *
-     * C4 fix: endpoint is now api_key_required — passes X-Api-Key header.
+     * C4 fix: endpoint is now api_key_required â€” passes X-Api-Key header.
      * The key is baked into BuildConfig.DEMO_API_KEY at build time via the
      * DEMO_API_KEY environment variable.
      */
@@ -477,9 +476,9 @@ object DiimeApiClient {
     }
 
     /**
-     * Fetch non-repudiation receipt for a gateway decision — Demo 2.
+     * Fetch non-repudiation receipt for a gateway decision â€” Demo 2.
      *
-     * C4 fix: endpoint is now api_key_required — passes X-Api-Key header.
+     * C4 fix: endpoint is now api_key_required â€” passes X-Api-Key header.
      */
     fun getEvidenceReceipt(decisionId: String): EvidenceReceipt? {
         val request = Request.Builder()
@@ -504,7 +503,7 @@ object DiimeApiClient {
                     action          = json.optString("action"),
                     payloadHash     = json.optString("payload_hash"),
                     // receipt_hmac is the Non-Repudiation HMAC field (renamed from server_signature
-                    // to avoid the PII scrubber masking it — scrubber only redacts server_signature)
+                    // to avoid the PII scrubber masking it â€” scrubber only redacts server_signature)
                     serverSignature = json.optString("receipt_hmac").ifBlank { json.optString("server_signature") },
                     signedAtIso     = json.optString("signed_at_iso"),
                     signingAlgorithm= json.optString("signing_algorithm"),
@@ -562,10 +561,10 @@ object DiimeApiClient {
         }
     }
 
-    // ── Scenario payload definitions ──────────────────────────────────────────
+    // â”€â”€ Scenario payload definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     //
     // Each entry defines the IngestEnvelope.payload for that fraud use case.
-    // Signals come from the real SDK on the device — these definitions describe
+    // Signals come from the real SDK on the device â€” these definitions describe
     // WHAT the SDK emits, not what the server fabricates.
     //
     // event_type must be UPPER_SNAKE_CASE (backend IngestEnvelope validator).
@@ -575,10 +574,10 @@ object DiimeApiClient {
         val name:       String,
         val eventType:  String,
         val signals:    Map<String, Any>,
-        val signalDefs: List<SignalFired>,   // for UI — what the SDK emits
+        val signalDefs: List<SignalFired>,   // for UI â€” what the SDK emits
         val decision:   String,             // expected outcome (for simulation fallback)
         val riskScore:  Int,
-        // Action context — the sensitive operation being guarded.
+        // Action context â€” the sensitive operation being guarded.
         // PAYMENT | KYC | OTP | LOGIN | SESSION_CREATE
         // Flows as X-PS-Action header + JSON body "action" field so NGINX policy
         // enforcement and the backend compliance engine apply action-specific rules.
@@ -652,11 +651,11 @@ object DiimeApiClient {
             // ATL-2027 enhanced: 8 device-layer signals feed deepfake_risk_detector.py
             mapOf("virtual_camera_detected" to true, "obs_package_present" to true,
                   "non_physical_camera_id" to true,
-                  "overlay_attack"      to true,      // RASP_DEV_063 — SYSTEM_ALERT_WINDOW redress
-                  "background_camera"   to true,      // RASP_DEV_064 — deepfake frame acquisition
-                  "frame_rate_anomaly"  to true,      // RASP_DEV_065 — synthetic camera FPS
-                  "mediapipe_injection" to true,      // RASP_DEV_065 — AR deepfake SDK present
-                  "voice_changer"       to true),     // RASP_DEV_065 — voice spoof for liveness
+                  "overlay_attack"      to true,      // RASP_DEV_063 â€” SYSTEM_ALERT_WINDOW redress
+                  "background_camera"   to true,      // RASP_DEV_064 â€” deepfake frame acquisition
+                  "frame_rate_anomaly"  to true,      // RASP_DEV_065 â€” synthetic camera FPS
+                  "mediapipe_injection" to true,      // RASP_DEV_065 â€” AR deepfake SDK present
+                  "voice_changer"       to true),     // RASP_DEV_065 â€” voice spoof for liveness
             listOf(
                 SignalFired("APP_RUNTIME_008", 0.94f, "CRITICAL", "synthetic_identity"),
                 // ATL-2027 deepfake precondition compound signals
@@ -683,7 +682,7 @@ object DiimeApiClient {
                    SignalFired("BOT_APP_011", 0.86f, "CRITICAL", "organized_crime_cluster")),
             "BLOCK", 94, "PAYMENT"),
 
-        // ── ATL-2027: Autonomous Trust Layer — DPIP + autonomous command enforcement ──
+        // â”€â”€ ATL-2027: Autonomous Trust Layer â€” DPIP + autonomous command enforcement â”€â”€
         17 to ScenarioDef("ATL-2027 Autonomous Trust",  "ATL_AUTONOMOUS_SIGNAL",
             // Compound payload: DPIP consortium blocklist hit + autonomous BLOCK command +
             // full deepfake precondition cluster (overlay + background camera + compound)
@@ -706,24 +705,24 @@ object DiimeApiClient {
             ),
             "BLOCK", 99, "KYC"),
 
-        // ── UC-PAY-RISK: Real-time Payment Risk Scoring ───────────────────────
+        // â”€â”€ UC-PAY-RISK: Real-time Payment Risk Scoring â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         // Composite signal from amount tier + geo velocity + device trust + velocity.
         // Demonstrates the backend's UC-PAYMENT-RISK path (commit a5ae22d):
-        //   A. Geo velocity: Mumbai → Delhi in 2.3h = 609 km/h (HIGH_VELOCITY → STEP_UP)
-        //   B. Amount tier: ₹5,00,000 (HIGH tier, ≥₹1L + device_trust 42 ≥ 40 → STEP_UP)
+        //   A. Geo velocity: Mumbai â†’ Delhi in 2.3h = 609 km/h (HIGH_VELOCITY â†’ STEP_UP)
+        //   B. Amount tier: â‚¹5,00,000 (HIGH tier, â‰¥â‚¹1L + device_trust 42 â‰¥ 40 â†’ STEP_UP)
         //   C. Device trust score gate: 42 (approaching 60 threshold)
         //   D. New beneficiary: 4th new payee in 14 days
         //   E. Payment velocity: 8 payments in 7 days (elevated pattern)
         //
         // In the demo app, PayShieldSDK.evaluateAtCheckpoint(action="PAYMENT") fires
         // this check automatically from PaymentActivity before every real payment.
-        // Customer apps call the SDK — no custom risk logic in the app.
+        // Customer apps call the SDK â€” no custom risk logic in the app.
         //
         // UPI cooling period: backend enforces 4-hour hold on first high-value
         // UPI payment to a new payee (RBI guideline compliance).
         19 to ScenarioDef("Real-time Payment Risk Scoring", "PAYMENT_RISK_SIGNAL",
             mapOf(
-                // Amount tier: HIGH (₹5L, threshold ≥ ₹1L)
+                // Amount tier: HIGH (â‚¹5L, threshold â‰¥ â‚¹1L)
                 "amount_inr"            to 500_000,
                 "currency"              to "INR",
                 "payment_method"        to "UPI",
@@ -734,7 +733,7 @@ object DiimeApiClient {
                 // Payment velocity (8 payments in 7 days)
                 "payment_count_7d"      to 8,
                 "payment_count_30d"     to 14,
-                // Geo velocity: Mumbai → Delhi in 2.3h = 609 km/h → HIGH_VELOCITY
+                // Geo velocity: Mumbai â†’ Delhi in 2.3h = 609 km/h â†’ HIGH_VELOCITY
                 "geo_velocity_kmh"      to 609,
                 "distance_km"           to 1400,
                 "travel_time_hours"     to 2.3,
@@ -751,7 +750,7 @@ object DiimeApiClient {
             ),
             "STEP_UP", 72, "PAYMENT"),
 
-        // ── UC-NEWDEV / UC-FP: Device Fingerprinting ─────────────────────────
+        // â”€â”€ UC-NEWDEV / UC-FP: Device Fingerprinting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         // Composite risk signal built from hardware attributes, OS version,
         // network characteristics (VPN, ASN), and app-version integrity.
         //
@@ -763,8 +762,8 @@ object DiimeApiClient {
         //   - VPN/proxy: IP ASN risk elevation
         //
         // Attestation gating:
-        //   DEVELOPMENT builds — Play Integrity failure is LOW (fail-open, emulators ok)
-        //   STAGING / PRODUCTION — Play Integrity failure is CRITICAL (hard block)
+        //   DEVELOPMENT builds â€” Play Integrity failure is LOW (fail-open, emulators ok)
+        //   STAGING / PRODUCTION â€” Play Integrity failure is CRITICAL (hard block)
         //   iOS companion: DeviceCheck + App Attest (RASP_IOS_003) follow the same gating.
         18 to ScenarioDef("Device Fingerprinting / ATO",  "DEVICE_FINGERPRINT_RISK",
             mapOf(
@@ -773,7 +772,7 @@ object DiimeApiClient {
                 "build_fingerprint"   to "generic/sdk/generic",
                 "serial"              to "unknown",
                 "android_id"          to "emu_android_test_12345",
-                // New device for existing user → UC-NEWDEV STEP_UP
+                // New device for existing user â†’ UC-NEWDEV STEP_UP
                 "new_device_for_user" to true,
                 // Outdated OS (Android 8 / API 26 = EOL, 25 pts)
                 "os_api_level"        to 26,
@@ -795,15 +794,15 @@ object DiimeApiClient {
             "BLOCK", 88, "LOGIN"),
     )
 
-    // ── Ingest scenario through real pipeline ─────────────────────────────────
+    // â”€â”€ Ingest scenario through real pipeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /**
      * Ingest a fraud scenario through the REAL backend pipeline.
      *
      * Flow (production path):
-     *   Android app → NGINX (5-phase Lua pipeline) → POST /api/v1/ingest
-     *   → DeviceAuthenticator → CryptoGate → EIP → CompositeDecisionService
-     *   → EvidenceRecord written to Postgres → SOC dashboard reflects the event
+     *   Android app â†’ NGINX (5-phase Lua pipeline) â†’ POST /api/v1/ingest
+     *   â†’ DeviceAuthenticator â†’ CryptoGate â†’ EIP â†’ CompositeDecisionService
+     *   â†’ EvidenceRecord written to Postgres â†’ SOC dashboard reflects the event
      *
      * Requirements:
      *   - NONASHIELD_BASE_URL must point to the NGINX gateway (not directly to
@@ -817,9 +816,9 @@ object DiimeApiClient {
      *   returns pipeline_trace {eip_total_ms, composite_score, flags}.
      *
      * Falls back to offline simulation when the backend is unreachable, so the
-     * demo always shows something — fromSimulation=true is clearly labelled.
+     * demo always shows something â€” fromSimulation=true is clearly labelled.
      *
-     * @param scenarioId  1–19 (maps to the 19 NonaShield use cases)
+     * @param scenarioId  1â€“19 (maps to the 19 NonaShield use cases)
      * @param tenantId    demo tenant identifier
      */
     fun ingestScenario(
@@ -836,18 +835,18 @@ object DiimeApiClient {
         // Build IngestEnvelope payload from the scenario's signal set.
         val payloadJson = JSONObject(scenario.signals as Map<*, *>)
 
-        // HMAC-SHA256 signature of the payload — CryptoGate validates this.
-        // Signing is delegated to the SDK — customer app never touches DeviceKeyManager.
-        val sig = PayShieldEdgeInitializer.signIngestPayload(payloadJson.toString().toByteArray())
+        // HMAC-SHA256 signature of the payload â€” CryptoGate validates this.
+        // Signing is delegated to the SDK â€” customer app never touches DeviceKeyManager.
+        val sig = PayShieldSDK.signIngestPayload(payloadJson.toString().toByteArray())
         if (sig.isEmpty()) {
-            Log.w(TAG, "signIngestPayload returned empty — cannot build signed envelope")
+            Log.w(TAG, "signIngestPayload returned empty â€” cannot build signed envelope")
             return simulatedScenarioResult(scenarioId)
         }
 
         val envelope = JSONObject().apply {
             put("device_id",   deviceId)
             put("event_type",  scenario.eventType)
-            // action is sent as X-PS-Action header — IngestEnvelope (extra="forbid") has no "action" field
+            // action is sent as X-PS-Action header â€” IngestEnvelope (extra="forbid") has no "action" field
             put("timestamp",   timestamp)
             put("signature",   sig)
             put("tenant_id",   tenantId)
@@ -859,21 +858,21 @@ object DiimeApiClient {
         val request = Request.Builder()
             .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/ingest")
             .post(envelope.toString().toRequestBody(JSON))
-            // Device-auth headers — DeviceAuthenticator validates these on the backend
+            // Device-auth headers â€” DeviceAuthenticator validates these on the backend
             .header("x-device-id",  deviceId)
             .header("x-timestamp",  (timestamp / 1000).toString())
             .header("x-nonce",      nonce)
-            // X-PS-Action — action context header consumed by:
-            //   • PinningInterceptor: embedded as JWT "act" claim in X-PayShield-Token
-            //   • NGINX header_validator: overrides JWT act if present → ngx.ctx.validated_action
-            //   • NGINX trust_context_builder: included in X-PS-Trust-Context forwarded to backend
-            //   • Backend ingest.py: x_ps_action Header injected into VerifiedPayload for EIP
+            // X-PS-Action â€” action context header consumed by:
+            //   â€¢ PinningInterceptor: embedded as JWT "act" claim in X-PayShield-Token
+            //   â€¢ NGINX header_validator: overrides JWT act if present â†’ ngx.ctx.validated_action
+            //   â€¢ NGINX trust_context_builder: included in X-PS-Trust-Context forwarded to backend
+            //   â€¢ Backend ingest.py: x_ps_action Header injected into VerifiedPayload for EIP
             .header("X-PS-Action",  scenario.action)
             // Request pipeline trace in non-prod so demo app can surface timings
             .header("X-PS-Trace",   "true")
             .apply { session?.jwt?.let { header("Authorization", "Bearer $it") } }
             // Note: PinningInterceptor reads X-PS-Action and uses it as the JWT act claim
-            // Note: NGINX stamps X-PS-Edge-Context — NONASHIELD_BASE_URL must point to NGINX
+            // Note: NGINX stamps X-PS-Edge-Context â€” NONASHIELD_BASE_URL must point to NGINX
             .build()
 
         val callStart = System.currentTimeMillis()
@@ -888,7 +887,7 @@ object DiimeApiClient {
                 val j    = runCatching { JSONObject(body) }.getOrDefault(JSONObject())
 
                 if (!response.isSuccessful && response.code !in setOf(403, 409)) {
-                    Log.w(TAG, "ingestScenario HTTP ${response.code} — using simulation")
+                    Log.w(TAG, "ingestScenario HTTP ${response.code} â€” using simulation")
                     return simulatedScenarioResult(scenarioId)
                 }
 
@@ -939,13 +938,13 @@ object DiimeApiClient {
                 )
             }
         } catch (e: Exception) {
-            Log.w(TAG, "ingestScenario network error — using simulation: ${e.message}")
+            Log.w(TAG, "ingestScenario network error â€” using simulation: ${e.message}")
             simulatedScenarioResult(scenarioId)
         }
     }
 
     /**
-     * Offline simulation — returned when backend / NGINX is unreachable.
+     * Offline simulation â€” returned when backend / NGINX is unreachable.
      * fromSimulation=true allows the UI to show a clear "SIM" badge.
      * Values are representative estimates, not real pipeline measurements.
      */
@@ -953,9 +952,9 @@ object DiimeApiClient {
         val scenario  = SCENARIO_DEFS[scenarioId] ?: SCENARIO_DEFS[7]!!
         val eventId   = "sim_${System.currentTimeMillis().toString(16)}"
         val simReason = when (scenario.decision) {
-            "BLOCK"   -> "Threat signals confirmed — request blocked by security policy"
-            "STEP_UP" -> "Elevated risk score — step-up authentication required"
-            else      -> "No active threats — request allowed"
+            "BLOCK"   -> "Threat signals confirmed â€” request blocked by security policy"
+            "STEP_UP" -> "Elevated risk score â€” step-up authentication required"
+            else      -> "No active threats â€” request allowed"
         }
         val simModules = when {
             scenario.decision == "BLOCK"   -> listOf("compliance_evaluator", "ml_engine", "threat_executor", "botnet_correlation")
@@ -988,7 +987,7 @@ object DiimeApiClient {
         )
     }
 
-    // ── SOC Dashboard ─────────────────────────────────────────────────────────
+    // â”€â”€ SOC Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /**
      * Fetch aggregate stats for the SOC dashboard.
@@ -1027,7 +1026,7 @@ object DiimeApiClient {
     }
 
     private fun simulatedDashboardStats(): DashboardStats {
-        // Fixed representative values — backend unreachable. dataSource="fallback"
+        // Fixed representative values â€” backend unreachable. dataSource="fallback"
         // lets SocDashboardActivity show a banner so operators know the source.
         val total   = 1423
         val blocked = 99
@@ -1162,7 +1161,7 @@ object DiimeApiClient {
         }
     }
 
-    // ── Compliance ────────────────────────────────────────────────────────────
+    // â”€â”€ Compliance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /**
      * Fetch real-time compliance status for the 5 cryptographic requirements.
@@ -1231,41 +1230,41 @@ object DiimeApiClient {
             ComplianceItem(
                 id = "dynamic_txn_linking", name = "Dynamic Transaction Linking",
                 standard = "PSD2 RTS Art. 4 / RBI FRM 2025",
-                industryGap = "Banks verify WHO you are — not WHAT you are authorising. A hacker who intercepts your session can silently change ₹500 to ₹50,000 and the bank sees a valid login and approves it.",
-                nsSolution = "NonaShield digitally seals every request with your device's hardware key. The seal covers the exact amount and recipient. Any tampering — even one character — breaks the seal and the bank rejects it before processing.",
+                industryGap = "Banks verify WHO you are â€” not WHAT you are authorising. A hacker who intercepts your session can silently change â‚¹500 to â‚¹50,000 and the bank sees a valid login and approves it.",
+                nsSolution = "NonaShield digitally seals every request with your device's hardware key. The seal covers the exact amount and recipient. Any tampering â€” even one character â€” breaks the seal and the bank rejects it before processing.",
                 status = "COMPLIANT", statusDetail = "Requests sealed with hardware signatures",
                 metric = 0.0, metricLabel = "requests sealed today",
             ),
             ComplianceItem(
                 id = "hardware_backed_possession", name = "Hardware-Backed Possession",
                 standard = "FIDO2 / NPCI 2025 SIL / RBI CCA",
-                industryGap = "A phone's identity (IMEI, device ID) is just a number stored in software — it can be copied to another device in minutes. Attackers clone legitimate phones to pass bank security checks.",
-                nsSolution = "NonaShield creates a key inside your phone's dedicated security chip (TEE / StrongBox). This key physically cannot leave the chip. Your identity IS the chip — not a number that can be copied from it.",
-                status = "COMPLIANT", statusDetail = "Hardware key locked in chip — no cloning possible",
+                industryGap = "A phone's identity (IMEI, device ID) is just a number stored in software â€” it can be copied to another device in minutes. Attackers clone legitimate phones to pass bank security checks.",
+                nsSolution = "NonaShield creates a key inside your phone's dedicated security chip (TEE / StrongBox). This key physically cannot leave the chip. Your identity IS the chip â€” not a number that can be copied from it.",
+                status = "COMPLIANT", statusDetail = "Hardware key locked in chip â€” no cloning possible",
                 metric = 0.0, metricLabel = "cloning attempts blocked",
             ),
             ComplianceItem(
                 id = "independent_auth_factors", name = "Independent Authentication Factors",
                 standard = "FIDO2 UAF / ISO 27001 A.9.4",
-                industryGap = "Most banking apps run their security inside Android — the same OS a hacker controls when they install a Remote Access Trojan. Compromise Android, and you compromise the entire app.",
+                industryGap = "Most banking apps run their security inside Android â€” the same OS a hacker controls when they install a Remote Access Trojan. Compromise Android, and you compromise the entire app.",
                 nsSolution = "NonaShield keeps its signing vault in a separate execution environment. Even if Android is fully taken over, the vault stays completely locked. The hacker can see your screen but cannot touch your keys.",
-                status = "COMPLIANT", statusDetail = "Signing vault isolated — no runtime attacks detected",
+                status = "COMPLIANT", statusDetail = "Signing vault isolated â€” no runtime attacks detected",
                 metric = 0.0, metricLabel = "vault breach attempts",
             ),
             ComplianceItem(
                 id = "tamper_proof_auditability", name = "Tamper-Proof Auditability",
                 standard = "RBI FRM Section 6 / DPDP Act 2023",
-                industryGap = "Bank audit trails are rows in a database. A rogue admin or attacker with database access can alter or delete records — making it impossible to prove what actually happened during a fraud.",
-                nsSolution = "Every NonaShield decision creates a cryptographically chained receipt. Changing one record breaks the entire chain — like a tamper-evident seal on a medicine bottle. Even NonaShield's own admins cannot erase evidence.",
+                industryGap = "Bank audit trails are rows in a database. A rogue admin or attacker with database access can alter or delete records â€” making it impossible to prove what actually happened during a fraud.",
+                nsSolution = "Every NonaShield decision creates a cryptographically chained receipt. Changing one record breaks the entire chain â€” like a tamper-evident seal on a medicine bottle. Even NonaShield's own admins cannot erase evidence.",
                 status = "COMPLIANT", statusDetail = "Tamper-proof receipts in chain today",
                 metric = 0.0, metricLabel = "tamper-proof records today",
             ),
             ComplianceItem(
                 id = "risk_based_auth", name = "Risk-Based Authentication",
                 standard = "PSD2 RTS Art. 18 / RBI CCA 2024",
-                industryGap = "Banks check security only when you log in. If a hacker installs a screen-sharing app after you've already logged in, the bank is completely blind — it has no way to know the session is compromised.",
+                industryGap = "Banks check security only when you log in. If a hacker installs a screen-sharing app after you've already logged in, the bank is completely blind â€” it has no way to know the session is compromised.",
                 nsSolution = "NonaShield watches continuously. The moment a screen-sharing app opens, a debugger attaches, or a hooking tool activates mid-session, NonaShield detects it and triggers step-up authentication immediately.",
-                status = "COMPLIANT", statusDetail = "All sessions clean — continuously monitored",
+                status = "COMPLIANT", statusDetail = "All sessions clean â€” continuously monitored",
                 metric = 0.0, metricLabel = "avg session risk score",
             ),
         )
@@ -1277,7 +1276,7 @@ object DiimeApiClient {
         )
     }
 
-    // ── OTP / Step-Up Auth ────────────────────────────────────────────────────
+    // â”€â”€ OTP / Step-Up Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /**
      * Request an OTP for step-up authentication.
@@ -1331,7 +1330,7 @@ object DiimeApiClient {
         }
     }
 
-    // ── KYC ───────────────────────────────────────────────────────────────────
+    // â”€â”€ KYC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /**
      * Submit a KYC request protected by the full NonaShield pipeline.
@@ -1341,31 +1340,31 @@ object DiimeApiClient {
      *
      *   UC-06 Mule Account:
      *     device_account_degree = number of enrollments completed on this device.
-     *     1st enrollment → baseline (ALLOW expected).
-     *     2nd enrollment → STEP_UP fired asynchronously via ingestLiveMuleAccount().
-     *     3rd+ enrollment → BLOCK fired.
+     *     1st enrollment â†’ baseline (ALLOW expected).
+     *     2nd enrollment â†’ STEP_UP fired asynchronously via ingestLiveMuleAccount().
+     *     3rd+ enrollment â†’ BLOCK fired.
      *
      *   UC-08 SIM Swap:
      *     SIM fingerprint (MCC+MNC derived) stored at first enrollment.
      *     Subsequent enrollments include iccid_match=false if SIM changed.
      *
-     * DPDP compliant — no Aadhaar/PAN/MSISDN stored. Enrollment count and SIM
+     * DPDP compliant â€” no Aadhaar/PAN/MSISDN stored. Enrollment count and SIM
      * fingerprint are non-PII device signals.
      */
     fun submitKyc(aadhaar: String, pan: String, deviceId: String): KycResult {
-        // Hash PII before sending — DPDP Act: no raw identity data over the wire
+        // Hash PII before sending â€” DPDP Act: no raw identity data over the wire
         val aadhaarHash = sha256hex(aadhaar)
         val panHash     = sha256hex(pan)
 
-        // ── UC-06: Read current enrollment count from SDK ─────────────────────
-        val enrollmentCount = PayShieldEdgeInitializer.getEnrollmentCount()
+        // â”€â”€ UC-06: Read current enrollment count from SDK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        val enrollmentCount = PayShieldSDK.getEnrollmentCount()
         val accountDegree   = enrollmentCount + 1  // this KYC makes it degree N+1
-        val velocitySecs    = PayShieldEdgeInitializer.getEnrollmentVelocitySecs()
-        val windowSecs      = PayShieldEdgeInitializer.getEnrollmentWindowSecs()
+        val velocitySecs    = PayShieldSDK.getEnrollmentVelocitySecs()
+        val windowSecs      = PayShieldSDK.getEnrollmentWindowSecs()
 
-        // ── UC-08: SIM swap check (baseline fingerprint stored by recordEnrollment on first enrollment)
+        // â”€â”€ UC-08: SIM swap check (baseline fingerprint stored by recordEnrollment on first enrollment)
         val simSwapSuspected = if (enrollmentCount > 0) {
-            PayShieldEdgeInitializer.isSimSwapSuspected() == true
+            PayShieldSDK.isSimSwapSuspected() == true
         } else false
 
         Log.i(TAG, "submitKyc: device_account_degree=$accountDegree velocity=${velocitySecs}s simSwap=$simSwapSuspected")
@@ -1375,14 +1374,14 @@ object DiimeApiClient {
             put("pan_hash",     panHash)
             put("device_id",    deviceId)
             put("timestamp",    System.currentTimeMillis() / 1000)
-            // ── Live UC-06 Mule Account signals ───────────────────────────────
+            // â”€â”€ Live UC-06 Mule Account signals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             // device_account_degree = number of distinct accounts enrolled on device
             put("device_account_degree",      accountDegree)
             // enrollment_velocity_secs = seconds since last enrollment
             put("enrollment_velocity_secs",   velocitySecs.coerceAtMost(99999L))
             // window_secs = seconds since first enrollment in current window
             put("enrollment_window_secs",     windowSecs.coerceAtMost(99999L))
-            // ── Live UC-08 SIM swap signal ────────────────────────────────────
+            // â”€â”€ Live UC-08 SIM swap signal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             put("sim_swap_suspected",         simSwapSuspected)
         }.toString()
 
@@ -1421,10 +1420,10 @@ object DiimeApiClient {
                     )
                 }
 
-                // ── Post-success: record enrollment via SDK ───────────────────
+                // â”€â”€ Post-success: record enrollment via SDK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 if (result.status in listOf("APPROVED", "PENDING")) {
-                    PayShieldEdgeInitializer.recordEnrollment()
-                    val newCount = PayShieldEdgeInitializer.getEnrollmentCount()
+                    PayShieldSDK.recordEnrollment()
+                    val newCount = PayShieldSDK.getEnrollmentCount()
                     Log.i(TAG, "UC-06: Device enrollment count now $newCount after KYC success")
 
                     // Fire mule account ingest signal when threshold is reached
@@ -1440,10 +1439,10 @@ object DiimeApiClient {
                 result
             }
         } catch (e: Exception) {
-            // Demo fallback — simulate approved KYC and still increment count
-            PayShieldEdgeInitializer.recordEnrollment()
-            val newCount = PayShieldEdgeInitializer.getEnrollmentCount()
-            Log.i(TAG, "UC-06: Demo fallback — enrollment count now $newCount")
+            // Demo fallback â€” simulate approved KYC and still increment count
+            PayShieldSDK.recordEnrollment()
+            val newCount = PayShieldSDK.getEnrollmentCount()
+            Log.i(TAG, "UC-06: Demo fallback â€” enrollment count now $newCount")
             if (newCount >= 2) {
                 Thread {
                     runCatching { ingestLiveMuleAccount(deviceId, newCount) }
@@ -1459,23 +1458,23 @@ object DiimeApiClient {
         }
     }
 
-    // ── Live fraud signal injection ────────────────────────────────────────────
+    // â”€â”€ Live fraud signal injection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /**
      * UC-06: Ingest a LIVE mule account signal using the real enrollment count
      * collected by [submitKyc].
      *
      * This is called automatically from [submitKyc] when enrollmentCount >= 2.
-     * The device_account_degree in the payload is REAL — it reflects how many
+     * The device_account_degree in the payload is REAL â€” it reflects how many
      * distinct KYC identities have been enrolled on this physical device.
      *
      * Expected backend outcome:
-     *   degree == 2 → STEP_UP  (mule risk elevated)
-     *   degree >= 3 → BLOCK    (probable mule node — NBFC policy)
+     *   degree == 2 â†’ STEP_UP  (mule risk elevated)
+     *   degree >= 3 â†’ BLOCK    (probable mule node â€” NBFC policy)
      */
     fun ingestLiveMuleAccount(deviceId: String, enrollmentCount: Int): ScenarioResult {
-        val windowSecs   = PayShieldEdgeInitializer.getEnrollmentWindowSecs()
-        val velocitySecs = PayShieldEdgeInitializer.getEnrollmentVelocitySecs()
+        val windowSecs   = PayShieldSDK.getEnrollmentWindowSecs()
+        val velocitySecs = PayShieldSDK.getEnrollmentVelocitySecs()
 
         // Override scenario 6 signals with REAL values
         val livePayload = mapOf(
@@ -1492,7 +1491,7 @@ object DiimeApiClient {
         val timestamp = System.currentTimeMillis()
         val payloadJson = JSONObject(livePayload as Map<*, *>)
 
-        val sig = PayShieldEdgeInitializer.signIngestPayload(payloadJson.toString().toByteArray())
+        val sig = PayShieldSDK.signIngestPayload(payloadJson.toString().toByteArray())
             .ifEmpty { return simulatedScenarioResult(6) }
 
         val envelope = JSONObject().apply {
@@ -1530,7 +1529,7 @@ object DiimeApiClient {
                         else                -> if (enrollmentCount >= 3) "BLOCK" else "STEP_UP"
                     }
                 }
-                Log.i(TAG, "UC-06 live mule ingest → $decision (degree=$enrollmentCount)")
+                Log.i(TAG, "UC-06 live mule ingest â†’ $decision (degree=$enrollmentCount)")
                 ScenarioResult(
                     scenarioId     = 6,
                     scenarioName   = "Mule Account Network (LIVE)",
@@ -1567,12 +1566,12 @@ object DiimeApiClient {
      *   (a) SIM fingerprint changed since enrollment, OR
      *   (b) The scenario 8 button is tapped in FraudScenarioDetailActivity.
      *
-     * The biometricDeviationScore is REAL — it comes from BehavioralMonitor.deviationScore().
+     * The biometricDeviationScore is REAL â€” it comes from BehavioralMonitor.deviationScore().
      * The iccidChanged flag is determined by DeviceSignalStore.isSimSwapSuspected().
      * Combined confidence = 1.00 when both signals are present.
      *
      * @param deviceId             enrolled device ID
-     * @param biometricDeviation   0.0–1.0 score from BehavioralMonitor (real channel data)
+     * @param biometricDeviation   0.0â€“1.0 score from BehavioralMonitor (real channel data)
      * @param iccidChanged         true if SIM fingerprint differs from enrolled value
      */
     fun ingestLiveSimSwap(
@@ -1581,9 +1580,9 @@ object DiimeApiClient {
         iccidChanged: Boolean,
     ): ScenarioResult {
         // Dual-signal confidence:
-        //   SIM changed alone   → 0.70
-        //   Bio deviation alone → 0.55
-        //   Both present        → 1.00
+        //   SIM changed alone   â†’ 0.70
+        //   Bio deviation alone â†’ 0.55
+        //   Both present        â†’ 1.00
         val confidence = when {
             iccidChanged && biometricDeviation > 0.30f -> 1.00f
             iccidChanged                               -> 0.70f
@@ -1605,7 +1604,7 @@ object DiimeApiClient {
         val timestamp = System.currentTimeMillis()
         val payloadJson = JSONObject(livePayload as Map<*, *>)
 
-        val sig = PayShieldEdgeInitializer.signIngestPayload(payloadJson.toString().toByteArray())
+        val sig = PayShieldSDK.signIngestPayload(payloadJson.toString().toByteArray())
             .ifEmpty { return simulatedScenarioResult(8) }
 
         val envelope = JSONObject().apply {
@@ -1642,7 +1641,7 @@ object DiimeApiClient {
                         else                -> "BLOCK"   // SIM swap default is always BLOCK
                     }
                 }
-                Log.i(TAG, "UC-08 live SIM swap ingest → $decision (iccidChanged=$iccidChanged bio=${(biometricDeviation*100).toInt()}%)")
+                Log.i(TAG, "UC-08 live SIM swap ingest â†’ $decision (iccidChanged=$iccidChanged bio=${(biometricDeviation*100).toInt()}%)")
                 ScenarioResult(
                     scenarioId     = 8,
                     scenarioName   = "SIM Swap Fraud (LIVE)",
@@ -1673,7 +1672,7 @@ object DiimeApiClient {
         }
     }
 
-    // ── Utils ─────────────────────────────────────────────────────────────────
+    // â”€â”€ Utils â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private fun sha256hex(input: String): String =
         java.security.MessageDigest.getInstance("SHA-256")
@@ -1693,16 +1692,16 @@ object DiimeApiClient {
         start + (endInclusive - start) * kotlin.random.Random.nextFloat()
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Result types
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 sealed class LoginResult {
     data class Success(val userId: String, val sessionId: String, val jwt: String) : LoginResult()
     data class Failure(val reason: String) : LoginResult()
 }
 
-/** Result of [DiimeApiClient.establishSession] — production session exchange. */
+/** Result of [DiimeApiClient.establishSession] â€” production session exchange. */
 sealed class SessionResult {
     data class Success(val userId: String, val sessionId: String, val jwt: String) : SessionResult()
     data class Failure(val reason: String) : SessionResult()
@@ -1737,23 +1736,23 @@ data class GatewayDecision(
     val receiptUrl:    String = ""
 )
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Demo 1: Hardware binding proof
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 data class BindingProof(
     val deviceId:          String,
     val attestationLevel:  String,   // FULL | BASIC | GATEWAY
     val pubkeyFingerprint: String,   // SHA-256 of public key DER (hex, 64 chars)
-    val pubkeyHex:         String,   // full DER bytes as hex — demo app display only
+    val pubkeyHex:         String,   // full DER bytes as hex â€” demo app display only
     val enrolledAtIso:     String,
     val hardwareBacked:    Boolean,
     val bindingSummary:    String,
     val proofId:           String
 )
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Demo 2: Non-repudiation receipt
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 data class EvidenceReceipt(
     val decisionId:       String,
     val deviceId:         String,
@@ -1766,9 +1765,9 @@ data class EvidenceReceipt(
     val receiptUrl:       String
 )
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // SOC Dashboard
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 data class DashboardStats(
     val totalDecisions: Int,
     val blockedCount:   Int,
@@ -1777,7 +1776,7 @@ data class DashboardStats(
     val avgRiskScore:   Float,
     val activeDevices:  Int,
     val period:         String,
-    // Category breakdown percentages (0–100)
+    // Category breakdown percentages (0â€“100)
     val raspPct:        Int    = 38,
     val networkPct:     Int    = 22,
     val bioPct:         Int    = 18,
@@ -1803,7 +1802,7 @@ data class DecisionRecord(
     val tenantId:    String  = "",
     val threatTypes: List<String> = emptyList(),
 ) {
-    // Convenience alias — SocDashboardActivity uses 'decision'
+    // Convenience alias â€” SocDashboardActivity uses 'decision'
     val decision: String get() = action
 }
 
@@ -1817,15 +1816,15 @@ data class ThreatEvent(
     val details:    String  = "",
 )
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Step-Up / OTP
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 data class OtpRequest(val sessionId: String, val expiresInSeconds: Int)
 data class OtpVerifyResult(val verified: Boolean, val reason: String)
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Compliance
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 data class ComplianceItem(
     val id:           String,
     val name:         String,
@@ -1858,9 +1857,9 @@ data class ComplianceStatus(
     val recentSeals:   List<SealRecord> = emptyList(),
 )
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // KYC
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 data class KycResult(
     val status:          String,   // APPROVED | PENDING | BLOCKED | REJECTED
     val kycId:           String,
@@ -1870,9 +1869,9 @@ data class KycResult(
     val enrollmentDegree: Int = 1,
 )
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Demo scenario trigger — full pipeline trace
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Demo scenario trigger â€” full pipeline trace
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 data class SignalFired(
     val threatId:   String,
@@ -1882,15 +1881,15 @@ data class SignalFired(
 )
 
 /**
- * Result of POST /api/v1/ingest through the real NGINX → backend pipeline.
+ * Result of POST /api/v1/ingest through the real NGINX â†’ backend pipeline.
  *
  * The demo app sends a real IngestEnvelope through the full auth chain:
- *   NGINX (5-phase) → DeviceAuthenticator → CryptoGate → EIP → CompositeDecisionService
+ *   NGINX (5-phase) â†’ DeviceAuthenticator â†’ CryptoGate â†’ EIP â†’ CompositeDecisionService
  *
  * Timing fields:
- *   nginxMs        — from X-Request-Time response header (stamped by NGINX)
- *   eipTotalMs     — EIP + CompositeDecisionService (from X-PS-Trace response body)
- *   rttMs          — full client-measured round-trip time
+ *   nginxMs        â€” from X-Request-Time response header (stamped by NGINX)
+ *   eipTotalMs     â€” EIP + CompositeDecisionService (from X-PS-Trace response body)
+ *   rttMs          â€” full client-measured round-trip time
  *
  * fromSimulation=true means the backend was unreachable; values are estimates
  * and the UI shows a clear "SIM" badge.
@@ -1901,17 +1900,17 @@ data class ScenarioResult(
     val eventId:            String,
     val decision:           String,    // BLOCK | STEP_UP | ALLOW
     val trustLevel:         String,    // TRUSTED | REJECTED | STEP_UP | SIMULATED
-    val riskScore:          Int,       // 0–100 (from EIP fraud_risk_score)
+    val riskScore:          Int,       // 0â€“100 (from EIP fraud_risk_score)
     val ruleVersion:        String,
     val mlScore:            Float,
     val mlFallback:         Boolean,
-    val compositeScore:     Int,       // CompositeDecisionService composite_score (0–100)
+    val compositeScore:     Int,       // CompositeDecisionService composite_score (0â€“100)
     val eipTotalMs:         Int,       // backend EIP processing time (from X-PS-Trace)
     val nginxMs:            Int,       // NGINX edge time (from X-Request-Time header)
     val rttMs:              Int,       // full client-measured RTT
     val signalsFired:       List<SignalFired>,  // SDK signal definitions for this scenario
     val fromSimulation:     Boolean,
-    // Phase breakdown timings (ms) — parsed from pipeline_trace or estimated in simulation
+    // Phase breakdown timings (ms) â€” parsed from pipeline_trace or estimated in simulation
     val phase3ComplianceMs: Int             = 0,
     val phase4MlMs:         Int             = 0,
     val phase5ThreatsMs:    Int             = 0,
@@ -1922,6 +1921,8 @@ data class ScenarioResult(
     // Human-readable reason for the decision
     val reason:             String          = "",
 ) {
-    /** Alias for backward compatibility — total backend pipeline time = eipTotalMs. */
+    /** Alias for backward compatibility â€” total backend pipeline time = eipTotalMs. */
     val totalMs: Int get() = eipTotalMs
 }
+
+

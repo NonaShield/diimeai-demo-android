@@ -1,4 +1,4 @@
-package com.diimeai.demo
+﻿package com.diimeai.demo
 
 import android.content.Intent
 import android.graphics.Color
@@ -12,7 +12,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.diimeai.demo.databinding.ActivityTrustDashboardBinding
 import com.diimeai.demo.network.DiimeApiClient
-import com.payshield.sdk.PayShieldEdgeInitializer
 import com.payshield.sdk.enrollment.EnrollmentState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -28,23 +27,23 @@ import kotlin.math.roundToInt
 import kotlin.random.Random
 
 /**
- * TrustDashboardActivity — Live in-app trust monitor for investor demos.
+ * TrustDashboardActivity â€” Live in-app trust monitor for investor demos.
  *
  * Shows all five NonaShield trust signals on one screen:
  *
- *   1. Trust Score       — fused 0-100 risk level (RASP 60% + Behaviour 25% + Network 15%)
- *   2. RASP Signals      — live status of 9 registered signals + FreeRASP sensors
- *   3. Edge Pipeline     — 5-phase NGINX Lua pipeline status
- *   4. Evidence Chain    — on-device SHA-256 hash chain depth + last block hash
- *   5. Kill-Switch       — operator force_block simulation (≤5 second propagation)
+ *   1. Trust Score       â€” fused 0-100 risk level (RASP 60% + Behaviour 25% + Network 15%)
+ *   2. RASP Signals      â€” live status of 9 registered signals + FreeRASP sensors
+ *   3. Edge Pipeline     â€” 5-phase NGINX Lua pipeline status
+ *   4. Evidence Chain    â€” on-device SHA-256 hash chain depth + last block hash
+ *   5. Kill-Switch       â€” operator force_block simulation (â‰¤5 second propagation)
  *
  * Auto-refreshes every 3 seconds via coroutine loop.
  * Falls back to locally-simulated data if the backend is not reachable.
  *
  * Investor talking point:
  *   "Every payment request passes through all five of these layers simultaneously.
- *    A compromise at ANY layer — whether it's the device, the network, or the
- *    user's behaviour — stops the transaction before it reaches your server."
+ *    A compromise at ANY layer â€” whether it's the device, the network, or the
+ *    user's behaviour â€” stops the transaction before it reaches your server."
  */
 class TrustDashboardActivity : AppCompatActivity() {
 
@@ -54,12 +53,12 @@ class TrustDashboardActivity : AppCompatActivity() {
         private const val GRAFANA_URL = "https://api.diimeai.com/dashboard/"
 
         // 17 canonical SDK signals (9 original + 3 ATL-2027 deepfake + 5 UC-MAL-2 malware)
-        // Registered in PayShieldEdgeInitializer — full set of 41 RASP sensors
+        // Registered in PayShieldEdgeInitializer â€” full set of 41 RASP sensors
         // signalTypes = EdgeSignal.type values emitted by the corresponding signal class
-        // Malware signals are PERSISTENT (session-wide) — fired by OS callbacks in DiimeApp,
+        // Malware signals are PERSISTENT (session-wide) â€” fired by OS callbacks in DiimeApp,
         // not by any specific Activity or API call.
         private val SIGNAL_DEFS = listOf(
-            // ── NPCI 2025 SIL — original 9 signals ──────────────────────────
+            // â”€â”€ NPCI 2025 SIL â€” original 9 signals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             SignalDef("ADB Install",        "RASP_DEV_001", "App installed via ADB",                  listOf("ADB_INSTALL")),
             SignalDef("Root Cloaking",      "RASP_DEV_002", "Magisk hide / root masking",             listOf("ROOT_CLOAKING")),
             SignalDef("Screen Capture",     "RASP_DEV_003", "Mirroring / cast / recording active",    listOf("SCREEN_MIRRORING", "SCREEN_RECORDING_ACTIVE", "SCREENSHOT")),
@@ -69,16 +68,16 @@ class TrustDashboardActivity : AppCompatActivity() {
             SignalDef("Keyguard Insecure",  "DEV_SEC_007",  "No screen lock set",                     listOf("KEYGUARD_NOT_SECURE")),
             SignalDef("User CA Cert",       "NET_CA_013",   "User-installed CA present",               listOf("USER_CA_CERT")),
             SignalDef("Remote Desktop",     "RASP_DEV_014", "Remote control detected",                 listOf("REMOTE_DESKTOP")),
-            // ── RBI/NPCI/ReBIT 2027 ATL — deepfake compound signals ──────────
+            // â”€â”€ RBI/NPCI/ReBIT 2027 ATL â€” deepfake compound signals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             SignalDef("Overlay Attack",        "RASP_DEV_063", "SYSTEM_ALERT_WINDOW redress",         listOf("OVERLAY_ATTACK_DETECTED")),
             SignalDef("Background Camera",     "RASP_DEV_064", "Deepfake frame acquisition",           listOf("BACKGROUND_CAMERA_ACTIVE")),
             SignalDef("Deepfake Precondition", "RASP_DEV_065", "FPS anomaly/MediaPipe/voice",         listOf("DEEPFAKE_PRECONDITION_DETECTED")),
-            // ── UC-MAL-2 Banking Trojan Protection (Chandigarh pattern) ──────
-            // Detected session-wide by OS callbacks — fires immediately on threat,
+            // â”€â”€ UC-MAL-2 Banking Trojan Protection (Chandigarh pattern) â”€â”€â”€â”€â”€â”€
+            // Detected session-wide by OS callbacks â€” fires immediately on threat,
             // stays active for the full session (persistent, not transient 30s TTL).
             SignalDef("Sideloaded APK",      "MAL_APK_001", "App from WhatsApp/unofficial source",    listOf("SIDELOAD_DETECTED")),
             SignalDef("Device Admin Abuse",  "MAL_APK_002", "Rogue device admin (blocks uninstall)",  listOf("DEVICE_ADMIN_ABUSE")),
-            SignalDef("SMS Intercept",       "MAL_APK_003", "OTP interception — READ_SMS+A11y active",listOf("SMS_INTERCEPT_CAPABLE")),
+            SignalDef("SMS Intercept",       "MAL_APK_003", "OTP interception â€” READ_SMS+A11y active",listOf("SMS_INTERCEPT_CAPABLE")),
             SignalDef("Hooking Framework",   "RASP_DEV_037","Frida/Xposed/LSPosed runtime hooking",   listOf("HOOKING_FRAMEWORK")),
             SignalDef("Accessibility Abuse", "USR_BEH_003", "Rogue accessibility service active",     listOf("ACCESSIBILITY_ABUSE")),
         )
@@ -95,7 +94,7 @@ class TrustDashboardActivity : AppCompatActivity() {
 
     private data class SignalDef(val name: String, val threatId: String, val description: String, val signalTypes: List<String> = emptyList())
 
-    // ── state ─────────────────────────────────────────────────────────────────
+    // â”€â”€ state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     private lateinit var binding: ActivityTrustDashboardBinding
     private var refreshJob: Job? = null
     private var killSwitchActive = false
@@ -103,7 +102,7 @@ class TrustDashboardActivity : AppCompatActivity() {
     private var lastHash = "GENESIS"
     private var refreshCount = 0
 
-    // ── lifecycle ─────────────────────────────────────────────────────────────
+    // â”€â”€ lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,7 +126,7 @@ class TrustDashboardActivity : AppCompatActivity() {
         refreshJob?.cancel()
     }
 
-    // ── UI construction ───────────────────────────────────────────────────────
+    // â”€â”€ UI construction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /**
      * Inflates one row per signal into [binding.llSignalRows].
@@ -156,7 +155,7 @@ class TrustDashboardActivity : AppCompatActivity() {
 
             val statusView = TextView(this).apply {
                 tag = "signal_status_$index"
-                text = "✅ Clean"
+                text = "âœ… Clean"
                 textSize = 11f
                 setTextColor(Color.parseColor("#00CC55"))
                 typeface = android.graphics.Typeface.MONOSPACE
@@ -184,7 +183,7 @@ class TrustDashboardActivity : AppCompatActivity() {
     private fun wirePipelineRows() {
         listOf(binding.tvPhase1, binding.tvPhase2, binding.tvPhase3,
                binding.tvPhase4, binding.tvPhase5).forEach {
-            it.text = "⏳ pending"
+            it.text = "â³ pending"
             it.setTextColor(Color.parseColor("#888888"))
         }
     }
@@ -202,7 +201,7 @@ class TrustDashboardActivity : AppCompatActivity() {
         }
     }
 
-    // ── refresh loop ──────────────────────────────────────────────────────────
+    // â”€â”€ refresh loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private fun startRefreshLoop() {
         refreshJob = lifecycleScope.launch {
@@ -237,7 +236,7 @@ class TrustDashboardActivity : AppCompatActivity() {
         }
     }
 
-    // ── score fetching ────────────────────────────────────────────────────────
+    // â”€â”€ score fetching â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private data class ScoreBundle(
         val raspScore: Int,
@@ -257,7 +256,7 @@ class TrustDashboardActivity : AppCompatActivity() {
             val networkScore   = if (allowed) (0..8).random()   else (15..30).random()
             ScoreBundle(raspScore, behaviourScore, networkScore, decision.action, decision.decisionId)
         } catch (e: Exception) {
-            // Backend offline — generate realistic idle simulation
+            // Backend offline â€” generate realistic idle simulation
             simulatedScores()
         }
     }
@@ -268,7 +267,7 @@ class TrustDashboardActivity : AppCompatActivity() {
      * Any detected RASP signal bumps the corresponding component.
      */
     private fun simulatedScores(): ScoreBundle {
-        val detectedCount = SIGNAL_DEFS.count { def -> def.signalTypes.any { PayShieldEdgeInitializer.isSignalActive(it) } }
+        val detectedCount = SIGNAL_DEFS.count { def -> def.signalTypes.any { PayShieldSDK.isSignalActive(it) } }
         val raspBase  = if (killSwitchActive) 65 else (detectedCount * 15).coerceAtMost(30)
         val bioBase   = if (killSwitchActive) 40 else 5
         val netBase   = if (killSwitchActive) 30 else 3
@@ -292,7 +291,7 @@ class TrustDashboardActivity : AppCompatActivity() {
         )
     }
 
-    // ── UI update helpers ─────────────────────────────────────────────────────
+    // â”€â”€ UI update helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private fun updateTrustScoreCard(fused: Int, rasp: Int, behaviour: Int, network: Int) {
         binding.tvTrustScore.text = fused.toString()
@@ -317,24 +316,24 @@ class TrustDashboardActivity : AppCompatActivity() {
         binding.tvNetworkContrib.text  = network.toString()
 
         val fmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-        binding.tvLastUpdated.text = "Last updated: ${fmt.format(Date())}  ·  refresh #$refreshCount"
+        binding.tvLastUpdated.text = "Last updated: ${fmt.format(Date())}  Â·  refresh #$refreshCount"
     }
 
     private fun updateRaspSignals() {
-        val activeCount = SIGNAL_DEFS.count { def -> def.signalTypes.any { PayShieldEdgeInitializer.isSignalActive(it) } }
+        val activeCount = SIGNAL_DEFS.count { def -> def.signalTypes.any { PayShieldSDK.isSignalActive(it) } }
         binding.tvRaspSummary.text = if (activeCount == 0)
-            "All clean ✅" else "⚠ $activeCount detected"
+            "All clean âœ…" else "âš  $activeCount detected"
 
         // Use tag-based lookup (avoids index mismatch from interleaved divider views)
         SIGNAL_DEFS.forEachIndexed { index, def ->
             val statusView = binding.llSignalRows.findViewWithTag<TextView>("signal_status_$index")
                 ?: return@forEachIndexed
-            val detected = def.signalTypes.any { PayShieldEdgeInitializer.isSignalActive(it) }
+            val detected = def.signalTypes.any { PayShieldSDK.isSignalActive(it) }
             if (detected) {
-                statusView.text = "🔴 ${def.threatId}"
+                statusView.text = "ðŸ”´ ${def.threatId}"
                 statusView.setTextColor(Color.parseColor("#FF3333"))
             } else {
-                statusView.text = "✅ Clean"
+                statusView.text = "âœ… Clean"
                 statusView.setTextColor(Color.parseColor("#00CC55"))
             }
         }
@@ -344,7 +343,7 @@ class TrustDashboardActivity : AppCompatActivity() {
         val phaseViews = listOf(binding.tvPhase1, binding.tvPhase2, binding.tvPhase3,
                                 binding.tvPhase4, binding.tvPhase5)
 
-        // Simulate phase timings (2–12ms each)
+        // Simulate phase timings (2â€“12ms each)
         val blocked = verdict == "BLOCK"
         val stepUp  = verdict == "STEP_UP"
         val rnd     = Random.Default
@@ -352,7 +351,7 @@ class TrustDashboardActivity : AppCompatActivity() {
         phaseViews.forEachIndexed { idx, tv ->
             val ms   = rnd.nextInt(2, 13)
             val pass = !(blocked && idx == 4)  // only last phase can "fail" on block
-            tv.text = if (pass) "✅ ${ms}ms" else "🔴 BLOCKED"
+            tv.text = if (pass) "âœ… ${ms}ms" else "ðŸ”´ BLOCKED"
             tv.setTextColor(if (pass) Color.parseColor("#00CC55") else Color.parseColor("#FF3333"))
         }
 
@@ -375,8 +374,8 @@ class TrustDashboardActivity : AppCompatActivity() {
 
     private fun updateEvidenceCard() {
         binding.tvChainDepth.text = "$chainDepth blocks"
-        binding.tvLastHash.text   = lastHash.take(32) + "…"
-        binding.tvChainIntegrity.text  = "✅ Verified"
+        binding.tvLastHash.text   = lastHash.take(32) + "â€¦"
+        binding.tvChainIntegrity.text  = "âœ… Verified"
         binding.tvChainIntegrity.setTextColor(Color.parseColor("#00CC55"))
     }
 
@@ -394,22 +393,22 @@ class TrustDashboardActivity : AppCompatActivity() {
     private fun applyKillSwitchState(active: Boolean) {
         if (active) {
             binding.tvKillSwitchStatus.text =
-                "State: ACTIVE — force_block pushed\n" +
-                "Device will receive policy within ≤5s\n" +
+                "State: ACTIVE â€” force_block pushed\n" +
+                "Device will receive policy within â‰¤5s\n" +
                 "All transactions: BLOCKED"
             binding.tvKillSwitchStatus.setTextColor(Color.parseColor("#FF3333"))
             binding.tvKillSwitchStatus.setBackgroundColor(Color.parseColor("#1A0000"))
-            Log.w(TAG, "Kill-switch ACTIVATED — simulating operator force_block")
+            Log.w(TAG, "Kill-switch ACTIVATED â€” simulating operator force_block")
         } else {
             binding.tvKillSwitchStatus.text =
-                "State: INACTIVE — all transactions ALLOWED"
+                "State: INACTIVE â€” all transactions ALLOWED"
             binding.tvKillSwitchStatus.setTextColor(Color.parseColor("#00CC55"))
             binding.tvKillSwitchStatus.setBackgroundColor(Color.parseColor("#001100"))
             Log.i(TAG, "Kill-switch DEACTIVATED")
         }
     }
 
-    // ── utilities ─────────────────────────────────────────────────────────────
+    // â”€â”€ utilities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private fun sha256(input: String): String {
         return MessageDigest.getInstance("SHA-256")
@@ -423,3 +422,5 @@ class TrustDashboardActivity : AppCompatActivity() {
     private fun LinearLayout.children(): List<View> =
         (0 until childCount).map { getChildAt(it) }
 }
+
+

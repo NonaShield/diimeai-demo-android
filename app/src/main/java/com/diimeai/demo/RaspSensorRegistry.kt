@@ -1,25 +1,25 @@
-package com.diimeai.demo
+﻿package com.diimeai.demo
 
 /**
- * Canonical registry of every RASP sensor exposed by the NonaShield SDK — both
+ * Canonical registry of every RASP sensor exposed by the NonaShield SDK â€” both
  * detection layers, presented to the customer as a single unified sensor set with no
  * third-party vendor names:
  *
- *   1. PayShield-native signals — one row per `orchestrator.register(...)` call in
+ *   1. PayShield-native signals â€” one row per `orchestrator.register(...)` call in
  *      [com.payshield.sdk.PayShieldEdgeInitializer].
- *   2. FreeRASP (Talsec)-bridged signals — one row per `FreeRaspEvent` case mapped in
- *      `FreeRaspBridge.toEdgeSignal()`. Internal/engineering reference only — never
+ *   2. FreeRASP (Talsec)-bridged signals â€” one row per `FreeRaspEvent` case mapped in
+ *      `FreeRaspBridge.toEdgeSignal()`. Internal/engineering reference only â€” never
  *      shown in the sensor `name`; the customer sees only NonaShield SDK branding.
  *
  * This is the source of truth for [ScenarioListFragment] tab 0 (Device / Runtime
  * Integrity), which renders this list as a live 3-column sensor status table.
  *
  * `signalTypes` lists every EdgeSignal `type` string a sensor can emit. A sensor's live
- * status is ACTIVE if `PayShieldEdgeInitializer.isSignalActive(type)` is true for ANY of
- * its types. `severity` is the worst-case severity across those types — the level shown
+ * status is ACTIVE if `PayShieldSDK.isSignalActive(type)` is true for ANY of
+ * its types. `severity` is the worst-case severity across those types â€” the level shown
  * to the SOC/investor is always the highest risk that sensor is capable of flagging.
  *
- * Extracted directly from each signal class's `evaluate()` source — kept in sync manually
+ * Extracted directly from each signal class's `evaluate()` source â€” kept in sync manually
  * when a new signal is registered in PayShieldEdgeInitializer.
  */
 object RaspSensorRegistry {
@@ -87,9 +87,9 @@ object RaspSensorRegistry {
         Sensor("USB Debugging Active",         "RASP_DEV_014", Severity.MEDIUM,   listOf("USB_DEBUGGING_ACTIVE", "DEVELOPER_OPTIONS_ACTIVE")),
         Sensor("Agentic Social Manipulation",  "SCAM_AI_002",  Severity.HIGH,     listOf("MESSAGING_APP_PRE_SESSION", "NOTIFICATION_TRIGGERED_SESSION")),
 
-        // ── Bridged sensors (internal: FreeRASP/Talsec engine) ────────────────────
+        // â”€â”€ Bridged sensors (internal: FreeRASP/Talsec engine) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         // Second, independent detection layer running alongside the PayShield-native
-        // sensors above. Customer-facing name carries NO third-party vendor branding —
+        // sensors above. Customer-facing name carries NO third-party vendor branding â€”
         // shown purely as additional NonaShield SDK sensors. Every FreeRaspEvent case
         // in FreeRaspBridge.toEdgeSignal() has a row here; kept in sync manually when
         // a new FreeRaspEvent case is added.
@@ -114,3 +114,4 @@ object RaspSensorRegistry {
         Sensor("Device ID Changed",              "BEH_DEV_001",   Severity.MEDIUM,   listOf("DEVICE_ID_CHANGED")),
     )
 }
+
