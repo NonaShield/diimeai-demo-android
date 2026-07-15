@@ -12,6 +12,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.diimeai.demo.databinding.ActivityTrustDashboardBinding
 import com.diimeai.demo.network.DiimeApiClient
+import com.payshield.sdk.PayShieldSDK
 import com.payshield.sdk.enrollment.EnrollmentState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job

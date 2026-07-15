@@ -591,11 +591,7 @@ class PaymentActivity : AppCompatActivity() {
             // when the SDK would normally gate the payment.
             if (!isAttestation) {
                 val checkpoint = runCatching {
-                    PayShieldSDK.evaluateAtCheckpoint(
-                        context  = this@PaymentActivity,
-                        action   = "PAYMENT",
-                        features = behavioralFeatures
-                    )
+                    PayShieldSDK.evaluateAtCheckpoint(action = "PAYMENT")
                 }.getOrNull()
 
                 if (checkpoint != null && checkpoint.decision == PolicyDecision.DENY) {
@@ -645,9 +641,9 @@ class PaymentActivity : AppCompatActivity() {
         lastReceiptUrl = result.receiptUrl
         lastDecisionId = result.decisionId
 
-        val nonceShort  = result.nonce.take(32).let { if (result.nonce.length > 32) "$itâ€¦" else it }
-        val hashShort   = result.requestHash.take(32).let { if (result.requestHash.length > 32) "$itâ€¦" else it }
-        val keyShort    = result.deviceKeyId.take(24).let { if (result.deviceKeyId.length > 24) "$itâ€¦" else it }
+        val nonceShort  = result.nonce.take(32).let { if (result.nonce.length > 32) "${it}..." else it }
+        val hashShort   = result.requestHash.take(32).let { if (result.requestHash.length > 32) "${it}..." else it }
+        val keyShort    = result.deviceKeyId.take(24).let { if (result.deviceKeyId.length > 24) "${it}..." else it }
         val iso = if (result.timestampEpoch > 0L)
             java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
                 .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }

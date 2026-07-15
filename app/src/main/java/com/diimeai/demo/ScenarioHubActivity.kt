@@ -6,6 +6,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.payshield.sdk.PayShieldSDK
 
 /**
  * Main hub after login â€” 5-tab fraud scenario dashboard.

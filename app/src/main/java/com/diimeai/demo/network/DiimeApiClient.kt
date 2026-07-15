@@ -5,6 +5,7 @@ import android.util.Log
 import com.diimeai.demo.BuildConfig
 import com.payshield.android.sdk.PinningInterceptor
 import com.payshield.android.sdk.SignalSink
+import com.payshield.sdk.PayShieldSDK
 import com.payshield.sdk.integration.PayShieldAuthInterceptor
 import com.payshield.sdk.token.SessionHolder
 import okhttp3.CertificatePinner

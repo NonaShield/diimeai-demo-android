@@ -20,6 +20,7 @@ import com.google.android.material.button.MaterialButton
 import com.payshield.sdk.BehaviourCategory
 import com.payshield.sdk.BehaviourParam
 import com.payshield.sdk.BehaviourStatus
+import com.payshield.sdk.PayShieldSDK
 import com.payshield.sdk.state.SignalStateListener
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
