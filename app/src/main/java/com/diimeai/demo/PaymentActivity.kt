@@ -525,20 +525,20 @@ class PaymentActivity : AppCompatActivity() {
                 }
             }
 
-            // â”€â”€ UC-08 LIVE: SIM swap check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            val simSwapSuspected = PayShieldSDK.isSimSwapSuspected() == true
+
             val bioDev = BehavioralSessionManager.deviationScore()
-            if (simSwapSuspected) {
-                Log.w(TAG, "[UC-08] SIM swap suspected â€” bioDev=${(bioDev * 100).toInt()}%")
-                showSimSwapDialog(iccidChanged = true, biometricDeviation = bioDev)
-                val deviceId = DiimeApp.enrollmentState?.deviceId
-                    ?: PayShieldSDK.getStableDeviceId()
-                lifecycleScope.launch(Dispatchers.IO) {
-                    runCatching { DiimeApiClient.ingestLiveSimSwap(deviceId, bioDev, iccidChanged = true) }
-                        .also { Log.i(TAG, "[UC-08] live ingest result: ${it.getOrNull()?.decision}") }
-                }
-                return
-            }
+
+
+
+
+
+
+
+
+
+
+
+
 
             // â”€â”€ Demo 5: Behavioral mismatch gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if (BehavioralSessionManager.isComparisonMode) {
@@ -1156,16 +1156,15 @@ class PaymentActivity : AppCompatActivity() {
     private fun updateRiskBadge() {
         val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         val isMirroring = dm.displays.size > 1
-        val simSwap     = PayShieldSDK.isSimSwapSuspected() == true
-        val tier = if (isMirroring || simSwap ||
+        val tier = if (isMirroring ||
             (BehavioralSessionManager.isComparisonMode && BehavioralSessionManager.deviationScore() > 0.55f))
             "HIGH"
         else
             EdgeRiskEnforcer.currentRiskTier()
         val label = when {
-            isMirroring -> "Risk: HIGH âš ï¸ Mirror"
-            simSwap     -> "Risk: HIGH ðŸ“± SIM Swap"
-            BehavioralSessionManager.isComparisonMode && tier == "HIGH" -> "Risk: HIGH ðŸ§¬ Bio"
+            isMirroring -> "Risk: HIGH Mirror"
+            BehavioralSessionManager.isComparisonMode && tier == "HIGH" -> "Risk: HIGH Bio"
+
             else -> "Risk: $tier"
         }
         binding.tvRiskTier.apply {

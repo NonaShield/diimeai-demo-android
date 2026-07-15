@@ -1356,33 +1356,11 @@ object DiimeApiClient {
         val aadhaarHash = sha256hex(aadhaar)
         val panHash     = sha256hex(pan)
 
-        // â”€â”€ UC-06: Read current enrollment count from SDK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        val enrollmentCount = PayShieldSDK.getEnrollmentCount()
-        val accountDegree   = enrollmentCount + 1  // this KYC makes it degree N+1
-        val velocitySecs    = PayShieldSDK.getEnrollmentVelocitySecs()
-        val windowSecs      = PayShieldSDK.getEnrollmentWindowSecs()
-
-        // â”€â”€ UC-08: SIM swap check (baseline fingerprint stored by recordEnrollment on first enrollment)
-        val simSwapSuspected = if (enrollmentCount > 0) {
-            PayShieldSDK.isSimSwapSuspected() == true
-        } else false
-
-        Log.i(TAG, "submitKyc: device_account_degree=$accountDegree velocity=${velocitySecs}s simSwap=$simSwapSuspected")
-
         val body = JSONObject().apply {
             put("aadhaar_hash", aadhaarHash)
             put("pan_hash",     panHash)
             put("device_id",    deviceId)
             put("timestamp",    System.currentTimeMillis() / 1000)
-            // â”€â”€ Live UC-06 Mule Account signals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            // device_account_degree = number of distinct accounts enrolled on device
-            put("device_account_degree",      accountDegree)
-            // enrollment_velocity_secs = seconds since last enrollment
-            put("enrollment_velocity_secs",   velocitySecs.coerceAtMost(99999L))
-            // window_secs = seconds since first enrollment in current window
-            put("enrollment_window_secs",     windowSecs.coerceAtMost(99999L))
-            // â”€â”€ Live UC-08 SIM swap signal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            put("sim_swap_suspected",         simSwapSuspected)
         }.toString()
 
         val request = Request.Builder()
@@ -1402,58 +1380,29 @@ object DiimeApiClient {
                         kycId            = j.optString("kyc_id", "kyc_${System.currentTimeMillis()}"),
                         riskScore        = j.optInt("risk_score", (5..18).random()),
                         reason           = j.optString("reason", "Verified"),
-                        enrollmentDegree = accountDegree,
                     )
                     response.code == 403 -> KycResult(
                         status           = "BLOCKED",
                         kycId            = "",
                         riskScore        = j.optInt("risk_score", 72),
                         reason           = j.optString("detail", "Blocked by security policy"),
-                        enrollmentDegree = accountDegree,
                     )
                     else -> KycResult(
                         status           = "PENDING",
                         kycId            = "kyc_${System.currentTimeMillis()}",
                         riskScore        = 12,
                         reason           = "Under review",
-                        enrollmentDegree = accountDegree,
                     )
                 }
-
-                // â”€â”€ Post-success: record enrollment via SDK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                if (result.status in listOf("APPROVED", "PENDING")) {
-                    PayShieldSDK.recordEnrollment()
-                    val newCount = PayShieldSDK.getEnrollmentCount()
-                    Log.i(TAG, "UC-06: Device enrollment count now $newCount after KYC success")
-
-                    // Fire mule account ingest signal when threshold is reached
-                    if (newCount >= 2) {
-                        Thread {
-                            runCatching { ingestLiveMuleAccount(deviceId, newCount) }.also {
-                                if (it.isFailure) Log.w(TAG, "UC-06 mule ingest failed: ${it.exceptionOrNull()?.message}")
-                            }
-                        }.start()
-                    }
-                }
-
                 result
             }
         } catch (e: Exception) {
-            // Demo fallback â€” simulate approved KYC and still increment count
-            PayShieldSDK.recordEnrollment()
-            val newCount = PayShieldSDK.getEnrollmentCount()
-            Log.i(TAG, "UC-06: Demo fallback â€” enrollment count now $newCount")
-            if (newCount >= 2) {
-                Thread {
-                    runCatching { ingestLiveMuleAccount(deviceId, newCount) }
-                }.start()
-            }
+            // Demo fallback
             KycResult(
                 status           = "APPROVED",
                 kycId            = "kyc_demo_${System.currentTimeMillis()}",
                 riskScore        = (5..18).random(),
                 reason           = "Demo approval",
-                enrollmentDegree = accountDegree,
             )
         }
     }
@@ -1473,15 +1422,11 @@ object DiimeApiClient {
      *   degree >= 3 â†’ BLOCK    (probable mule node â€” NBFC policy)
      */
     fun ingestLiveMuleAccount(deviceId: String, enrollmentCount: Int): ScenarioResult {
-        val windowSecs   = PayShieldSDK.getEnrollmentWindowSecs()
-        val velocitySecs = PayShieldSDK.getEnrollmentVelocitySecs()
 
         // Override scenario 6 signals with REAL values
         val livePayload = mapOf(
             "device_account_degree"  to enrollmentCount,
             "account_velocity_24h"   to enrollmentCount,
-            "enrollment_window_secs" to windowSecs.coerceAtMost(99999L),
-            "enrollment_velocity_s"  to velocitySecs.coerceAtMost(99999L),
             "device_reuse_count"     to enrollmentCount,
             "live_signal"            to true,
         )
