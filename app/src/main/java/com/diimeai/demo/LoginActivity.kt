@@ -206,6 +206,12 @@ class LoginActivity : AppCompatActivity() {
             jwt       = result.jwt
         )
 
+        // Establish the real device JWT (iss=nonashield-device) via hardware-signed
+        // /auth/device. Without this, BackendUploader falls back to the demo /auth/login
+        // token (no iss claim), which /threats/batch rejects with 401 — RASP telemetry
+        // never reaches the SOC dashboard even though login itself succeeds.
+        PayShieldSDK.onUserLogin(result.userId)
+
         Toast.makeText(this, "Welcome, ${result.userId}!", Toast.LENGTH_SHORT).show()
 
         // ── Behavioral: record screen transition (Login → Payment) ─────────────
