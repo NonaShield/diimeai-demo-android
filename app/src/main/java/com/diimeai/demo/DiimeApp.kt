@@ -11,7 +11,6 @@ import com.payshield.sdk.enrollment.EnrollmentResult
 import com.payshield.sdk.enrollment.EnrollmentState
 import com.payshield.sdk.crypto.DeviceKeyManager
 import com.payshield.sdk.signal.EdgeSignal
-import com.payshield.sdk.behavioral.BehavioralTelemetrySender
 import com.payshield.sdk.PayShieldEdgeInitializer
 import com.payshield.sdk.PayShieldSDK
 import com.payshield.sdk.SdkEnvironment
@@ -160,10 +159,9 @@ class DiimeApp : Application() {
         // (via EnrollmentState.loadDpipSalt()) at request time — no salt param here.
         DiimeApiClient.init(applicationContext)
 
-        // ── Step 3b: Wire behavioral telemetry sender ─────────────────────────
-        // BehavioralTelemetrySender POSTs to /api/v1/security/telemetry at each
-        // PAYMENT / KYC / LOGIN checkpoint.  Must be set before any Activity starts.
-        BehavioralTelemetrySender.backendBaseUrl = BuildConfig.NONASHIELD_BASE_URL
+        // Behavioral telemetry no longer uses a dedicated /security/telemetry sender --
+        // features ride the same /threats/batch flow as RASP threats instead (see
+        // PayShieldEdgeInitializer's 60s heartbeat + PayShieldCheckpoint.evaluate()).
 
         // ── DEBUG ONLY: track foreground activity so the RASP debug popup (see
         // initPayShieldEdge → sdkSignalSink) can show an AlertDialog over whatever

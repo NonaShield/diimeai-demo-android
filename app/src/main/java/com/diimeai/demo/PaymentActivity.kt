@@ -26,7 +26,6 @@ import com.payshield.sdk.behavioral.BehavioralCaptureManager
 import com.payshield.sdk.behavioral.BehavioralSessionManager
 import com.payshield.sdk.behavioral.BiometricChannelStatus
 import com.payshield.sdk.behavioral.BiometricDeviationSummary
-import com.payshield.sdk.behavioral.BehavioralTelemetrySender
 import com.payshield.sdk.behavioral.KeystrokeDynamicsCapture
 import com.payshield.sdk.enrollment.EnrollmentState
 import com.payshield.sdk.signal.EdgeSignal
@@ -69,8 +68,10 @@ class PaymentActivity : AppCompatActivity() {
     //                     velocity, orientation changes, and navigation events.
     //
     // Both are attached in [onResume] and detached in [onPause].
-    // [BehavioralTelemetrySender.send] is called inside [initiatePayment] before
-    // the backend API call so the backend decision includes behavioral context.
+    // Behavioral features ride along in ThreatBuffer's next /threats/batch flush
+    // (same API as RASP threats) instead of a dedicated BehavioralTelemetrySender
+    // call to /security/telemetry -- that call's response was fail-open/log-only
+    // here anyway (never gated the payment; evaluateAtCheckpoint below does that).
     //
     // Bridge: routes [com.payshield.sdk.signal.SignalSink] (SDK internal interface)
     // to [DiimeApiClient.signalSink] ([com.payshield.android.sdk.SignalSink]).
@@ -565,26 +566,12 @@ class PaymentActivity : AppCompatActivity() {
         val noteText = binding.etNote.text.toString().trim()
 
         lifecycleScope.launch(Dispatchers.IO) {
-            // ── Behavioral telemetry: fail-open, never blocks the payment ─────
-            val behavioralFeatures = captureManager.getLatestFeatures()
-            if (behavioralFeatures != null) {
-                val sessionId = resolveSessionId()
-                val sessionFlow = captureManager.sessionFlowAnalyzer.build()
-                val telemetryResponse = runCatching {
-                    BehavioralTelemetrySender.send(
-                        features            = behavioralFeatures,
-                        sessionId           = sessionId,
-                        tenantId            = "default",
-                        action              = "PAYMENT",
-                        sessionFlowFeatures = sessionFlow
-                    )
-                }.getOrNull()
-                if (telemetryResponse != null) {
-                    Log.d(TAG, "[Behavioral] telemetry action=${telemetryResponse.action} " +
-                        "score=${telemetryResponse.behavioralScore} " +
-                        "level=${telemetryResponse.riskLevel}")
-                }
-            }
+            // Behavioral telemetry no longer sent via a dedicated /security/telemetry
+            // call here -- that response was fail-open/log-only (never gated the
+            // payment; evaluateAtCheckpoint below does that). Behavioral features
+            // now ride the same /threats/batch flow as RASP threats, refreshed on
+            // the SDK's 60s heartbeat (PayShieldEdgeInitializer) in addition to
+            // every checkpoint -- same continuous-monitoring path as RASP.
 
             // ── SDK checkpoint gate — skipped in attestation mode ─────────────
             // Attestation demo is specifically for showing telemetry proof even
