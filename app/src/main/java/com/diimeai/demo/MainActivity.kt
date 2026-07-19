@@ -168,19 +168,24 @@ class MainActivity : AppCompatActivity() {
         // "PENDING" — the hardware key binding IS complete (AndroidKeyStore ECDSA key
         // enrolled), only the Google-side Play Integrity verdict is unavailable.
         val (badgeText, badgeColor) = when (proof.attestationLevel) {
-            "FULL"    -> "PENDING (Play Integrity)"  to 0xFFFF8800.toInt()  // amber — not green
-            "BASIC"   -> "BASIC ATTESTATION"         to 0xFF0088FF.toInt()
-            "GATEWAY" -> "GATEWAY ENROLLED"          to 0xFF0088FF.toInt()
-            else      -> "ENROLLED"                  to 0xFF666666.toInt()
+            "FULL"    -> "PENDING (Play Integrity)"        to 0xFFFF8800.toInt()  // amber — not green
+            "BASIC"   -> "BASIC — Play Integrity missing"  to 0xFFFF8800.toInt()  // amber — honest, not a fake "compliant" blue/green
+            "GATEWAY" -> "GATEWAY ENROLLED"                to 0xFF0088FF.toInt()
+            else      -> "ENROLLED"                        to 0xFF666666.toInt()
         }
         binding.tvAttestationBadge.text = badgeText
         binding.tvAttestationBadge.setBackgroundColor(badgeColor)
 
-        // Hardware backing
-        val hardwareLabel = if (proof.hardwareBacked)
-            "AndroidKeyStore (StrongBox / TEE) 🔒"
-        else
-            "Software Key (dev mode only)"
+        // Hardware backing — driven by proof.hardwareLevel (the actual key-generation
+        // tier parsed from the device attestation chain), NOT proof.attestationLevel.
+        // attestation_level only reflects whether a Play Integrity verdict was
+        // obtained, which is unrelated to where the key itself was generated.
+        val hardwareLabel = when (proof.hardwareLevel) {
+            "STRONGBOX"      -> "AndroidKeyStore (StrongBox) 🔒"
+            "TEE"            -> "AndroidKeyStore (TEE) 🔒"
+            "SECURE_ENCLAVE" -> "Secure Enclave 🔒"
+            else             -> "Software Key (dev mode only)"
+        }
         binding.tvHardwareBacking.text = hardwareLabel
         binding.tvHardwareBacking.setTextColor(
             if (proof.hardwareBacked) getColor(android.R.color.holo_blue_light)
@@ -258,11 +263,17 @@ class MainActivity : AppCompatActivity() {
             //   GATEWAY  = Enrolled at the NonaShield edge gateway only (no device key).
             val levelDisplay = when (proof.attestationLevel) {
                 "FULL"  -> "PENDING\n  (Play Integrity unavailable — app not on Google Play Store.\n  AndroidKeyStore hardware binding is complete.)"
-                "BASIC" -> "BASIC\n  (AndroidKeyStore key enrolled; Play Integrity not requested)"
+                "BASIC" -> "BASIC — Play Integrity missing\n  (AndroidKeyStore key enrolled; no Play Integrity verdict obtained)"
                 else    -> proof.attestationLevel
             }
             append("Attestation Level:\n  $levelDisplay\n\n")
-            append("Hardware Backed:\n  ${if (proof.hardwareBacked) "YES — AndroidKeyStore (StrongBox/TEE)" else "NO — Software key"}\n\n")
+            val hwDisplay = when (proof.hardwareLevel) {
+                "STRONGBOX"      -> "YES — AndroidKeyStore (StrongBox)"
+                "TEE"            -> "YES — AndroidKeyStore (TEE)"
+                "SECURE_ENCLAVE" -> "YES — Secure Enclave"
+                else             -> "NO — Software key"
+            }
+            append("Hardware Backed:\n  $hwDisplay\n\n")
             val fp = proof.pubkeyFingerprint
             if (fp.isNotBlank()) {
                 append("Key Fingerprint (SHA-256):\n  ${fp.chunked(16).joinToString("\n  ")}\n\n")

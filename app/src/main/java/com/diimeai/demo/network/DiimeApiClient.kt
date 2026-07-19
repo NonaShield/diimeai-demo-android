@@ -462,6 +462,7 @@ object DiimeApiClient {
                 BindingProof(
                     deviceId         = json.optString("device_id"),
                     attestationLevel = json.optString("attestation_level", "BASIC"),
+                    hardwareLevel    = json.optString("hardware_level", "SOFTWARE"),
                     pubkeyFingerprint= json.optString("pubkey_fingerprint"),
                     pubkeyHex        = json.optString("pubkey_hex"),
                     enrolledAtIso    = json.optString("enrolled_at_iso"),
@@ -1688,6 +1689,7 @@ data class GatewayDecision(
 data class BindingProof(
     val deviceId:          String,
     val attestationLevel:  String,   // FULL | BASIC | GATEWAY
+    val hardwareLevel:     String,   // STRONGBOX | TEE | SECURE_ENCLAVE | SOFTWARE
     val pubkeyFingerprint: String,   // SHA-256 of public key DER (hex, 64 chars)
     val pubkeyHex:         String,   // full DER bytes as hex — demo app display only
     val enrolledAtIso:     String,
