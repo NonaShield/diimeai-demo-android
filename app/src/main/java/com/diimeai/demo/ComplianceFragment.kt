@@ -22,6 +22,7 @@ import com.diimeai.demo.network.ComplianceStatus
 import com.diimeai.demo.network.DiimeApiClient
 import com.diimeai.demo.network.SealRecord
 import com.google.android.material.button.MaterialButton
+import com.payshield.sdk.PayShieldSDK
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -349,6 +350,16 @@ class ComplianceFragment : Fragment() {
             btnVerify.text = "Processing payment…"
             tvVerifyResult.text = "Sealing with hardware key…"
             tvVerifyResult.setTextColor(0xFF9E9E9E.toInt())
+
+            // Real checkpoint evaluation -- this is what PaymentActivity's real payment
+            // flow does and this screen never did. Sets BackendUploader.latestBehavioralFeatures
+            // (the SDK's own on-device gesture snapshot), which rides the next ThreatBuffer
+            // /threats/batch flush a few seconds later -- same path RASP threats already use,
+            // so behavioral data now reaches the SOC dashboard from this button too, not just
+            // the (currently unreachable in this build) Live Payment Test screen.
+            withContext(Dispatchers.IO) {
+                runCatching { PayShieldSDK.evaluateAtCheckpoint(action = "PAYMENT") }
+            }
 
             val result = withContext(Dispatchers.IO) {
                 DiimeApiClient.ingestScenario(scenarioId = 1)
