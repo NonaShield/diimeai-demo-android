@@ -857,24 +857,21 @@ object DiimeApiClient {
             put("sdk_version", "2.0.0")
         }
 
+        // `client` (not statsClient) is used below — its PinningInterceptor recomputes
+        // and attaches X-Device-Id, X-Timestamp/X-TS, X-Nonce/X-NONCE, X-PayShield-Token,
+        // X-PayShield-Signature, X-HW-Level, X-Edge-Nonce, X-Binding-Token etc. itself,
+        // from SessionHolder/TimeSync/DeviceKeyManager — exactly the same signing path
+        // /threats/batch's BackendUploader uses. This app code does not duplicate that:
+        // the only header set manually is X-PS-Action, which is the documented per-call
+        // override PinningInterceptor reads (see its own action resolution) since one
+        // shared client instance can't otherwise vary "act" per request.
         val request = Request.Builder()
             .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/ingest")
             .post(envelope.toString().toRequestBody(JSON))
-            // Device-auth headers — DeviceAuthenticator validates these on the backend
-            .header("x-device-id",  deviceId)
-            .header("x-timestamp",  (timestamp / 1000).toString())
-            .header("x-nonce",      nonce)
-            // X-PS-Action — action context header consumed by:
-            //   • PinningInterceptor: embedded as JWT "act" claim in X-PayShield-Token
-            //   • NGINX header_validator: overrides JWT act if present → ngx.ctx.validated_action
-            //   • NGINX trust_context_builder: included in X-PS-Trust-Context forwarded to backend
-            //   • Backend ingest.py: x_ps_action Header injected into VerifiedPayload for EIP
             .header("X-PS-Action",  scenario.action)
             // Request pipeline trace in non-prod so demo app can surface timings
             .header("X-PS-Trace",   "true")
             .apply { session?.jwt?.let { header("Authorization", "Bearer $it") } }
-            // Note: PinningInterceptor reads X-PS-Action and uses it as the JWT act claim
-            // Note: NGINX stamps X-PS-Edge-Context — NONASHIELD_BASE_URL must point to NGINX
             .build()
 
         val callStart = System.currentTimeMillis()
@@ -1452,12 +1449,11 @@ object DiimeApiClient {
             put("sdk_version", "2.0.0")
         }
 
+        // See ingestScenario() above — PinningInterceptor on `client` attaches all
+        // device-auth headers itself; only the per-call X-PS-Action override is set here.
         val request = Request.Builder()
             .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/ingest")
             .post(envelope.toString().toRequestBody(JSON))
-            .header("x-device-id",  deviceId)
-            .header("x-timestamp",  (timestamp / 1000).toString())
-            .header("x-nonce",      nonce)
             .header("X-PS-Action",  "KYC")
             .header("X-PS-Trace",   "true")
             .apply { session?.jwt?.let { header("Authorization", "Bearer $it") } }
@@ -1565,12 +1561,11 @@ object DiimeApiClient {
             put("sdk_version", "2.0.0")
         }
 
+        // See ingestScenario() above — PinningInterceptor on `client` attaches all
+        // device-auth headers itself; only the per-call X-PS-Action override is set here.
         val request = Request.Builder()
             .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/ingest")
             .post(envelope.toString().toRequestBody(JSON))
-            .header("x-device-id",  deviceId)
-            .header("x-timestamp",  (timestamp / 1000).toString())
-            .header("x-nonce",      nonce)
             .header("X-PS-Action",  "OTP")
             .header("X-PS-Trace",   "true")
             .apply { session?.jwt?.let { header("Authorization", "Bearer $it") } }
