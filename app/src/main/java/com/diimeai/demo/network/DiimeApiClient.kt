@@ -588,68 +588,68 @@ object DiimeApiClient {
 
     private val SCENARIO_DEFS: Map<Int, ScenarioDef> = mapOf(
         //           name                            eventType                   signals                                                                       signalDefs                                                                                                  decision    riskScore  action
-        1  to ScenarioDef("Hardware Possession",      "DEVICE_ATTESTATION",
+        1  to ScenarioDef("Hardware Possession",      "SECURITY_EVENT",
             mapOf("hardware_bound" to true, "key_storage" to "AndroidKeyStore"),
             listOf(SignalFired("APP_SEC_001", 0.99f, "HIGH", "evidence_verifier")),
             "ALLOW", 5, "SESSION_CREATE"),
-        2  to ScenarioDef("Non-Repudiation Receipt",  "EVIDENCE_CHAIN_VERIFY",
+        2  to ScenarioDef("Non-Repudiation Receipt",  "SECURITY_EVENT",
             mapOf("hybrid_sig_verified" to true, "pqc_sig_present" to true),
             listOf(SignalFired("APP_SEC_002", 0.99f, "HIGH", "evidence_verifier")),
             "ALLOW", 5, "SESSION_CREATE"),
-        3  to ScenarioDef("Screen Mirroring Attack",  "SCREEN_MIRROR_DETECTED",
+        3  to ScenarioDef("Screen Mirroring Attack",  "SECURITY_EVENT",
             mapOf("screen_mirroring" to true, "presentation_display" to true, "vnc_active" to false),
             listOf(SignalFired("RASP_DEV_003", 0.92f, "HIGH", "botnet_correlation"),
                    SignalFired("RASP_DEV_004", 0.85f, "HIGH", "botnet_correlation")),
             "BLOCK", 87, "PAYMENT"),
-        4  to ScenarioDef("Behavioral Biometrics",    "BIOMETRIC_ANOMALY",
+        4  to ScenarioDef("Behavioral Biometrics",    "SECURITY_EVENT",
             mapOf("hesitation_spike" to true, "pressure_anomaly" to true, "biometric_score" to 0.31),
             listOf(SignalFired("USR_BEH_001", 0.78f, "MEDIUM", "mule_account"),
                    SignalFired("USR_BEH_001", 0.71f, "MEDIUM", "mule_account")),
             "STEP_UP", 55, "PAYMENT"),
-        5  to ScenarioDef("Device RASP (38 sensors)", "RASP_THREAT_DETECTED",
+        5  to ScenarioDef("Device RASP (38 sensors)", "SECURITY_EVENT",
             mapOf("root_detected" to true, "hook_detected" to true, "magisk_present" to true),
             listOf(SignalFired("RASP_DEV_001", 0.95f, "CRITICAL", "botnet_correlation"),
                    SignalFired("APP_RUNTIME_008", 1.0f, "CRITICAL", "botnet_correlation")),
             "BLOCK", 100, "PAYMENT"),
-        6  to ScenarioDef("Mule Account Network",     "MULE_ACCOUNT_SIGNAL",
+        6  to ScenarioDef("Mule Account Network",     "SECURITY_EVENT",
             mapOf("account_velocity_24h" to 4, "device_account_degree" to 8, "device_reuse_count" to 12),
             listOf(SignalFired("USR_BEH_002", 0.88f, "HIGH", "mule_account"),
                    SignalFired("USR_BEH_003", 0.76f, "HIGH", "mule_account")),
             "BLOCK", 82, "PAYMENT"),
-        7  to ScenarioDef("Bot Attack / Emulator",    "BOT_EMULATOR_DETECTED",
+        7  to ScenarioDef("Bot Attack / Emulator",    "SECURITY_EVENT",
             mapOf("emulator_detected" to true, "build_fingerprint_anomaly" to true, "sensor_absence" to true),
             listOf(SignalFired("BOT_APP_001", 0.97f, "CRITICAL", "botnet_correlation"),
                    SignalFired("BOT_APP_002", 0.91f, "CRITICAL", "botnet_correlation")),
             "BLOCK", 98, "LOGIN"),
-        8  to ScenarioDef("SIM Swap Fraud",           "SIM_SWAP_SIGNAL",
+        8  to ScenarioDef("SIM Swap Fraud",           "SECURITY_EVENT",
             mapOf("sim_swap_detected" to true, "iccid_changed" to true, "carrier_transition" to true),
             listOf(SignalFired("SCAM_SS_001", 1.00f, "CRITICAL", "sim_swap_proxy"),
                    SignalFired("SCAM_SS_002", 0.96f, "HIGH",     "sim_swap_proxy")),
             "BLOCK", 95, "OTP"),
-        9  to ScenarioDef("Digital Arrest Scam",      "DIGITAL_ARREST_SIGNAL",
+        9  to ScenarioDef("Digital Arrest Scam",      "SECURITY_EVENT",
             mapOf("active_video_call" to true, "call_merge_active" to true,
                   "voip_cellular_concurrent" to true, "prolonged_call_mins" to 47),
             listOf(SignalFired("SCAM_CM_001", 0.98f, "CRITICAL", "digital_arrest_detector"),
                    SignalFired("SCAM_CM_002", 0.85f, "HIGH",     "digital_arrest_detector")),
             "BLOCK", 100, "PAYMENT"),
-        10 to ScenarioDef("Fake Loan App Extortion",  "PREDATORY_LOAN_SIGNAL",
+        10 to ScenarioDef("Fake Loan App Extortion",  "SECURITY_EVENT",
             mapOf("sms_permission" to true, "contacts_permission" to true,
                   "call_log_permission" to true, "storage_permission" to true),
             listOf(SignalFired("LOAN_APP_002", 0.90f, "HIGH", "beneficiary_abuse")),
             "STEP_UP", 68, "KYC"),
-        11 to ScenarioDef("Ghost Tapping / NFC Abuse","NFC_FRAUD_SIGNAL",
+        11 to ScenarioDef("Ghost Tapping / NFC Abuse","SECURITY_EVENT",
             mapOf("rogue_hce_app" to true, "nfc_enabled" to true, "no_screen_lock" to true),
             listOf(SignalFired("NFC_FRAUD_001", 0.80f, "HIGH", "credential_reuse"),
                    SignalFired("NFC_FRAUD_002", 0.85f, "HIGH", "credential_reuse")),
             "BLOCK", 83, "PAYMENT"),
-        12 to ScenarioDef("Malicious APK Injection",  "MALICIOUS_APK_SIGNAL",
+        12 to ScenarioDef("Malicious APK Injection",  "SECURITY_EVENT",
             mapOf("apk_signature_mismatch" to true, "dangerous_permission_cluster" to true,
                   "overlay_abuse" to true, "sideloaded" to true),
             listOf(SignalFired("MAL_APK_001", 0.95f, "CRITICAL", "botnet_correlation"),
                    SignalFired("MAL_APK_002", 0.88f, "CRITICAL", "botnet_correlation"),
                    SignalFired("MAL_APK_003", 0.92f, "CRITICAL", "botnet_correlation")),
             "BLOCK", 100, "PAYMENT"),
-        13 to ScenarioDef("Deepfake KYC Bypass",      "DEEPFAKE_KYC_SIGNAL",
+        13 to ScenarioDef("Deepfake KYC Bypass",      "SECURITY_EVENT",
             // ATL-2027 enhanced: 8 device-layer signals feed deepfake_risk_detector.py
             mapOf("virtual_camera_detected" to true, "obs_package_present" to true,
                   "non_physical_camera_id" to true,
@@ -666,17 +666,17 @@ object DiimeApiClient {
                 SignalFired("RASP_DEV_065",    0.85f, "HIGH",     "deepfake_risk_detector"),  // compound
             ),
             "BLOCK", 97, "KYC"),
-        14 to ScenarioDef("NBFC Insider Burst",        "INSIDER_BURST_SIGNAL",
+        14 to ScenarioDef("NBFC Insider Burst",        "SECURITY_EVENT",
             mapOf("enrollment_velocity_60s" to 5, "off_hours_enrollment" to true,
                   "device_account_degree" to 5, "device_reuse_count" to 18),
             listOf(SignalFired("USR_BEH_003", 0.93f, "HIGH", "beneficiary_abuse")),
             "BLOCK", 88, "PAYMENT"),
-        15 to ScenarioDef("Investment / Romance Scam", "INVESTMENT_SCAM_SIGNAL",
+        15 to ScenarioDef("Investment / Romance Scam", "SECURITY_EVENT",
             mapOf("dating_apps_detected" to 3, "first_large_foreign_tx" to true),
             listOf(SignalFired("SCAM_RS_001", 0.60f, "MEDIUM", "investment_fraud_detector"),
                    SignalFired("SCAM_RS_001", 0.72f, "MEDIUM", "investment_fraud_detector")),
             "STEP_UP", 52, "PAYMENT"),
-        16 to ScenarioDef("Organized Crime Ring",      "ORG_CRIME_RING_SIGNAL",
+        16 to ScenarioDef("Organized Crime Ring",      "SECURITY_EVENT",
             mapOf("oc_cluster_match" to true, "shared_ip_ring" to true,
                   "cluster_size" to 14, "timing_rhythm_detected" to true,
                   "device_account_degree" to 12, "device_reuse_count" to 38),
@@ -685,7 +685,7 @@ object DiimeApiClient {
             "BLOCK", 94, "PAYMENT"),
 
         // ── ATL-2027: Autonomous Trust Layer — DPIP + autonomous command enforcement ──
-        17 to ScenarioDef("ATL-2027 Autonomous Trust",  "ATL_AUTONOMOUS_SIGNAL",
+        17 to ScenarioDef("ATL-2027 Autonomous Trust",  "SECURITY_EVENT",
             // Compound payload: DPIP consortium blocklist hit + autonomous BLOCK command +
             // full deepfake precondition cluster (overlay + background camera + compound)
             mapOf("dpip_blocklist_hit"    to true,
@@ -722,7 +722,7 @@ object DiimeApiClient {
         //
         // UPI cooling period: backend enforces 4-hour hold on first high-value
         // UPI payment to a new payee (RBI guideline compliance).
-        19 to ScenarioDef("Real-time Payment Risk Scoring", "PAYMENT_RISK_SIGNAL",
+        19 to ScenarioDef("Real-time Payment Risk Scoring", "SECURITY_EVENT",
             mapOf(
                 // Amount tier: HIGH (₹5L, threshold ≥ ₹1L)
                 "amount_inr"            to 500_000,
@@ -767,7 +767,7 @@ object DiimeApiClient {
         //   DEVELOPMENT builds — Play Integrity failure is LOW (fail-open, emulators ok)
         //   STAGING / PRODUCTION — Play Integrity failure is CRITICAL (hard block)
         //   iOS companion: DeviceCheck + App Attest (RASP_IOS_003) follow the same gating.
-        18 to ScenarioDef("Device Fingerprinting / ATO",  "DEVICE_FINGERPRINT_RISK",
+        18 to ScenarioDef("Device Fingerprinting / ATO",  "SECURITY_EVENT",
             mapOf(
                 // Emulator hardware + build fingerprint signatures
                 "hardware_id"         to "goldfish",
@@ -1443,7 +1443,7 @@ object DiimeApiClient {
 
         val envelope = JSONObject().apply {
             put("device_id",   deviceId)
-            put("event_type",  "MULE_ACCOUNT_SIGNAL")
+            put("event_type",  "SECURITY_EVENT")
             put("timestamp",   timestamp)
             put("signature",   sig)
             put("tenant_id",   "demo_tenant")
@@ -1556,7 +1556,7 @@ object DiimeApiClient {
 
         val envelope = JSONObject().apply {
             put("device_id",   deviceId)
-            put("event_type",  "SIM_SWAP_SIGNAL")
+            put("event_type",  "SECURITY_EVENT")
             put("timestamp",   timestamp)
             put("signature",   sig)
             put("tenant_id",   "demo_tenant")
