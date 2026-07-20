@@ -861,31 +861,23 @@ object DiimeApiClient {
             put("sdk_version", "2.0.0")
         }
 
-        // `client` (not statsClient) is used below — its PinningInterceptor recomputes
-        // and attaches X-Device-Id, X-Timestamp/X-TS, X-Nonce/X-NONCE, X-PayShield-Token,
-        // X-PayShield-Signature, X-HW-Level, X-Edge-Nonce, X-Binding-Token etc. itself,
-        // from SessionHolder/TimeSync/DeviceKeyManager — exactly the same signing path
-        // /threats/batch's BackendUploader uses. This app code does not duplicate that:
-        // the only header set manually is X-PS-Action, which is the documented per-call
-        // override PinningInterceptor reads (see its own action resolution) since one
-        // shared client instance can't otherwise vary "act" per request.
+        // `client` (not statsClient) is used below — its PinningInterceptor is the
+        // SDK's sole authority for request security headers (X-Device-Id, X-Timestamp,
+        // X-Nonce, X-PayShield-Token, X-PayShield-Signature, X-Payload-Hash,
+        // X-Nonce-Binding, X-HW-Level, X-Binding-Token, etc.) — exactly the same
+        // signing path /threats/batch's BackendUploader uses. This app code does not
+        // compute or duplicate any of it; the only header set manually is X-PS-Action,
+        // the documented per-call override PinningInterceptor reads, since one shared
+        // client instance can't otherwise vary "act" per request.
         //
-        // TEMPORARY (remove once a new AAR ships): PinningInterceptor computes bodyHash
-        // internally for its own signing input but never exposed it as X-Payload-Hash
-        // (payload_hash_validator.lua requires it, NGINX-HASH-VALID-001 otherwise), and
-        // never computed/sent X-Nonce-Binding at all (nonce_binding_validator.lua
-        // requires it, NGINX-NONCE-BIND-001 otherwise). Both fixed in the SDK
-        // (nonashield-sdk commit 1dbfb28), but that repo's CI is blocked by an org
-        // billing issue, so this AAR predates the fix. Setting them here is a
-        // stopgap, not a permanent second source of truth -- delete once the AAR
-        // is rebuilt.
-        val bodyStr    = envelope.toString()
-        val bodyHash   = sha256hex(bodyStr)
+        // NOTE: the currently-bundled AAR predates the SDK fix for X-Payload-Hash /
+        // X-Nonce-Binding (nonashield-sdk commit 1dbfb28 / 767cb81) — PinningInterceptor
+        // in this AAR does not send them, so nginx will reject this call until a new
+        // AAR is built. That is an SDK/CI problem to fix at the source, not something
+        // to patch around with app-level crypto.
         val request = Request.Builder()
             .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/ingest")
-            .post(bodyStr.toRequestBody(JSON))
-            .header("X-Payload-Hash",  bodyHash)
-            .header("X-Nonce-Binding", sha256hex("$nonce|$bodyHash|$deviceId"))
+            .post(envelope.toString().toRequestBody(JSON))
             .header("X-PS-Action",  scenario.action)
             // Request pipeline trace in non-prod so demo app can surface timings
             .header("X-PS-Trace",   "true")
@@ -1471,15 +1463,11 @@ object DiimeApiClient {
             put("sdk_version", "2.0.0")
         }
 
-        // See ingestScenario() above — PinningInterceptor on `client` attaches all
-        // device-auth headers itself; only the per-call X-PS-Action override is set here.
-        // X-Payload-Hash / X-Nonce-Binding are the same temporary stopgap noted there.
-        val bodyStr = envelope.toString()
+        // See ingestScenario() above — PinningInterceptor on `client` is the SDK's
+        // sole authority for request security headers; no app-level crypto here.
         val request = Request.Builder()
             .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/ingest")
-            .post(bodyStr.toRequestBody(JSON))
-            .header("X-Payload-Hash",   sha256hex(bodyStr))
-            .header("X-Nonce-Binding",  sha256hex("$nonce|${sha256hex(bodyStr)}|$deviceId"))
+            .post(envelope.toString().toRequestBody(JSON))
             .header("X-PS-Action",  "KYC")
             .header("X-PS-Trace",   "true")
             .apply { session?.jwt?.let { header("Authorization", "Bearer $it") } }
@@ -1591,15 +1579,11 @@ object DiimeApiClient {
             put("sdk_version", "2.0.0")
         }
 
-        // See ingestScenario() above — PinningInterceptor on `client` attaches all
-        // device-auth headers itself; only the per-call X-PS-Action override is set here.
-        // X-Payload-Hash / X-Nonce-Binding are the same temporary stopgap noted there.
-        val bodyStr = envelope.toString()
+        // See ingestScenario() above — PinningInterceptor on `client` is the SDK's
+        // sole authority for request security headers; no app-level crypto here.
         val request = Request.Builder()
             .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/ingest")
-            .post(bodyStr.toRequestBody(JSON))
-            .header("X-Payload-Hash",   sha256hex(bodyStr))
-            .header("X-Nonce-Binding",  sha256hex("$nonce|${sha256hex(bodyStr)}|$deviceId"))
+            .post(envelope.toString().toRequestBody(JSON))
             .header("X-PS-Action",  "OTP")
             .header("X-PS-Trace",   "true")
             .apply { session?.jwt?.let { header("Authorization", "Bearer $it") } }
