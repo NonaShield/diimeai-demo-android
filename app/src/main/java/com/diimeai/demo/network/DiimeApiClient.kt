@@ -870,18 +870,22 @@ object DiimeApiClient {
         // override PinningInterceptor reads (see its own action resolution) since one
         // shared client instance can't otherwise vary "act" per request.
         //
-        // TEMPORARY (remove once a new AAR ships): PinningInterceptor computes this
-        // exact SHA-256-of-body value internally for its own signing input but never
-        // exposes it as X-Payload-Hash, which payload_hash_validator.lua requires
-        // (NGINX-HASH-VALID-001 otherwise). Fixed in the SDK (nonashield-sdk commit
-        // 1dbfb28), but that repo's CI is blocked by an org billing issue, so this
-        // AAR predates the fix. Setting it here is a stopgap, not a permanent
-        // second source of truth -- delete this header once the AAR is rebuilt.
-        val bodyStr = envelope.toString()
+        // TEMPORARY (remove once a new AAR ships): PinningInterceptor computes bodyHash
+        // internally for its own signing input but never exposed it as X-Payload-Hash
+        // (payload_hash_validator.lua requires it, NGINX-HASH-VALID-001 otherwise), and
+        // never computed/sent X-Nonce-Binding at all (nonce_binding_validator.lua
+        // requires it, NGINX-NONCE-BIND-001 otherwise). Both fixed in the SDK
+        // (nonashield-sdk commit 1dbfb28), but that repo's CI is blocked by an org
+        // billing issue, so this AAR predates the fix. Setting them here is a
+        // stopgap, not a permanent second source of truth -- delete once the AAR
+        // is rebuilt.
+        val bodyStr    = envelope.toString()
+        val bodyHash   = sha256hex(bodyStr)
         val request = Request.Builder()
             .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/ingest")
             .post(bodyStr.toRequestBody(JSON))
-            .header("X-Payload-Hash", sha256hex(bodyStr))
+            .header("X-Payload-Hash",  bodyHash)
+            .header("X-Nonce-Binding", sha256hex("$nonce|$bodyHash|$deviceId"))
             .header("X-PS-Action",  scenario.action)
             // Request pipeline trace in non-prod so demo app can surface timings
             .header("X-PS-Trace",   "true")
@@ -1469,9 +1473,13 @@ object DiimeApiClient {
 
         // See ingestScenario() above — PinningInterceptor on `client` attaches all
         // device-auth headers itself; only the per-call X-PS-Action override is set here.
+        // X-Payload-Hash / X-Nonce-Binding are the same temporary stopgap noted there.
+        val bodyStr = envelope.toString()
         val request = Request.Builder()
             .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/ingest")
-            .post(envelope.toString().toRequestBody(JSON))
+            .post(bodyStr.toRequestBody(JSON))
+            .header("X-Payload-Hash",   sha256hex(bodyStr))
+            .header("X-Nonce-Binding",  sha256hex("$nonce|${sha256hex(bodyStr)}|$deviceId"))
             .header("X-PS-Action",  "KYC")
             .header("X-PS-Trace",   "true")
             .apply { session?.jwt?.let { header("Authorization", "Bearer $it") } }
@@ -1585,9 +1593,13 @@ object DiimeApiClient {
 
         // See ingestScenario() above — PinningInterceptor on `client` attaches all
         // device-auth headers itself; only the per-call X-PS-Action override is set here.
+        // X-Payload-Hash / X-Nonce-Binding are the same temporary stopgap noted there.
+        val bodyStr = envelope.toString()
         val request = Request.Builder()
             .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/ingest")
-            .post(envelope.toString().toRequestBody(JSON))
+            .post(bodyStr.toRequestBody(JSON))
+            .header("X-Payload-Hash",   sha256hex(bodyStr))
+            .header("X-Nonce-Binding",  sha256hex("$nonce|${sha256hex(bodyStr)}|$deviceId"))
             .header("X-PS-Action",  "OTP")
             .header("X-PS-Trace",   "true")
             .apply { session?.jwt?.let { header("Authorization", "Bearer $it") } }
