@@ -849,7 +849,11 @@ object DiimeApiClient {
             put("device_id",   deviceId)
             put("event_type",  scenario.eventType)
             // action is sent as X-PS-Action header — IngestEnvelope (extra="forbid") has no "action" field
-            put("timestamp",   timestamp)
+            // schema_validator.lua compares this directly against ngx.time() (Unix
+            // epoch SECONDS, ±300s tolerance) -- sending milliseconds here made every
+            // request fail with NGINX-SCHEMA-VALID-004 timestamp_skew (skew reported
+            // in the ~10^12 range, exactly the ms/s unit mismatch).
+            put("timestamp",   timestamp / 1000)
             put("signature",   sig)
             put("tenant_id",   tenantId)
             put("nonce",       nonce)
@@ -1441,7 +1445,11 @@ object DiimeApiClient {
         val envelope = JSONObject().apply {
             put("device_id",   deviceId)
             put("event_type",  "SECURITY_EVENT")
-            put("timestamp",   timestamp)
+            // schema_validator.lua compares this directly against ngx.time() (Unix
+            // epoch SECONDS, ±300s tolerance) -- sending milliseconds here made every
+            // request fail with NGINX-SCHEMA-VALID-004 timestamp_skew (skew reported
+            // in the ~10^12 range, exactly the ms/s unit mismatch).
+            put("timestamp",   timestamp / 1000)
             put("signature",   sig)
             put("tenant_id",   "demo_tenant")
             put("nonce",       nonce)
@@ -1553,7 +1561,11 @@ object DiimeApiClient {
         val envelope = JSONObject().apply {
             put("device_id",   deviceId)
             put("event_type",  "SECURITY_EVENT")
-            put("timestamp",   timestamp)
+            // schema_validator.lua compares this directly against ngx.time() (Unix
+            // epoch SECONDS, ±300s tolerance) -- sending milliseconds here made every
+            // request fail with NGINX-SCHEMA-VALID-004 timestamp_skew (skew reported
+            // in the ~10^12 range, exactly the ms/s unit mismatch).
+            put("timestamp",   timestamp / 1000)
             put("signature",   sig)
             put("tenant_id",   "demo_tenant")
             put("nonce",       nonce)
