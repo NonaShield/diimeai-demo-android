@@ -869,9 +869,19 @@ object DiimeApiClient {
         // the only header set manually is X-PS-Action, which is the documented per-call
         // override PinningInterceptor reads (see its own action resolution) since one
         // shared client instance can't otherwise vary "act" per request.
+        //
+        // TEMPORARY (remove once a new AAR ships): PinningInterceptor computes this
+        // exact SHA-256-of-body value internally for its own signing input but never
+        // exposes it as X-Payload-Hash, which payload_hash_validator.lua requires
+        // (NGINX-HASH-VALID-001 otherwise). Fixed in the SDK (nonashield-sdk commit
+        // 1dbfb28), but that repo's CI is blocked by an org billing issue, so this
+        // AAR predates the fix. Setting it here is a stopgap, not a permanent
+        // second source of truth -- delete this header once the AAR is rebuilt.
+        val bodyStr = envelope.toString()
         val request = Request.Builder()
             .url("${BuildConfig.NONASHIELD_BASE_URL}/api/v1/ingest")
-            .post(envelope.toString().toRequestBody(JSON))
+            .post(bodyStr.toRequestBody(JSON))
+            .header("X-Payload-Hash", sha256hex(bodyStr))
             .header("X-PS-Action",  scenario.action)
             // Request pipeline trace in non-prod so demo app can surface timings
             .header("X-PS-Trace",   "true")
