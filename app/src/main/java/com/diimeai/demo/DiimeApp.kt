@@ -282,6 +282,28 @@ class DiimeApp : Application() {
 
         Log.i(TAG, "PayShield SDK initialized (env=$sdkEnvironment, atl2027=true, " +
             "dpipSalt=${if (EnrollmentState.loadDpipSalt().isNotBlank()) "ISSUED" else "PENDING_ENROLLMENT"})")
+
+        startBehavioralHeartbeat()
+    }
+
+    /**
+     * App-level substitute for the SDK's own 60s heartbeat behavioral piggyback
+     * (PayShieldEdgeInitializer.kt, Step 6b) -- that fix is source-committed in
+     * the SDK repo but the SDK's CI is blocked by an org billing issue, so no
+     * AAR has ever been built with it. evaluateAtCheckpoint() is already public
+     * in the currently-bundled AAR and already contains the same "Path A:
+     * behavioral" piggyback logic PayShieldCheckpoint.evaluate() runs on every
+     * call -- calling it here periodically, app-wide, makes behavioral data
+     * flow continuously like RASP does, using only the existing AAR's public
+     * API. No SDK/AAR change needed. Remove once a new AAR carries the fix.
+     */
+    private fun startBehavioralHeartbeat() {
+        appScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(60_000L)
+                runCatching { PayShieldSDK.evaluateAtCheckpoint(action = "SESSION") }
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
