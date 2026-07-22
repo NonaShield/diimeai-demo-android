@@ -1,16 +1,10 @@
 package com.diimeai.demo
 
 import android.os.Bundle
-import android.view.MotionEvent
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
-import com.diimeai.demo.network.DiimeApiClient
 import com.google.android.material.bottomnavigation.BottomNavigationView
-import com.payshield.sdk.PayShieldSDK
-import com.payshield.sdk.behavioral.BehavioralCaptureManager
-import com.payshield.sdk.signal.EdgeSignal
-import com.payshield.sdk.token.SessionHolder
 
 /**
  * Main hub after login — 5-tab fraud scenario dashboard.
@@ -54,42 +48,18 @@ class ScenarioHubActivity : AppCompatActivity() {
 
     // ── Behavioral SDK ────────────────────────────────────────────────────────
     //
-    // PayShieldSDK.recordTouchForBiometrics() below feeds BehavioralBiometricsCollector,
-    // which only powers the on-device "live biometric readout" demo screen
-    // (PayShieldSDK.getBehaviourParams()) -- it is a separate object from
-    // BehavioralCaptureManager and never touches BackendUploader.latestBehavioralFeatures,
-    // so none of it ever reaches ThreatBuffer/SOC dashboard.
-    //
-    // BehavioralCaptureManager is the component PayShieldCheckpoint.evaluate()'s
-    // "Path A: behavioral" line actually reads (via its latestSessionFeatures
-    // companion property) before every /threats/batch upload -- same class
-    // LoginActivity already uses. Feeding it here directly from
-    // dispatchTouchEvent(), rather than via BehavioralCaptureManager.attachTo()'s
-    // View.OnTouchListener, is deliberate: a ViewGroup's OnTouchListener is not
-    // reliably invoked for touches a child view (Button, EditText) itself
-    // consumes, which is most interaction in this hub. dispatchTouchEvent() sees
-    // every touch before any child view processes it, so nothing is missed.
-    private val behavioralSink = object : com.payshield.sdk.signal.SignalSink {
-        override fun emit(signal: EdgeSignal) {
-            DiimeApiClient.signalSink?.onSignalsCollected(listOf(signal))
-        }
-        override fun onBlock(reason: String) {
-            DiimeApiClient.signalSink?.onBlock(reason)
-        }
-    }
-
-    private val captureManager by lazy {
-        BehavioralCaptureManager(
-            sink      = behavioralSink,
-            sessionId = SessionHolder.session?.sessionId ?: "hub_${System.currentTimeMillis()}",
-        )
-    }
-
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        PayShieldSDK.recordTouchForBiometrics(ev)
-        captureManager.onTouch(window.decorView, ev)
-        return super.dispatchTouchEvent(ev)
-    }
+    // This Activity does NOT wire touch capture itself. PayShieldEdgeInitializer
+    // (registered once in DiimeApp) auto-attaches a BehavioralCaptureManager to
+    // every Activity window that isn't already instrumented, wrapping
+    // Window.Callback so it sees every touch regardless of what consumes it
+    // (Button, EditText, etc. — a decor-view OnTouchListener would miss those).
+    // That same automatic capture also feeds BehavioralBiometricsCollector
+    // internally, which is what powers the "Behavioral & Biometric Fraud" tab's
+    // live readout via PayShieldSDK.getBehaviourParams() below — and its sink
+    // is the app-wide one already wired to both ThreatBuffer and the in-app
+    // ticker, so signals reach the SOC dashboard too (the old local sink here
+    // never did). See BehavioralCaptureManager / PayShieldEdgeInitializer for
+    // the capture mechanism; nothing here needs to duplicate it.
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
