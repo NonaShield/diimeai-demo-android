@@ -845,6 +845,18 @@ object DiimeApiClient {
             return simulatedScenarioResult(scenarioId)
         }
 
+        // /api/v1/ingest requires a device-issued JWT (iss=nonashield-device) as of
+        // nonashield-backend commit requiring require_device_jwt here -- the session
+        // JWT this used to send (session?.jwt) is now rejected with 401 (wrong
+        // issuer). PayShieldSDK.getDeviceJwt() is the SDK's own source of truth for
+        // this (same fallback BackendUploader uses for /threats/batch), not
+        // something this app re-derives.
+        val deviceJwt = PayShieldSDK.getDeviceJwt()
+        if (deviceJwt.isNullOrEmpty()) {
+            Log.w(TAG, "getDeviceJwt() returned null — device not yet authenticated, cannot call /ingest")
+            return simulatedScenarioResult(scenarioId)
+        }
+
         val envelope = JSONObject().apply {
             put("device_id",   deviceId)
             put("event_type",  scenario.eventType)
@@ -881,7 +893,7 @@ object DiimeApiClient {
             .header("X-PS-Action",  scenario.action)
             // Request pipeline trace in non-prod so demo app can surface timings
             .header("X-PS-Trace",   "true")
-            .apply { session?.jwt?.let { header("Authorization", "Bearer $it") } }
+            .header("Authorization", "Bearer $deviceJwt")
             .build()
 
         val callStart = System.currentTimeMillis()
