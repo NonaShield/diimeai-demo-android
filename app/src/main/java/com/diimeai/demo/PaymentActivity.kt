@@ -1033,6 +1033,27 @@ class PaymentActivity : AppCompatActivity() {
             binding.tvResult.visibility = View.VISIBLE
             return
         }
+
+        // NonaShield checkpoint — same call PaymentActivity.initiatePayment() already
+        // makes for PAYMENT. Runs the on-device policy check AND fires the SDK's
+        // parallel /api/v1/ingest call in the background (see
+        // PayShieldEdgeInitializer.reportCheckpointToIngest) so this KYC action
+        // reaches the real fraud/graph/compliance engine, not just the local-only
+        // block flag checked above. Previously KYC had no per-action risk gate at
+        // all, so an operator-issued remote force_block (or any KYC-specific
+        // policy rule) could never stop enrollment.
+        val checkpoint = runCatching { PayShieldSDK.evaluateAtCheckpoint(action = "KYC") }.getOrNull()
+        if (checkpoint != null && checkpoint.decision == PolicyDecision.DENY) {
+            binding.tvResult.text = "⛔ KYC blocked — ${checkpoint.reason}"
+            binding.tvResult.setTextColor(getColor(android.R.color.holo_red_dark))
+            binding.tvResult.visibility = View.VISIBLE
+            return
+        }
+        if (checkpoint != null && checkpoint.decision == PolicyDecision.STEP_UP) {
+            showStepUpDialog(checkpoint.reason)
+            return
+        }
+
         setLoading(true)
         binding.tvResult.visibility = View.GONE
 
