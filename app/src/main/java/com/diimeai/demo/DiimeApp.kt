@@ -261,23 +261,31 @@ class DiimeApp : Application() {
         // event listener categories, and starts the 60-second periodic sweep.
         // FreeRASP auto-starts here if already enrolled; otherwise starts on first
         // recordEnrollment() call.
+        // autoBlockSeverity has no SDK default -- every integration must decide
+        // explicitly. Demo choice: null (never auto-block on-device) -- blocking is
+        // triggered from the SOC dashboard's force_block command instead, which the
+        // demo's PaymentActivity/TrustDashboardActivity already surface via
+        // isBlocked()/getBlockDetails(). RASP + behavioral signals still flow to the
+        // backend continuously either way -- this only controls local enforcement.
         PayShieldEdgeInitializer.initialize(
-            context        = applicationContext,
-            signalSink     = sdkSignalSink,
-            sdkState       = sdkState,
-            backendBaseUrl = BuildConfig.NONASHIELD_BASE_URL,
-            environment    = sdkEnvironment,
-            tenantId       = "default",
+            context           = applicationContext,
+            signalSink        = sdkSignalSink,
+            sdkState          = sdkState,
+            backendBaseUrl    = BuildConfig.NONASHIELD_BASE_URL,
+            environment       = sdkEnvironment,
+            tenantId          = "default",
+            autoBlockSeverity = null,
         )
 
         // Mark PayShieldSDK as initialized so evaluateAtCheckpoint() works in
         // PaymentActivity. requireOrchestrator() resolves via internalOrchestrator
         // (set by the call above) — no second init, no duplicate OS listeners.
         PayShieldSDK.configure(
-            backendUrl       = BuildConfig.NONASHIELD_BASE_URL,
-            tenantId         = "default",
-            environment      = sdkEnvironment,
-            enableBehavioral = true,
+            backendUrl        = BuildConfig.NONASHIELD_BASE_URL,
+            autoBlockSeverity = null,
+            tenantId          = "default",
+            environment       = sdkEnvironment,
+            enableBehavioral  = true,
         )
 
         Log.i(TAG, "PayShield SDK initialized (env=$sdkEnvironment, atl2027=true, " +
