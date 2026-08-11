@@ -332,7 +332,12 @@ class DiimeApp : Application() {
         appScope.launch(Dispatchers.IO) {
             Log.i(TAG, "Starting device enrollment...")
 
-            val deviceId = DeviceKeyManager().getStableDeviceId()
+            // device_id is determined by the SDK itself, internally, from the
+            // device's hardware-backed key -- it does not exist until enroll()
+            // generates that key. Reading it here (before enroll() runs) used to
+            // observe the pre-key placeholder instead, so every fresh install
+            // silently registered a zero-UUID as its permanent device identity.
+            // Read the authoritative value back from result.deviceId below.
             val enrollmentMgr = EnrollmentManager(
                 context        = applicationContext,
                 keyManager     = DeviceKeyManager(),
@@ -343,14 +348,14 @@ class DiimeApp : Application() {
                 environment    = sdkEnvironment
             )
 
-            when (val result = enrollmentMgr.enroll(deviceId)) {
+            when (val result = enrollmentMgr.enroll()) {
                 is EnrollmentResult.Success -> {
                     enrollmentState = EnrollmentState.load()
                     _enrollmentStatus.value = EnrollmentStatus.Enrolled(
-                        deviceId  = deviceId,
+                        deviceId  = result.deviceId,
                         sessionId = result.sessionId
                     )
-                    Log.i(TAG, "Enrollment succeeded. deviceId=$deviceId session=${result.sessionId}")
+                    Log.i(TAG, "Enrollment succeeded. deviceId=${result.deviceId} session=${result.sessionId}")
                 }
                 is EnrollmentResult.Failure -> {
                     // Hard failures (integrity violations in STAGING/PRODUCTION) are not
