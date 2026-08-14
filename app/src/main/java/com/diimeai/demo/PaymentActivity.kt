@@ -577,8 +577,12 @@ class PaymentActivity : AppCompatActivity() {
             // Attestation demo is specifically for showing telemetry proof even
             // when the SDK would normally gate the payment.
             if (!isAttestation) {
+                // Bucket the on-screen amount into a coarse tier ON-DEVICE — the
+                // raw Double never leaves this call; only the tier crosses the
+                // wire (see TransactionValueTier's own KDoc for why).
+                val valueTier = com.payshield.sdk.transaction.TransactionValueTier.fromAmountInr(amount)
                 val checkpoint = runCatching {
-                    PayShieldSDK.evaluateAtCheckpoint(action = "PAYMENT")
+                    PayShieldSDK.evaluateAtCheckpoint(action = "PAYMENT", transactionValueTier = valueTier)
                 }.getOrNull()
 
                 if (checkpoint != null && checkpoint.decision == PolicyDecision.DENY) {
