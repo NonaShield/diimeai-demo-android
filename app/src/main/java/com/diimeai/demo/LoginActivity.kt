@@ -11,6 +11,7 @@ import com.diimeai.demo.network.DiimeApiClient
 import com.diimeai.demo.network.LoginResult
 import com.payshield.android.edge.EdgeRiskEnforcer
 import com.payshield.sdk.PayShieldSDK
+import com.payshield.sdk.policy.PolicyDecision
 import com.payshield.sdk.behavioral.BehavioralCaptureManager
 import com.payshield.sdk.behavioral.KeystrokeDynamicsCapture
 import com.payshield.sdk.signal.EdgeSignal
@@ -173,6 +174,38 @@ class LoginActivity : AppCompatActivity() {
         setLoading(true)
 
         lifecycleScope.launch(Dispatchers.IO) {
+            // Credential-stuffing gap fix (ledger #8): fires POST /api/v1/ingest
+            // with X-PS-Action=LOGIN and the typed username BEFORE the real
+            // login call below -- this is what the backend's
+            // check_login_action()/check_login_action_ip()/
+            // check_login_action_device_distinct_users()/check_login_action_asn()
+            // rate limiters actually key on. Without this call (or without
+            // attemptedUserId specifically), none of those checks have any
+            // real identity to rate-limit against at all -- the device's own
+            // JWT only reflects whichever user last completed a REAL login,
+            // which is stale/wrong at this exact moment. Same
+            // runCatching {}.getOrNull() + DENY-gate pattern PaymentActivity/
+            // ComplianceFragment already use for PAYMENT/KYC.
+            val checkpoint = runCatching {
+                PayShieldSDK.evaluateAtCheckpoint(action = "LOGIN", attemptedUserId = username)
+            }.getOrNull()
+
+            if (checkpoint != null && checkpoint.decision == PolicyDecision.DENY) {
+                withContext(Dispatchers.Main) {
+                    setLoading(false)
+                    Toast.makeText(
+                        this@LoginActivity,
+                        "⛔ Login blocked — ${checkpoint.reason}",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+                return@launch
+            }
+            // STEP_UP: a real integration would show an OTP/CAPTCHA challenge
+            // here (same pattern as PaymentActivity's risk step-up dialog).
+            // This demo has no step-up flow on the login screen, so STEP_UP
+            // is treated as advisory only and falls through to the real login.
+
             val result = DiimeApiClient.login(username, password)
 
             withContext(Dispatchers.Main) {
