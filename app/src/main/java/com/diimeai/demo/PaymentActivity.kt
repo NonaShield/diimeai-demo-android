@@ -581,8 +581,21 @@ class PaymentActivity : AppCompatActivity() {
                 // raw Double never leaves this call; only the tier crosses the
                 // wire (see TransactionValueTier's own KDoc for why).
                 val valueTier = com.payshield.sdk.transaction.TransactionValueTier.fromAmountInr(amount)
+                // Real multi-step payment gate: computed once here and reused for
+                // both the live checkpoint call and /payment/initiate below, so
+                // TransactionLinkTokenService can verify they match on a STEP_UP.
+                val txCommitment = DiimeApiClient.computeTxCommitment(amount, "INR", recipient)
+                // evaluatePaymentCheckpoint() AWAITS a live /api/v1/ingest verdict
+                // for THIS attempt (bounded ~6s, falls back to the on-device signal
+                // chain on timeout/offline) — unlike evaluateAtCheckpoint()'s
+                // fire-and-forget /ingest call, this is what lets NonaShield
+                // actually deny/step-up the payment that triggered the check,
+                // not just a future one.
                 val checkpoint = runCatching {
-                    PayShieldSDK.evaluateAtCheckpoint(action = "PAYMENT", transactionValueTier = valueTier)
+                    PayShieldSDK.evaluatePaymentCheckpoint(
+                        transactionValueTier = valueTier,
+                        txCommitment         = txCommitment,
+                    )
                 }.getOrNull()
 
                 if (checkpoint != null && checkpoint.decision == PolicyDecision.DENY) {
@@ -596,7 +609,7 @@ class PaymentActivity : AppCompatActivity() {
                 if (checkpoint != null && checkpoint.decision == PolicyDecision.STEP_UP) {
                     withContext(Dispatchers.Main) {
                         setLoading(false)
-                        showPaymentRiskStepUpDialog(amount, checkpoint.reason)
+                        showPaymentRiskStepUpDialog(amount, checkpoint)
                     }
                     return@launch
                 }
@@ -1120,36 +1133,71 @@ class PaymentActivity : AppCompatActivity() {
     }
 
     /**
-     * STEP_UP triggered by [PayShieldSDK.evaluateAtCheckpoint] (UC-PAYMENT-RISK).
+     * STEP_UP triggered by [PayShieldSDK.evaluatePaymentCheckpoint] (UC-PAYMENT-RISK).
      *
      * Fires when geo-velocity anomaly, high-amount + low device trust, or
-     * transaction velocity exceeds the policy threshold.  In production the
-     * customer's auth layer enforces an OTP/biometric challenge here.
+     * transaction velocity exceeds the policy threshold. When the live
+     * /api/v1/ingest call issued a real TLT/AFA challenge ([hasRealChallenge]
+     * below), this completes the actual RBI Mandate 2 second channel
+     * (POST /api/v1/payment/confirm) instead of just re-attempting
+     * /payment/initiate.
      */
-    private fun showPaymentRiskStepUpDialog(amount: Double, reason: String?) {
+    private fun showPaymentRiskStepUpDialog(
+        amount:     Double,
+        checkpoint: com.payshield.sdk.PayShieldCheckpoint.CheckpointResult,
+    ) {
         val amountStr = "₹${String.format("%,.0f", amount)}"
+        val hasRealChallenge = !checkpoint.challengeId.isNullOrBlank() &&
+            !checkpoint.tlt.isNullOrBlank() && !checkpoint.afaNonce.isNullOrBlank()
         AlertDialog.Builder(this)
             .setTitle("⚠ï¸  Transaction Risk — Step-Up Required")
             .setMessage(
                 "NonaShield has flagged this ₹$amountStr payment for elevated risk.\n\n" +
-                "Reason: ${reason ?: "PAYMENT_RISK_STEP_UP"}\n\n" +
+                "Reason: ${checkpoint.reason}\n\n" +
                 "Risk factors evaluated by SDK:\n" +
                 "  • Transaction amount tier (HIGH ≥ ₹1L)\n" +
                 "  • Geo-velocity anomaly (impossible/high-velocity travel)\n" +
                 "  • Device trust score\n" +
                 "  • New beneficiary + payment velocity\n\n" +
-                "In production: OTP or biometric challenge issued before proceeding.\n" +
-                "RBI guideline: automatic hold on anomalous UPI/NEFT transactions."
+                if (hasRealChallenge)
+                    "Verify code: ${checkpoint.tltDisplay ?: "—"}\n\n" +
+                    "RBI Mandate 2 (AFA): biometric-gated hardware-key signature required " +
+                    "before this payment can proceed."
+                else
+                    "In production: OTP or biometric challenge issued before proceeding.\n" +
+                    "RBI guideline: automatic hold on anomalous UPI/NEFT transactions."
             )
-            .setPositiveButton("Simulate OTP Verify") { _, _ ->
-                // Demo: proceed after simulated step-up (customer app would launch OTP screen)
+            .setPositiveButton(if (hasRealChallenge) "Simulate Biometric Verify" else "Simulate OTP Verify") { _, _ ->
+                // Real AFA channel B (hasRealChallenge): sign SHA-256(afa_nonce|tlt|device_id)
+                // with the hardware-backed device key, then POST /api/v1/payment/confirm — a
+                // real host app would call BiometricPrompt here first; this demo labels the
+                // button "Simulate" the same way the OTP fallback below always has, since no
+                // actual biometric gate is wired into this dialog.
+                // Fallback (no live challenge — offline/timed-out ingest call): re-attempt
+                // /payment/initiate, same behavior this dialog had before this change.
                 lifecycleScope.launch(Dispatchers.IO) {
-                    val result = DiimeApiClient.initiatePayment(
-                        amount      = amount,
-                        currency    = "INR",
-                        recipientId = binding.etRecipient.text.toString().trim(),
-                        note        = binding.etNote.text.toString().trim()
-                    )
+                    val result = if (hasRealChallenge) {
+                        val signature = PayShieldSDK.signAfaChallenge(
+                            afaNonce = checkpoint.afaNonce!!,
+                            tlt      = checkpoint.tlt!!,
+                        )
+                        if (signature.isBlank()) {
+                            PaymentResult.Failure("Device signing failed — cannot complete step-up")
+                        } else {
+                            DiimeApiClient.confirmPayment(
+                                challengeId  = checkpoint.challengeId!!,
+                                tlt          = checkpoint.tlt!!,
+                                afaSignature = signature,
+                            )
+                        }
+                    } else {
+                        DiimeApiClient.initiatePayment(
+                            amount      = amount,
+                            currency    = "INR",
+                            recipientId = binding.etRecipient.text.toString().trim(),
+                            note        = binding.etNote.text.toString().trim()
+                        )
+                    }
                     withContext(Dispatchers.Main) { handlePaymentResult(result) }
                 }
             }

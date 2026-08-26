@@ -193,10 +193,14 @@ object DiimeApiClient {
         }
 
         // Stable device ID: prefer an already-enrolled ID from SessionHolder,
-        // fall back to a hardware-derived identifier.
+        // fall back to a random one for this pre-enrollment call only.
+        // Build.SERIAL is deprecated since API 26 and returns "unknown"
+        // without READ_PRIVILEGED_PHONE_STATE (an app-inaccessible
+        // permission) -- on every real device this app runs on, it always
+        // evaluated to the UUID fallback below anyway, so dropping it
+        // changes no real behavior, just removes the deprecated call.
         val deviceId = SessionHolder.session?.deviceId
-            ?: "device_${(android.os.Build.SERIAL?.takeIf { it != "unknown" }?.take(12)
-                ?: java.util.UUID.randomUUID().toString().take(12))}"
+            ?: "device_${java.util.UUID.randomUUID().toString().take(12)}"
 
         val bodyJson = JSONObject().apply {
             put("username",  username)
@@ -344,6 +348,20 @@ object DiimeApiClient {
      * The HTTP client automatically attaches all required headers via
      * PinningInterceptor (X-PayShield-Token, X-PayShield-Signature, X-Device-Id, etc.)
      */
+    /**
+     * Opaque SHA-256 commitment of the transaction details — NonaShield never
+     * receives the raw amount/currency/VPA (see payment.py's PaymentInitiateRequest
+     * docstring for the exact formula this must match byte-for-byte). Exposed so
+     * the caller can compute the SAME commitment once, up front, and pass it to
+     * both the pre-confirmation PayShieldSDK.evaluatePaymentCheckpoint() call and
+     * this function — a mismatch here would fail TransactionLinkTokenService's
+     * TLT verification at /payment/confirm time.
+     */
+    fun computeTxCommitment(amount: Double, currency: String, recipientId: String): String {
+        val amountPaise = (amount * 100).toLong()
+        return sha256hex("${amountPaise}|${currency}|${recipientId}")
+    }
+
     fun initiatePayment(
         amount:      Double,
         currency:    String,
@@ -353,8 +371,7 @@ object DiimeApiClient {
         // NonaShield is privacy-preserving — never send raw PII (amount, recipient, VPA).
         // Compute an opaque SHA-256 commitment from the payment details so the backend
         // can sign the decision without seeing transaction values.
-        val amountPaise = (amount * 100).toLong()
-        val txCommitment = sha256hex("${amountPaise}|${currency}|${recipientId}")
+        val txCommitment = computeTxCommitment(amount, currency, recipientId)
 
         val session  = SessionHolder.session
         val deviceId = session?.deviceId ?: "unknown"
@@ -432,6 +449,69 @@ object DiimeApiClient {
             PaymentResult.Blocked(reason = "Device security check failed")
         } catch (e: Exception) {
             Log.e(TAG, "Payment network error: ${e.message}", e)
+            PaymentResult.Failure("Network error: ${e.message}")
+        }
+    }
+
+    /**
+     * Complete a step-up payment — POST /api/v1/payment/confirm.
+     *
+     * Second AFA channel (RBI 2026 Mandate 2, backend: payment_confirm.py).
+     * Called after the user completes biometric/step-up auth and the SDK has
+     * signed the challenge with the hardware-backed device key
+     * ([com.payshield.sdk.PayShieldSDK.signAfaChallenge]) — never sends amount/
+     * currency/VPA, only the opaque challenge_id/tlt/afa_signature the STEP_UP
+     * checkpoint result carried.
+     */
+    fun confirmPayment(
+        challengeId:  String,
+        tlt:          String,
+        afaSignature: String,
+    ): PaymentResult {
+        val session  = SessionHolder.session
+        val deviceId = session?.deviceId ?: "unknown"
+
+        val body = JSONObject().apply {
+            put("challenge_id",  challengeId)
+            put("tlt",           tlt)
+            put("afa_signature", afaSignature)
+            put("device_id",     deviceId)
+        }.toString()
+
+        val request = Request.Builder()
+            .url("${BuildConfig.DIIMEAI_API_URL}/api/v1/payment/confirm")
+            .post(body.toRequestBody(JSON))
+            .header("X-PS-Action", "PAYMENT")
+            .apply { session?.jwt?.let { header("Authorization", "Bearer $it") } }
+            .build()
+
+        return try {
+            client.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string() ?: ""
+                if (!response.isSuccessful) {
+                    return@use PaymentResult.Failure("Confirmation failed: HTTP ${response.code}")
+                }
+                val json = JSONObject(responseBody)
+                if (!json.optBoolean("allowed", false)) {
+                    return@use PaymentResult.Blocked(
+                        reason = json.optString("reason", "Step-up verification failed"),
+                    )
+                }
+                val att = com.payshield.android.sdk.LastAttestation
+                PaymentResult.Success(
+                    transactionId  = json.optString("transaction_id", challengeId),
+                    status         = "ALLOW",
+                    receiptUrl     = json.optString("receipt_url", ""),
+                    decisionId     = challengeId,
+                    nonce          = att.nonce,
+                    timestampEpoch = att.timestampEpoch,
+                    deviceKeyId    = att.deviceId,
+                    hwLevel        = att.hwLevel,
+                    requestHash    = att.requestHash,
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Payment confirm network error: ${e.message}", e)
             PaymentResult.Failure("Network error: ${e.message}")
         }
     }
