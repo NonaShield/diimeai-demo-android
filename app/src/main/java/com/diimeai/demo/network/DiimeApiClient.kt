@@ -49,20 +49,33 @@ object DiimeApiClient {
     // In production: replace "api.diimeai.com" with your bank's own API hostname
     // and update these pins whenever your backend TLS certificate is renewed.
     //
-    // Current leaf cert: issued 2026-05-28, expires 2026-08-26 (Let's Encrypt YE2)
-    // Intermediate pin (YE2) is included as backup so routine 90-day leaf renewals
-    // do NOT require an app update — only a key-pair rotation does.
+    // Current leaf cert: renewed 2026-08-27, expires 2026-11-25 (Let's Encrypt YE1)
     //
-    // To get the current pin after a renewal:
+    // 2026-08-27 incident: the previous leaf cert silently expired (the server's
+    // renewal cron reloaded nginx but never copied the renewed files into the
+    // path nginx actually reads from -- see payshield-backend ops notes) and had
+    // to be force-renewed manually. The renewal ALSO rotated Let's Encrypt's
+    // issuing intermediate from YE2 to YE1 -- meaning the "intermediate backup
+    // pin" below did NOT save this app from needing new pins, even though that
+    // was its whole purpose. Intermediate-level pins are not durable against
+    // this failure mode; the root pin (3rd entry) is included specifically so a
+    // future intermediate rotation alone does not repeat this outage.
+    //
+    // To get the current pins after a renewal:
     //   openssl s_client -connect api.diimeai.com:443 -servername api.diimeai.com \
-    //     </dev/null 2>/dev/null | openssl x509 -pubkey -noout \
-    //     | openssl pkey -pubin -outform DER | openssl dgst -sha256 -binary \
-    //     | openssl enc -base64
+    //     -showcerts </dev/null 2>/dev/null | csplit -s -z -f /tmp/cert_ - \
+    //     '/-----BEGIN CERTIFICATE-----/' '{*}'
+    //   for f in /tmp/cert_*; do
+    //     openssl x509 -in "$f" -pubkey -noout | openssl pkey -pubin -outform DER \
+    //       | openssl dgst -sha256 -binary | openssl enc -base64
+    //   done
     private val BACKEND_CERT_PINNER: CertificatePinner = CertificatePinner.Builder()
-        .add("api.diimeai.com", "sha256/1kxomJM4WNmZfPDERIy86e7hsmxV9fCaGgEexIUyZ3w=")  // leaf — expires 2026-08-26
-        .add("api.diimeai.com", "sha256/s/tdAOmUzd8syaTuqfgGvFcn6DzA5Cmb+Vby1ST+U3Y=")  // Let's Encrypt YE2 intermediate (backup)
-        .add("diimeai.com",     "sha256/1kxomJM4WNmZfPDERIy86e7hsmxV9fCaGgEexIUyZ3w=")
-        .add("diimeai.com",     "sha256/s/tdAOmUzd8syaTuqfgGvFcn6DzA5Cmb+Vby1ST+U3Y=")
+        .add("api.diimeai.com", "sha256/DNUBm2e3pjQxpmeLywECXQohfN2Z+fuGWkqt/oiBAVA=")  // leaf — expires 2026-11-25
+        .add("api.diimeai.com", "sha256/brzvtCELCIZUo4sD/qPX0ccRtPsd3DY6RfmxpOU9oB4=")  // Let's Encrypt YE1 intermediate (backup)
+        .add("api.diimeai.com", "sha256/diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI=")  // ISRG Root X2 (durable backup — survives intermediate rotation)
+        .add("diimeai.com",     "sha256/DNUBm2e3pjQxpmeLywECXQohfN2Z+fuGWkqt/oiBAVA=")
+        .add("diimeai.com",     "sha256/brzvtCELCIZUo4sD/qPX0ccRtPsd3DY6RfmxpOU9oB4=")
+        .add("diimeai.com",     "sha256/diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI=")
         .build()
 
     // Populated by DiimeApp.registerSignalSink()
