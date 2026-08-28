@@ -361,23 +361,40 @@ class ComplianceFragment : Fragment() {
                 runCatching { PayShieldSDK.evaluateAtCheckpoint(action = "PAYMENT") }
             }
 
-            val result = withContext(Dispatchers.IO) {
-                DiimeApiClient.ingestScenario(scenarioId = 1)
+            // Real payment checkpoint -- same tx_commitment + evaluatePaymentCheckpoint()
+            // call PaymentActivity's (currently unreachable) payment screen already uses,
+            // now driven by the amount/description actually typed here instead of a
+            // canned ingestScenario(1) payload that ignored them.
+            val amountValue  = amount.toDoubleOrNull() ?: 0.0
+            val txCommitment = DiimeApiClient.computeTxCommitment(
+                amountValue, "INR", description.ifBlank { "demo_recipient" }
+            )
+            val valueTier = com.payshield.sdk.transaction.TransactionValueTier.fromAmountInr(amountValue)
+
+            val callStart = System.currentTimeMillis()
+            val checkpoint = withContext(Dispatchers.IO) {
+                runCatching {
+                    PayShieldSDK.evaluatePaymentCheckpoint(
+                        transactionValueTier = valueTier,
+                        txCommitment         = txCommitment,
+                    )
+                }.getOrNull()
             }
+            val rttMs = (System.currentTimeMillis() - callStart).toInt()
 
             if (!isActive) return@launch
 
             when {
-                result.fromSimulation -> {
+                checkpoint == null -> {
                     tvVerifyResult.text = "⚠ Could not complete — ensure SDK is initialized"
                     tvVerifyResult.setTextColor(0xFFE65100.toInt())
                     btnVerify.text = "Send Secure Payment"
                     btnVerify.isEnabled = true
                 }
 
-                result.decision == "ALLOW" -> {
+                checkpoint.decision == com.payshield.sdk.policy.PolicyDecision.ALLOW -> {
                     tvVerifyResult.text =
-                        "✓  Payment Approved  —  ₹$amount sealed & verified in ${result.rttMs}ms"
+                        "✓  Payment Approved  —  ₹$amount sealed & verified in ${rttMs}ms"
                     tvVerifyResult.setTextColor(0xFF4CAF50.toInt())
                     btnVerify.text = "Send Secure Payment"
                     btnVerify.isEnabled = true
@@ -386,11 +403,11 @@ class ComplianceFragment : Fragment() {
                 }
 
                 else -> {
-                    // Backend blocked — show threat alert dialog so user can continue demo
+                    // Backend blocked or stepped up — show threat alert dialog so user can continue demo
                     btnVerify.text = "Send Secure Payment"
                     btnVerify.isEnabled = true
                     tvVerifyResult.text = ""
-                    showThreatBlockDialog(amount, description, result.rttMs)
+                    showThreatBlockDialog(amount, description, rttMs)
                 }
             }
         }
