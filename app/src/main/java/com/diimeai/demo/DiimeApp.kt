@@ -273,7 +273,10 @@ class DiimeApp : Application() {
             sdkState          = sdkState,
             backendBaseUrl    = BuildConfig.NONASHIELD_BASE_URL,
             environment       = sdkEnvironment,
-            tenantId          = "default",
+            // Matches the live backend's own configured identity (DEFAULT_TENANT_ID=dimeai
+            // on api.diimeai.com) -- "default" was never a real tenant, just an unconfigured
+            // placeholder the SDK used to silently fall back to.
+            tenantId          = "dimeai",
             autoBlockSeverity = null,
         )
 
@@ -283,7 +286,7 @@ class DiimeApp : Application() {
         PayShieldSDK.configure(
             backendUrl        = BuildConfig.NONASHIELD_BASE_URL,
             autoBlockSeverity = null,
-            tenantId          = "default",
+            tenantId          = "dimeai",
             environment       = sdkEnvironment,
             enableBehavioral  = true,
         )
