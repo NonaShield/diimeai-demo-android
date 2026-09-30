@@ -8,7 +8,7 @@
 #   2. Build debug APK — SDK AAR resolved from app/libs/ (flatDir, no SDK source needed)
 #   3. Upload APK as a GitHub Actions artifact
 #
-# The SDK AAR (app/libs/payshield-android-sdk-1.0.0.aar) is committed to this
+# The SDK AAR (app/libs/android-sdk-release.aar) is committed to this
 # repo. To update the SDK: download the new AAR from the nonashield-sdk CI
 # artifacts and replace the file, then commit.
 #

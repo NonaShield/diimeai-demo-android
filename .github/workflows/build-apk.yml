@@ -49,7 +49,7 @@ jobs:
       # ── Verify SDK AAR is bundled ─────────────────────────────────────────────
       - name: Verify SDK AAR
         run: |
-          AAR="app/libs/payshield-android-sdk-1.0.0.aar"
+          AAR="app/libs/android-sdk-release.aar"
           if [ -f "$AAR" ]; then
             echo "SDK AAR: $(du -h "$AAR" | cut -f1)"
           else
