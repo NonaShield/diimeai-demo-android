@@ -5,17 +5,12 @@ import android.content.Intent
 import android.util.Log
 import com.diimeai.demo.enrollment.EnrollmentStatus
 import com.diimeai.demo.network.DiimeApiClient
-import com.payshield.android.sdk.SignalSink
-import com.payshield.sdk.enrollment.EnrollmentManager
-import com.payshield.sdk.enrollment.EnrollmentResult
-import com.payshield.sdk.enrollment.EnrollmentState
-import com.payshield.sdk.crypto.DeviceKeyManager
-import com.payshield.sdk.signal.EdgeSignal
-import com.payshield.sdk.PayShieldEdgeInitializer
+import com.payshield.sdk.PayShieldConfig
 import com.payshield.sdk.PayShieldSDK
 import com.payshield.sdk.SdkEnvironment
-
-import com.payshield.sdk.state.SdkState
+import com.payshield.sdk.enrollment.EnrollmentCallback
+import com.payshield.sdk.enrollment.EnrollmentResult
+import com.payshield.sdk.enrollment.EnrollmentState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,17 +23,16 @@ import kotlin.system.exitProcess
 /**
  * DiimeAI Application class.
  *
- * Responsibilities (in order):
- *   1. Initialize SecureStorage (EncryptedSharedPreferences backed by AndroidKeyStore).
- *   2. Create DeviceKeyManager — generates ECDSA P-256 key in AndroidKeyStore on first run.
- *   3. Run NonaShield enrollment in background:
- *        GET  api.diimeai.com/api/v1/enroll/nonce
- *        POST api.diimeai.com/api/v1/enroll/register  (with Play Integrity token)
- *   4. Register the global SignalSink — routes RASP signals to the NonaShield backend
- *      and shows BlockedActivity when the device is flagged.
+ * Integrates NonaShield exactly as CUSTOMER_INTEGRATION_GUIDE.md "The Standard Integration" tells every
+ * customer to, so this demo exercises the same code path a customer app does:
+ *   1. PayShieldSDK.initialize(context, PayShieldConfig(...))   -- here, in onCreate()
+ *   2. PayShieldSDK.enroll(callback)                            -- here, right after initialize
+ *   3. PayShieldSDK.onUserLogin(userId)                         -- LoginActivity, after login succeeds
+ *   4. PayShieldSDK.evaluateAtCheckpoint("PAYMENT")             -- PaymentActivity, before a payment
  *
+ * The demo's on-screen threat ticker and blocked screen use the SDK's public listeners
+ * (addSignalStateListener, addBlockListener); the app never replaces the SDK's own signal handling.
  * The app starts normally even if enrollment is still in progress.
- * PinningInterceptor will retry nonce/signing until enrollment succeeds.
  */
 class DiimeApp : Application() {
 
@@ -51,52 +45,10 @@ class DiimeApp : Application() {
             private set
 
         /**
-         * Deduped live signal list for the RASP alert ticker.
-         * Keyed by signal type — newest signal per type wins, up to 20 unique types.
-         * Written by the SDK sink; read by PaymentActivity's 500ms refresh loop.
-         * The app does ZERO detection — only stores what the SDK already decided.
+         * Signal types that are active right now, for the demo's live threat ticker (newest last, max 20).
+         * Fed by PayShieldSDK.addSignalStateListener -- the app does no detection of its own.
          */
-        val recentRaspSignals: ArrayDeque<EdgeSignal> = ArrayDeque(20)
-
-        /** DEBUG ONLY — currently foregrounded activity, used by the RASP debug popup. */
-        @Volatile
-        private var debugCurrentActivity: android.app.Activity? = null
-
-        /** DEBUG ONLY — signal types covered by the screen-recording false-positive debug popup. */
-        private val SCREEN_DEBUG_TYPES = setOf(
-            "SCREEN_RECORDING", "SCREEN_RECORDING_ACTIVE",
-            "COMPANION_SCREEN_SHARE_ACTIVE", "SCREEN_MIRRORING",
-        )
-
-        /**
-         * DEBUG ONLY — shows a blocking AlertDialog with the full diagnostic context
-         * for a screen-recording-related signal: which file/function emitted it, the
-         * raw display dump, and any heuristic match. Lets us see the exact trigger on
-         * the device screen without needing `adb logcat`. Remove once the screen
-         * recording false-positive investigation is closed.
-         */
-        private fun showRaspDebugPopup(signal: EdgeSignal) {
-            val activity = debugCurrentActivity ?: return
-            val ctxDump = signal.context.entries.joinToString("\n") { (k, v) -> "$k = $v" }
-            val message = "threatId=${signal.threatId}\nseverity=${signal.severity}\n\n$ctxDump"
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                try {
-                    android.app.AlertDialog.Builder(activity)
-                        .setTitle("RASP DEBUG: ${signal.type}")
-                        .setMessage(message)
-                        .setPositiveButton("OK", null)
-                        .setCancelable(true)
-                        .show()
-                } catch (_: Throwable) {
-                    // Activity may have finished between the check and show() — fall back to Toast.
-                    android.widget.Toast.makeText(
-                        activity.applicationContext,
-                        "RASP DEBUG ${signal.type}: ${signal.context["debug_source"] ?: "?"}",
-                        android.widget.Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        }
+        val recentRaspSignals: ArrayDeque<String> = ArrayDeque(20)
 
         /**
          * Observable enrollment status — collected by MainActivity to gate the
@@ -115,7 +67,7 @@ class DiimeApp : Application() {
         /**
          * Called by MainActivity's Retry button.
          * Resets status to Pending and re-runs the enrollment coroutine.
-         * Safe to call if enrollment is already running — EnrollmentManager is idempotent.
+         * Safe to call if enrollment is already running — PayShieldSDK.enroll() is idempotent.
          */
         fun retryEnrollment(instance: DiimeApp) {
             _enrollmentStatus.value = EnrollmentStatus.Pending
@@ -123,12 +75,8 @@ class DiimeApp : Application() {
         }
     }
 
-    // ATL-2027: SDK state tracks PayShieldEdgeInitializer lifecycle.
-    // Stored at Application scope so it survives configuration changes.
-    private val sdkState = SdkState()
-
-    // Resolved once in initPayShieldEdge() and reused throughout the Application
-    // lifecycle so enrollDevice() and initPayShieldEdge() use the same environment.
+    // Per build type (SDK_ENVIRONMENT in app/build.gradle): debug -> DEVELOPMENT, staging -> STAGING,
+    // release -> PRODUCTION.
     private val sdkEnvironment: SdkEnvironment by lazy {
         when (BuildConfig.SDK_ENVIRONMENT) {
             "STAGING"    -> SdkEnvironment.STAGING
@@ -163,45 +111,18 @@ class DiimeApp : Application() {
         // features ride the same /threats/batch flow as RASP threats instead (see
         // PayShieldEdgeInitializer's 60s heartbeat + PayShieldCheckpoint.evaluate()).
 
-        // ── DEBUG ONLY: track foreground activity so the RASP debug popup (see
-        // initPayShieldEdge → sdkSignalSink) can show an AlertDialog over whatever
-        // screen is currently visible. Temporary instrumentation for the screen
-        // recording false-positive investigation — safe to remove once resolved.
-        if (BuildConfig.DEBUG) {
-            registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
-                override fun onActivityResumed(a: android.app.Activity) { debugCurrentActivity = a }
-                override fun onActivityPaused(a: android.app.Activity) { if (debugCurrentActivity == a) debugCurrentActivity = null }
-                override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) {}
-                override fun onActivityStarted(a: android.app.Activity) {}
-                override fun onActivityStopped(a: android.app.Activity) {}
-                override fun onActivitySaveInstanceState(a: android.app.Activity, b: android.os.Bundle) {}
-                override fun onActivityDestroyed(a: android.app.Activity) {}
-            })
-        }
-
-        // ── Step 4: Register RASP signal sink ─────────────────────────────────
-        // Routes all RASP signals to backend and triggers BlockedActivity on termination.
-        registerSignalSink()
-
-        // ── Step 4b: Initialize PayShield Edge (ATL-2027) ─────────────────────
-        // Registers all 41 RASP signals (including the 3 new ATL-2027 deepfake signals),
-        // starts AutonomousCommandReceiver (polls /api/v1/device/commands every 4.5s),
-        // and fires SdkCapabilityReporter to POST the capability matrix to the backend.
-        //
-        // The SdkSignalSink bridge below routes com.payshield.sdk.signal.SignalSink
-        // (used by SignalOrchestrator) → DiimeApiClient.signalSink (android-sdk layer).
-        // This is the same bridge pattern used in LoginActivity and PaymentActivity.
+        // ── NonaShield standard integration, step 1: initialize ───────────────
         try {
-            initPayShieldEdge()
+            initNonaShield()
         } catch (t: Throwable) {
-            showCrashScreen("initPayShieldEdge() threw:\n\n${t.stackTraceToString()}")
+            showCrashScreen("PayShieldSDK.initialize() threw:\n\n${t.stackTraceToString()}")
             // Kill the main process — CrashReportActivity in :crash process survives.
             android.os.Process.killProcess(android.os.Process.myPid())
             exitProcess(1)
         }
 
-        // ── Step 5: Enroll device in background ───────────────────────────────
-        // Fast-path: EnrollmentState.isEnrolled() returns immediately if already done.
+        // ── NonaShield standard integration, step 2: enroll ───────────────────
+        // Every launch; returns the stored result immediately once enrolled.
         enrollDevice()
     }
 
@@ -212,86 +133,46 @@ class DiimeApp : Application() {
         // is killed without this hook — AutonomousCommandReceiver uses SupervisorJob
         // so it is cleaned up automatically by the OS.
         PayShieldSDK.stopAutonomousReceiver()
-        sdkState.shutdown()
     }
 
-    // ── ATL-2027 PayShield Edge Initialisation ────────────────────────────────
+    // ── NonaShield initialisation (standard integration) ──────────────────────
 
-    /**
-     * Initialises the full PayShield signal orchestrator with all 41 RASP sensors
-     * including the three new RBI/NPCI/ReBIT 2027 Autonomous Trust Layer deepfake signals.
-     *
-     * Also starts [AutonomousCommandReceiver] which polls the backend every 4.5s for
-     * BLOCK/STEP_UP/MONITOR commands pushed by `autonomous_decision_enhancer.py`.
-     *
-     * The SdkSignalSink bridge delegates from the SDK's internal
-     * `com.payshield.sdk.signal.SignalSink` (used by [SignalOrchestrator]) to the
-     * android-sdk layer `com.payshield.android.sdk.SignalSink` (used by [DiimeApiClient]).
-     *
-     * Environment gating (set per buildType via SDK_ENVIRONMENT in app/build.gradle):
-     *   debug   → DEVELOPMENT (no attestation enforcement, emulators allowed)
-     *   staging → STAGING     (full attestation enforcement, QA / pen-test)
-     *   release → PRODUCTION  (full attestation enforcement, live customers)
-     */
-    private fun initPayShieldEdge() {
-        // Composed signal sink: routes every EdgeSignal through TWO paths simultaneously.
-        //   1. PayShieldSDK.signalSink  — ThreatBuffer upload to /api/v1/threats/batch
-        //   2. DiimeApiClient.signalSink — in-app alert display + live RASP ticker
-        val sdkSignalSink = object : com.payshield.sdk.signal.SignalSink {
-            override fun emit(signal: EdgeSignal) {
-                PayShieldSDK.signalSink.emit(signal)                           // ThreatBuffer path
-                DiimeApiClient.signalSink?.onSignalsCollected(listOf(signal))  // in-app alert path
-                Log.d(TAG, "SDK signal: ${signal.type} [${signal.threatId}] confidence=${signal.confidence}")
+    private fun initNonaShield() {
+        // autoBlockSeverity has no SDK default -- every integration must decide. Demo choice: null
+        // (never block on the phone itself); blocking comes from the SOC dashboard's force_block command.
+        PayShieldSDK.initialize(
+            context = applicationContext,
+            config = PayShieldConfig(
+                backendUrl        = BuildConfig.NONASHIELD_BASE_URL,
+                // The live backend's own tenant (DEFAULT_TENANT_ID=dimeai on api.diimeai.com).
+                tenantId          = "dimeai",
+                autoBlockSeverity = null,
+                environment       = sdkEnvironment,
+            ),
+        )
 
-                // DEBUG ONLY — pop up the full diagnostic context for screen-recording
-                // related signals so the exact trigger is visible on-device. See
-                // showRaspDebugPopup() doc comment. Remove once investigation is closed.
-                if (BuildConfig.DEBUG && signal.type in SCREEN_DEBUG_TYPES) {
-                    showRaspDebugPopup(signal)
+        // Demo display only: keep the live threat ticker in step with the SDK's active signals.
+        PayShieldSDK.addSignalStateListener { type, active ->
+            synchronized(recentRaspSignals) {
+                recentRaspSignals.remove(type)
+                if (active) {
+                    recentRaspSignals.addLast(type)
+                    while (recentRaspSignals.size > 20) recentRaspSignals.removeFirst()
                 }
             }
-            override fun onBlock(reason: String) {
-                Log.e(TAG, "SDK block: $reason")
-                DiimeApiClient.signalSink?.onBlock(reason)
-            }
+            Log.d(TAG, "Signal $type active=$active")
         }
 
-        // Single initialize() — registers all 47 RASP signals once, starts
-        // AutonomousCommandReceiver, runs startup evaluateAll(), registers the 10 OS
-        // event listener categories, and starts the 60-second periodic sweep.
-        // FreeRASP auto-starts here if already enrolled; otherwise starts on first
-        // recordEnrollment() call.
-        // autoBlockSeverity has no SDK default -- every integration must decide
-        // explicitly. Demo choice: null (never auto-block on-device) -- blocking is
-        // triggered from the SOC dashboard's force_block command instead, which the
-        // demo's PaymentActivity/TrustDashboardActivity already surface via
-        // isBlocked()/getBlockDetails(). RASP + behavioral signals still flow to the
-        // backend continuously either way -- this only controls local enforcement.
-        PayShieldEdgeInitializer.initialize(
-            context           = applicationContext,
-            signalSink        = sdkSignalSink,
-            sdkState          = sdkState,
-            backendBaseUrl    = BuildConfig.NONASHIELD_BASE_URL,
-            environment       = sdkEnvironment,
-            // Matches the live backend's own configured identity (DEFAULT_TENANT_ID=dimeai
-            // on api.diimeai.com) -- "default" was never a real tenant, just an unconfigured
-            // placeholder the SDK used to silently fall back to.
-            tenantId          = "dimeai",
-            autoBlockSeverity = null,
-        )
+        // Show the blocked screen when the device is blocked (on the phone or by the SOC).
+        PayShieldSDK.addBlockListener { details ->
+            Log.e(TAG, "Device BLOCKED by NonaShield: ${details.threatId} (${details.source})")
+            startActivity(Intent(applicationContext, BlockedActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                putExtra(BlockedActivity.EXTRA_REASON, details.displayName)
+            })
+        }
 
-        // Mark PayShieldSDK as initialized so evaluateAtCheckpoint() works in
-        // PaymentActivity. requireOrchestrator() resolves via internalOrchestrator
-        // (set by the call above) — no second init, no duplicate OS listeners.
-        PayShieldSDK.configure(
-            backendUrl        = BuildConfig.NONASHIELD_BASE_URL,
-            autoBlockSeverity = null,
-            tenantId          = "dimeai",
-            environment       = sdkEnvironment,
-            enableBehavioral  = true,
-        )
-
-        Log.i(TAG, "PayShield SDK initialized (env=$sdkEnvironment, atl2027=true, " +
+        Log.i(TAG, "NonaShield initialized (env=$sdkEnvironment, " +
             "dpipSalt=${if (EnrollmentState.loadDpipSalt().isNotBlank()) "ISSUED" else "PENDING_ENROLLMENT"})")
 
         startBehavioralHeartbeat()
@@ -320,58 +201,33 @@ class DiimeApp : Application() {
     // -------------------------------------------------------------------------
 
     internal fun enrollDevice() {
-        // Fast path — already enrolled on a previous launch (EnrollmentState persisted)
-        EnrollmentState.load()?.also { stored ->
-            enrollmentState = stored
-            _enrollmentStatus.value = EnrollmentStatus.Enrolled(
-                deviceId  = stored.deviceId,
-                sessionId = stored.sessionId
-            )
-            Log.i(TAG, "Device already enrolled: ${stored.deviceId}")
-            return
-        }
-
-        // Background enrollment — Play Integrity request happens on Dispatchers.IO
-        appScope.launch(Dispatchers.IO) {
-            Log.i(TAG, "Starting device enrollment...")
-
-            // device_id is determined by the SDK itself, internally, from the
-            // device's hardware-backed key -- it does not exist until enroll()
-            // generates that key. Reading it here (before enroll() runs) used to
-            // observe the pre-key placeholder instead, so every fresh install
-            // silently registered a zero-UUID as its permanent device identity.
-            // Read the authoritative value back from result.deviceId below.
-            val enrollmentMgr = EnrollmentManager(
-                context        = applicationContext,
-                keyManager     = DeviceKeyManager(),
-                backendBaseUrl = BuildConfig.NONASHIELD_BASE_URL,
-                // ATL-2027: pass the same environment used by PayShieldEdgeInitializer.
-                // STAGING / PRODUCTION → Play Integrity failure = hard enrollment failure.
-                // DEVELOPMENT → fail open (emulators / sideloaded APKs allowed).
-                environment    = sdkEnvironment
-            )
-
-            when (val result = enrollmentMgr.enroll()) {
-                is EnrollmentResult.Success -> {
-                    enrollmentState = EnrollmentState.load()
-                    _enrollmentStatus.value = EnrollmentStatus.Enrolled(
-                        deviceId  = result.deviceId,
-                        sessionId = result.sessionId
-                    )
-                    Log.i(TAG, "Enrollment succeeded. deviceId=${result.deviceId} session=${result.sessionId}")
-                }
-                is EnrollmentResult.Failure -> {
-                    // Hard failures (integrity violations in STAGING/PRODUCTION) are not
-                    // retryable — user must switch to a legitimate device.
-                    val isRetryable = result.cause !is SecurityException
-                    _enrollmentStatus.value = EnrollmentStatus.Failed(
-                        reason      = result.reason,
-                        isRetryable = isRetryable
-                    )
-                    Log.e(TAG, "Enrollment failed (retryable=$isRetryable): ${result.reason}", result.cause)
+        Log.i(TAG, "Enrolling device...")
+        // Standard integration, step 2. The SDK decides the device_id itself (from the hardware key) and
+        // returns it in the result; it never has to be computed by the app.
+        PayShieldSDK.enroll(callback = object : EnrollmentCallback {
+            override fun onResult(result: EnrollmentResult) {
+                when (result) {
+                    is EnrollmentResult.Success -> {
+                        enrollmentState = EnrollmentState.load()
+                        _enrollmentStatus.value = EnrollmentStatus.Enrolled(
+                            deviceId  = result.deviceId,
+                            sessionId = result.sessionId
+                        )
+                        Log.i(TAG, "Enrollment succeeded. deviceId=${result.deviceId} session=${result.sessionId}")
+                    }
+                    is EnrollmentResult.Failure -> {
+                        // Integrity violations in STAGING/PRODUCTION are not retryable -- the user must
+                        // switch to a genuine device.
+                        val isRetryable = result.cause !is SecurityException
+                        _enrollmentStatus.value = EnrollmentStatus.Failed(
+                            reason      = result.reason,
+                            isRetryable = isRetryable
+                        )
+                        Log.e(TAG, "Enrollment failed (retryable=$isRetryable): ${result.reason}", result.cause)
+                    }
                 }
             }
-        }
+        })
     }
 
     // ── Demo-only crash helpers ───────────────────────────────────────────────
@@ -407,34 +263,4 @@ class DiimeApp : Application() {
         }
         startActivity(intent)
     }
-
-    private fun registerSignalSink() {
-        // SDK handles ThreatBuffer upload, system notifications, and in-app alerts internally.
-        // Customer app only needs to handle the block event — show the blocked screen.
-        DiimeApiClient.signalSink = object : SignalSink {
-            override fun onSignalsCollected(signals: List<EdgeSignal>) {
-                for (signal in signals) {
-                    Log.w(TAG, "RASP: ${signal.type} [${signal.threatId}] sev=${signal.severity} conf=${signal.confidence}")
-                    // Buffer for live threat ticker in PaymentActivity.
-                    // Cap at 5; drop oldest when full (SDK decided these — app just displays).
-                    synchronized(recentRaspSignals) {
-                        // Replace existing entry of same type so each threat appears once
-                        recentRaspSignals.removeAll { it.type == signal.type }
-                        recentRaspSignals.addLast(signal)
-                        while (recentRaspSignals.size > 20) recentRaspSignals.removeFirst()
-                    }
-                }
-            }
-
-            override fun onBlock(reason: String) {
-                Log.e(TAG, "Device BLOCKED by NonaShield: $reason")
-                val intent = Intent(applicationContext, BlockedActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                    putExtra(BlockedActivity.EXTRA_REASON, reason)
-                }
-                startActivity(intent)
-            }
-        }
-    }
 }
-

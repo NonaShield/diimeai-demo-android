@@ -351,34 +351,11 @@ class ComplianceFragment : Fragment() {
             tvVerifyResult.text = "Sealing with hardware key…"
             tvVerifyResult.setTextColor(0xFF9E9E9E.toInt())
 
-            // Real checkpoint evaluation -- this is what PaymentActivity's real payment
-            // flow does and this screen never did. Sets BackendUploader.latestBehavioralFeatures
-            // (the SDK's own on-device gesture snapshot), which rides the next ThreatBuffer
-            // /threats/batch flush a few seconds later -- same path RASP threats already use,
-            // so behavioral data now reaches the SOC dashboard from this button too, not just
-            // the (currently unreachable in this build) Live Payment Test screen.
-            withContext(Dispatchers.IO) {
-                runCatching { PayShieldSDK.evaluateAtCheckpoint(action = "PAYMENT") }
-            }
-
-            // Real payment checkpoint -- same tx_commitment + evaluatePaymentCheckpoint()
-            // call PaymentActivity's (currently unreachable) payment screen already uses,
-            // now driven by the amount/description actually typed here instead of a
-            // canned ingestScenario(1) payload that ignored them.
-            val amountValue  = amount.toDoubleOrNull() ?: 0.0
-            val txCommitment = DiimeApiClient.computeTxCommitment(
-                amountValue, "INR", description.ifBlank { "demo_recipient" }
-            )
-            val valueTier = com.payshield.sdk.transaction.TransactionValueTier.fromAmountInr(amountValue)
-
+            // Standard integration step 7: one check just before the payment, with the action name only.
+            // Nothing about the amount or description is given to the SDK.
             val callStart = System.currentTimeMillis()
             val checkpoint = withContext(Dispatchers.IO) {
-                runCatching {
-                    PayShieldSDK.evaluatePaymentCheckpoint(
-                        transactionValueTier = valueTier,
-                        txCommitment         = txCommitment,
-                    )
-                }.getOrNull()
+                runCatching { PayShieldSDK.evaluateAtCheckpoint(action = "PAYMENT") }.getOrNull()
             }
             val rttMs = (System.currentTimeMillis() - callStart).toInt()
 
@@ -487,7 +464,7 @@ Continue to simulate the payment approval flow?
         pollJob = lifecycleScope.launch {
             while (isActive) {
                 val hasMirroring = synchronized(DiimeApp.recentRaspSignals) {
-                    DiimeApp.recentRaspSignals.any { it.type == "SCREEN_MIRRORING" }
+                    DiimeApp.recentRaspSignals.any { it == "SCREEN_MIRRORING" }
                 }
                 tvAdvisoryBanner.visibility = if (hasMirroring) View.VISIBLE else View.GONE
 
