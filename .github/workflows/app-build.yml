@@ -2,6 +2,11 @@
 # NonaShield Demo App — Build APK
 # =============================================================================
 #
+# The ONLY workflow that builds the demo app. One app, one tenant: the SDK is configured with
+# tenantId = "dimeai" in DiimeApp.kt (checked below) and the demo API key defaults to the one in
+# app/build.gradle, so every APK from this repo is built the same way. (A second workflow,
+# build-apk.yml, used to build the same app with a different API key; it was removed.)
+#
 # Triggers on push to main when app source files change.
 # Steps:
 #   1. Check out demo app repo
@@ -23,6 +28,15 @@ name: Build App
 
 on:
   push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "build.gradle"
+      - "settings.gradle"
+      - "gradle/**"
+      - "gradle.properties"
+      - ".github/workflows/app-build.yml"
+  pull_request:
     branches: [main]
     paths:
       - "app/**"
@@ -59,6 +73,14 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: wrapper
+
+      - name: Verify the demo defaults to the DIMEAI tenant
+        run: |
+          if ! grep -qE 'tenantId\s*=\s*"dimeai"' app/src/main/java/com/diimeai/demo/DiimeApp.kt; then
+            echo "✗ DiimeApp.kt must configure the SDK with tenantId = \"dimeai\""
+            exit 1
+          fi
+          echo "✓ SDK tenant: dimeai"
 
       - name: Build debug APK
         env:
