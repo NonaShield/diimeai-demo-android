@@ -655,6 +655,11 @@ class PaymentActivity : AppCompatActivity() {
                 "NonaShield could not verify this payment, so it was not made. " +
                     "Check your connection and try again."
             )
+            "critical_issue_enforced" -> showSimpleDialog(
+                "Payment blocked",
+                "A critical security issue was found on this device and enforcement is on, so this " +
+                    "payment was blocked on the device. No money was moved."
+            )
             "on_device_persistent_block", "backend_force_block" ->
                 showThreatBlockedDialog(PayShieldSDK.getBlockDetails()?.threatId)
             else -> showThreatBlockedDialog(reason)
