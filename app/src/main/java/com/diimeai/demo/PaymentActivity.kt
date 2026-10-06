@@ -371,21 +371,24 @@ class PaymentActivity : AppCompatActivity() {
             // Attestation demo is specifically for showing telemetry proof even
             // when the SDK would normally gate the payment.
             if (!isAttestation) {
-                // Standard integration step 7: one check just before the payment, with the action name only.
-                // Nothing about the amount, recipient or note is given to the SDK.
-                val checkpoint = runCatching {
-                    PayShieldSDK.evaluateAtCheckpoint(action = "PAYMENT")
-                }.getOrNull()
+                // Standard integration step 7: one check just before the payment, with nothing about the
+                // amount, recipient or note given to the SDK. It waits for the verdict, including a SOC
+                // admin's decision on a held payment, and a payment goes ahead only on an approval.
+                val checkpoint = try {
+                    PayShieldSDK.evaluatePaymentCheckpoint()
+                } catch (e: Exception) {
+                    null   // no verdict: treated as a denial below, never as success
+                }
 
-                if (checkpoint != null && checkpoint.decision == PolicyDecision.DENY) {
+                if (checkpoint == null || checkpoint.decision == PolicyDecision.DENY) {
                     withContext(Dispatchers.Main) {
                         setLoading(false)
-                        showThreatBlockedDialog(checkpoint.reason ?: "PAYMENT_RISK_BLOCK")
+                        showPaymentDeniedDialog(checkpoint?.reason ?: "verification_unavailable")
                     }
                     return@launch
                 }
 
-                if (checkpoint != null && checkpoint.decision == PolicyDecision.STEP_UP) {
+                if (checkpoint.decision == PolicyDecision.STEP_UP) {
                     withContext(Dispatchers.Main) {
                         setLoading(false)
                         showPaymentRiskStepUpDialog(amount, checkpoint)
@@ -632,6 +635,37 @@ class PaymentActivity : AppCompatActivity() {
                 initiatePayment()
             }
             .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** The payment was not allowed. [reason] is the SDK's CheckpointResult.reason. */
+    private fun showPaymentDeniedDialog(reason: String) {
+        when (reason) {
+            "soc_blocked" -> showSimpleDialog(
+                "Payment blocked",
+                "The NonaShield security team reviewed this payment and blocked it. No money was moved."
+            )
+            "soc_review_timeout" -> showSimpleDialog(
+                "Payment not approved",
+                "This payment was held for security review and was not approved in time. " +
+                    "No money was moved. Please try again."
+            )
+            "verification_unavailable" -> showSimpleDialog(
+                "Payment verification unavailable",
+                "NonaShield could not verify this payment, so it was not made. " +
+                    "Check your connection and try again."
+            )
+            "on_device_persistent_block", "backend_force_block" ->
+                showThreatBlockedDialog(PayShieldSDK.getBlockDetails()?.threatId)
+            else -> showThreatBlockedDialog(reason)
+        }
+    }
+
+    private fun showSimpleDialog(title: String, message: String) {
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("OK", null)
             .show()
     }
 

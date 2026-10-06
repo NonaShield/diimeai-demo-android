@@ -28,7 +28,7 @@ import kotlin.system.exitProcess
  *   1. PayShieldSDK.initialize(context, PayShieldConfig(...))   -- here, in onCreate()
  *   2. PayShieldSDK.enroll(callback)                            -- here, right after initialize
  *   3. PayShieldSDK.onUserLogin(userId)                         -- LoginActivity, after login succeeds
- *   4. PayShieldSDK.evaluateAtCheckpoint("PAYMENT")             -- PaymentActivity, before a payment
+ *   4. PayShieldSDK.evaluatePaymentCheckpoint()                 -- PaymentActivity, before a payment (waits for the verdict)
  *
  * The demo's on-screen threat ticker and blocked screen use the SDK's public listeners
  * (addSignalStateListener, addBlockListener); the app never replaces the SDK's own signal handling.
