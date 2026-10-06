@@ -205,15 +205,10 @@ object DiimeApiClient {
             return LoginResult.Failure("Username and password required")
         }
 
-        // Stable device ID: prefer an already-enrolled ID from SessionHolder,
-        // fall back to a random one for this pre-enrollment call only.
-        // Build.SERIAL is deprecated since API 26 and returns "unknown"
-        // without READ_PRIVILEGED_PHONE_STATE (an app-inaccessible
-        // permission) -- on every real device this app runs on, it always
-        // evaluated to the UUID fallback below anyway, so dropping it
-        // changes no real behavior, just removes the deprecated call.
-        val deviceId = SessionHolder.session?.deviceId
-            ?: "device_${java.util.UUID.randomUUID().toString().take(12)}"
+        // The SDK decides the device_id from the hardware key. A random fallback here made the backend sync
+        // the login to a device that does not exist, leaving the real device on its placeholder user
+        // (NGINX-BIND-010 on the next call).
+        val deviceId = SessionHolder.session?.deviceId ?: PayShieldSDK.getStableDeviceId()
 
         val bodyJson = JSONObject().apply {
             put("username",  username)
