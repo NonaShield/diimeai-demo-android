@@ -75,42 +75,29 @@ class LoginActivity : AppCompatActivity() {
         setLoading(true)
 
         lifecycleScope.launch(Dispatchers.IO) {
-            // Protect the login API: ask NonaShield BEFORE calling our own login. The action "LOGIN" is the API
-            // name shown in the dashboard's Critical API section, and the typed username is what the backend's
-            // login limits key on. The call waits for the answer (up to about a minute when the security team
-            // has to review), and the login goes ahead only on ALLOW.
-            val checkpoint = try {
-                PayShieldSDK.evaluateApiCheckpoint(action = "LOGIN", attemptedUserId = username)
-            } catch (e: Exception) {
-                null                                   // no answer: not approved
-            }
-
-            when {
-                checkpoint == null -> {
-                    stopLoginWith("We could not verify this sign-in. Check your connection and try again.")
-                    return@launch
-                }
-                checkpoint.decision == PolicyDecision.DENY -> {
-                    stopLoginWith(loginDenyMessage(checkpoint.reason))
-                    return@launch
-                }
-                checkpoint.decision == PolicyDecision.STEP_UP -> {
-                    // A real app asks for its own OTP or biometric here; the demo asks for a confirmation.
-                    if (!confirmStepUp()) {
-                        stopLoginWith("Sign-in cancelled.")
-                        return@launch
-                    }
-                }
-            }
-
             val result = DiimeApiClient.login(username, password)
+            when (result) {
+                is LoginResult.Failure -> stopLoginWith(result.reason)
+                is LoginResult.Success -> {
+                    // The app's own login worked and NonaShield now knows the user. Before entering the app, ask
+                    // NonaShield about this login, the same way a payment is checked. The action "LOGIN" is the API
+                    // name shown in the dashboard's Critical API section. The call waits for the answer (up to about
+                    // a minute when the security team has to review) and the app is entered only on ALLOW.
+                    withContext(Dispatchers.Main) { startSession(result) }
+                    val checkpoint = try {
+                        PayShieldSDK.evaluateApiCheckpoint(action = "LOGIN", attemptedUserId = username)
+                    } catch (e: Exception) {
+                        null                               // no answer: not approved
+                    }
 
-            withContext(Dispatchers.Main) {
-                setLoading(false)
-                when (result) {
-                    is LoginResult.Success -> onLoginSuccess(result)
-                    is LoginResult.Failure -> {
-                        Toast.makeText(this@LoginActivity, result.reason, Toast.LENGTH_LONG).show()
+                    when {
+                        checkpoint == null -> denyLogin("We could not verify this sign-in. Check your connection and try again.")
+                        checkpoint.decision == PolicyDecision.DENY -> denyLogin(loginDenyMessage(checkpoint.reason))
+                        checkpoint.decision == PolicyDecision.STEP_UP -> {
+                            // A real app asks for its own OTP or biometric here; the demo asks for a confirmation.
+                            if (confirmStepUp()) enterApp(result) else denyLogin("Sign-in cancelled.")
+                        }
+                        else -> enterApp(result)
                     }
                 }
             }
@@ -120,6 +107,12 @@ class LoginActivity : AppCompatActivity() {
     private suspend fun stopLoginWith(message: String) = withContext(Dispatchers.Main) {
         setLoading(false)
         Toast.makeText(this@LoginActivity, message, Toast.LENGTH_LONG).show()
+    }
+
+    /** NonaShield did not approve this login: leave the signed-in session and stay on the login screen. */
+    private suspend fun denyLogin(message: String) {
+        DiimeApiClient.clearSession()
+        stopLoginWith(message)
     }
 
     private fun loginDenyMessage(reason: String?): String = when (reason) {
@@ -151,7 +144,8 @@ class LoginActivity : AppCompatActivity() {
         attemptLogin()
     }
 
-    private fun onLoginSuccess(result: LoginResult.Success) {
+    /** Puts the signed-in user into the app and NonaShield (no screen change yet). */
+    private fun startSession(result: LoginResult.Success) {
         val deviceId = DiimeApp.enrollmentState?.deviceId
             ?: PayShieldSDK.getStableDeviceId()
 
@@ -168,10 +162,13 @@ class LoginActivity : AppCompatActivity() {
         // token (no iss claim), which /threats/batch rejects with 401 — RASP telemetry
         // never reaches the SOC dashboard even though login itself succeeds.
         PayShieldSDK.onUserLogin(result.userId)
+    }
 
-        Toast.makeText(this, "Welcome, ${result.userId}!", Toast.LENGTH_SHORT).show()
+    private suspend fun enterApp(result: LoginResult.Success) = withContext(Dispatchers.Main) {
+        setLoading(false)
+        Toast.makeText(this@LoginActivity, "Welcome, ${result.userId}!", Toast.LENGTH_SHORT).show()
 
-        startActivity(Intent(this, ScenarioHubActivity::class.java).apply {
+        startActivity(Intent(this@LoginActivity, ScenarioHubActivity::class.java).apply {
             putExtra("USER_ID", result.userId)
         })
         finish()
