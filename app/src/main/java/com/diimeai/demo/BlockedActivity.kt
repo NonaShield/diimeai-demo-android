@@ -8,7 +8,7 @@ import com.diimeai.demo.databinding.ActivityBlockedBinding
  * Shown when NonaShield blocks the device due to HIGH / CRITICAL risk signals.
  *
  * This screen is launched by DiimeApp.SignalSink.onBlock() and by
- * EdgeRiskEnforcer.assertAllowed() throwing SecurityException in PaymentActivity.
+ * a block the SDK reports to the app through its block listener.
  *
  * In production: add a "Contact Support" button and log the event to your SOC.
  */

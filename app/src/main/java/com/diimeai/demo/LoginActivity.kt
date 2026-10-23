@@ -65,13 +65,6 @@ class LoginActivity : AppCompatActivity() {
             return
         }
 
-        try {
-            PayShieldSDK.assertAllowed()
-        } catch (e: SecurityException) {
-            Toast.makeText(this, "⛔ Login blocked — security risk detected", Toast.LENGTH_LONG).show()
-            return
-        }
-
         setLoading(true)
 
         lifecycleScope.launch(Dispatchers.IO) {

@@ -32,8 +32,7 @@ import kotlinx.coroutines.withContext
  *   - Behavioral biometrics: 6-channel passive capture on every touch
  *   - Screen capture / mirroring: DisplayManager + SDK continuous scan
  *   - SIM swap: SIM fingerprint vs. KYC-enrolled fingerprint
- *   - RASP gate: PayShieldSDK.assertAllowed() before every payment
- *   - Behavioral telemetry: sent to backend before payment decision
+ *   - One check before the payment: PayShieldSDK.evaluatePaymentCheckpoint() decides; the app adds no gate of its own
  */
 class PaymentActivity : AppCompatActivity() {
 
@@ -279,80 +278,6 @@ class PaymentActivity : AppCompatActivity() {
         // isDemoAttestationMode is always cleared after the payment completes.
         val isAttestation = isDemoAttestationMode
 
-        if (!isAttestation) {
-            // ── Screen capture check ──────────────────────────────────────────
-            // Three-tier logic based on who owns the virtual display:
-            //
-            //   COMPANION_SCREEN_SHARE_ACTIVE (MEDIUM, advisory):
-            //     A verified companion app (WhatsApp Web, Telegram Desktop) is mirroring
-            //     the screen.  Screen IS at risk but source is known — show a graceful
-            //     "please pause sharing" prompt rather than a hard block.
-            //
-            //   hasScreenCaptureThreat() (HIGH, hard block):
-            //     Unknown recorder app, hardware mirroring (Chromecast/HDMI), or
-            //     multiple virtual displays — cannot determine ownership.
-            //
-            //   dm.displays.size > 1 without any SDK signal:
-            //     SDK may not have had time to evaluate the new display yet (race).
-            //     Fall through to the screen capture threat check — the next
-            //     evaluateNow() triggered by onDisplayAdded will update the signal.
-            val skipCompanionCheck = companionShareAcknowledged.also { companionShareAcknowledged = false }
-            if (!skipCompanionCheck && PayShieldSDK.hasCompanionScreenShare()) {
-                Log.w(TAG, "[RASP] Companion screen share active — showing advisory")
-                showCompanionShareAdvisory()
-                return
-            }
-            if (PayShieldSDK.hasScreenCaptureThreat()) {
-                Log.w(TAG, "[RASP] Screen capture threat active (RASP_DEV_051)")
-                showThreatBlockedDialog("RASP_DEV_051")
-                return
-            }
-            // Raw display-count fallback — guards the race window between onDisplayAdded()
-            // and evaluateNow() completing.  Skip entirely when the companion display was
-            // acknowledged ("Proceed Anyway") or is still signalled as active: the extra
-            // display IS the companion virtual display and blocking it here would contradict
-            // the advisory acknowledgment and prevent payment from executing (Scenario 3).
-            val companionDisplayActive = skipCompanionCheck || PayShieldSDK.hasCompanionScreenShare()
-            if (!companionDisplayActive) {
-                val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
-                if (dm.displays.size > 1) {
-                    Log.w(TAG, "[Demo4] Screen mirroring: ${dm.displays.size} displays active")
-                    showThreatBlockedDialog("RASP_DEV_025")
-                    return
-                }
-            }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            // ── Demo 5: Behavioral mismatch gate ──────────────────────────────
-            DemoBehaviour.snapshot().let { s ->
-                if (s.baselineReady && s.composite > 0.55f) {
-                    showBiometricPaymentBlockedDialog(s)
-                    return
-                }
-            }
-
-            // ── Local RASP gate ────────────────────────────────────────────────
-            try {
-                PayShieldSDK.assertAllowed()
-            } catch (e: SecurityException) {
-                showThreatBlockedDialog(PayShieldSDK.getBlockDetails()?.threatId)
-                return
-            }
-        }
-
         setLoading(true)
         binding.tvResult.visibility    = View.GONE
         binding.btnViewProof.visibility = View.GONE
@@ -362,7 +287,7 @@ class PaymentActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             // Behavioral telemetry no longer sent via a dedicated /security/telemetry
             // call here -- that response was fail-open/log-only (never gated the
-            // payment; evaluateAtCheckpoint below does that). Behavioral features
+            // payment; evaluatePaymentCheckpoint below does that). Behavioral features
             // now ride the same /threats/batch flow as RASP threats, refreshed on
             // the SDK's 60s heartbeat (PayShieldEdgeInitializer) in addition to
             // every checkpoint -- same continuous-monitoring path as RASP.
@@ -851,43 +776,36 @@ class PaymentActivity : AppCompatActivity() {
     }
 
     private fun performKycEnrollment(aadhaar: String, pan: String, deviceId: String) {
-        try {
-            PayShieldSDK.assertAllowed()
-        } catch (e: SecurityException) {
-            binding.tvResult.text = "⛔ KYC blocked — security risk detected\n${e.message}"
-            binding.tvResult.setTextColor(getColor(android.R.color.holo_red_dark))
-            binding.tvResult.visibility = View.VISIBLE
-            return
-        }
-
-        // NonaShield checkpoint — same call PaymentActivity.initiatePayment() already
-        // makes for PAYMENT. Runs the on-device policy check AND fires the SDK's
-        // parallel /api/v1/ingest call in the background (see
-        // PayShieldEdgeInitializer.reportCheckpointToIngest) so this KYC action
-        // reaches the real fraud/graph/compliance engine, not just the local-only
-        // block flag checked above. Previously KYC had no per-action risk gate at
-        // all, so an operator-issued remote force_block (or any KYC-specific
-        // policy rule) could never stop enrollment.
-        val checkpoint = runCatching { PayShieldSDK.evaluateAtCheckpoint(action = "KYC") }.getOrNull()
-        if (checkpoint != null && checkpoint.decision == PolicyDecision.DENY) {
-            binding.tvResult.text = "⛔ KYC blocked — ${checkpoint.reason}"
-            binding.tvResult.setTextColor(getColor(android.R.color.holo_red_dark))
-            binding.tvResult.visibility = View.VISIBLE
-            return
-        }
-        if (checkpoint != null && checkpoint.decision == PolicyDecision.STEP_UP) {
-            showStepUpDialog(checkpoint.reason)
-            return
-        }
-
         setLoading(true)
         binding.tvResult.visibility = View.GONE
 
         lifecycleScope.launch(Dispatchers.IO) {
-            val result = DiimeApiClient.submitKyc(aadhaar, pan, deviceId)
-            withContext(Dispatchers.Main) {
-                setLoading(false)
-                showKycResult(result)
+            // Standard integration, "protect any API": one check just before the KYC API, nothing about the
+            // submission is given to the SDK. The KYC call is made only on an approval.
+            val checkpoint = try {
+                PayShieldSDK.evaluateApiCheckpoint(action = "KYC")
+            } catch (e: Exception) {
+                null   // no verdict: not approved
+            }
+
+            when {
+                checkpoint == null || checkpoint.decision == PolicyDecision.DENY -> withContext(Dispatchers.Main) {
+                    setLoading(false)
+                    binding.tvResult.text = "⛔ KYC not approved — ${checkpoint?.reason ?: "verification_unavailable"}"
+                    binding.tvResult.setTextColor(getColor(android.R.color.holo_red_dark))
+                    binding.tvResult.visibility = View.VISIBLE
+                }
+                checkpoint.decision == PolicyDecision.STEP_UP -> withContext(Dispatchers.Main) {
+                    setLoading(false)
+                    showStepUpDialog(checkpoint.reason)
+                }
+                else -> {
+                    val result = DiimeApiClient.submitKyc(aadhaar, pan, deviceId)
+                    withContext(Dispatchers.Main) {
+                        setLoading(false)
+                        showKycResult(result)
+                    }
+                }
             }
         }
     }
