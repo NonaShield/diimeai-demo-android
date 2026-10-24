@@ -120,6 +120,17 @@ android {
             // but attestation is still fully enforced at the SDK layer.
             debuggable false
         }
+        // Demo phones: a release build (signed, minified, not debuggable) with SDK_ENVIRONMENT
+        // DEVELOPMENT, which relaxes only Play Integrity and the store install-source checks.
+        // Every other check and all on-device enforcement match production, so a debug build
+        // or a phone with developer options / ADB on is blocked here just as in production.
+        // Same applicationId as release so the backend's attestation app-identity pin matches.
+        demo {
+            initWith release
+            versionNameSuffix '-demo'
+            matchingFallbacks = ['release']
+            buildConfigField 'String', 'SDK_ENVIRONMENT', '"DEVELOPMENT"'
+        }
         release {
             minifyEnabled   true
             shrinkResources true
