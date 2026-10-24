@@ -75,13 +75,13 @@ class DiimeApp : Application() {
         }
     }
 
-    // Per build type (SDK_ENVIRONMENT in app/build.gradle): debug -> DEVELOPMENT, staging -> STAGING,
-    // release -> PRODUCTION.
+    // Per build type (SDK_ENVIRONMENT in app/build.gradle): debug -> DEVELOPMENT (set explicitly),
+    // staging -> STAGING, release -> PRODUCTION. Anything else is PRODUCTION, the SDK's own default.
     private val sdkEnvironment: SdkEnvironment by lazy {
         when (BuildConfig.SDK_ENVIRONMENT) {
-            "STAGING"    -> SdkEnvironment.STAGING
-            "PRODUCTION" -> SdkEnvironment.PRODUCTION
-            else         -> SdkEnvironment.DEVELOPMENT
+            "DEVELOPMENT" -> SdkEnvironment.DEVELOPMENT
+            "STAGING"     -> SdkEnvironment.STAGING
+            else          -> SdkEnvironment.PRODUCTION
         }
     }
 
@@ -148,6 +148,7 @@ class DiimeApp : Application() {
                 tenantId          = "dimeai",
                 autoBlockSeverity = null,
                 environment       = sdkEnvironment,
+                backendCertPins   = BuildConfig.NONASHIELD_CERT_PINS.split(',').map { it.trim() }.filter { it.isNotEmpty() },
             ),
         )
 

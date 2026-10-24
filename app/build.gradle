@@ -34,6 +34,10 @@ android {
         // Change to your actual gateway URL in production.
         buildConfigField 'String', 'NONASHIELD_BASE_URL',
             '"https://api.diimeai.com"'
+        // Backend certificate pins, comma-separated "sha256/<base64>" (gradle property
+        // nonashieldCertPins). Required by the SDK for the PRODUCTION (release) build.
+        buildConfigField 'String', 'NONASHIELD_CERT_PINS',
+            "\"${project.findProperty('nonashieldCertPins') ?: ''}\""
 
         // ── Play Integrity configuration ─────────────────────────────────────
         // Your Google Cloud project number (NOT the Play Console app ID).
