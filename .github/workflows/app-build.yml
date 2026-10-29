@@ -27,24 +27,7 @@
 name: Build App
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "app/**"
-      - "build.gradle"
-      - "settings.gradle"
-      - "gradle/**"
-      - "gradle.properties"
-      - ".github/workflows/app-build.yml"
-  pull_request:
-    branches: [main]
-    paths:
-      - "app/**"
-      - "build.gradle"
-      - "settings.gradle"
-      - "gradle/**"
-      - "gradle.properties"
-      - ".github/workflows/app-build.yml"
+  # Manual only: nothing starts on a push, pull request, schedule or tag. Run it from the Actions tab (branch demo or main).
   workflow_dispatch:
 
 concurrency:
