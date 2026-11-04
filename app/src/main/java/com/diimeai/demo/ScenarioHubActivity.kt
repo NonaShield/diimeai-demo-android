@@ -67,6 +67,9 @@ class ScenarioHubActivity : AppCompatActivity() {
 
         bottomNav       = findViewById(R.id.bottomNav)
         tvCategoryTitle = findViewById(R.id.tvCategoryTitle)
+        findViewById<android.view.View>(R.id.tvOpenConsent).setOnClickListener {
+            startActivity(android.content.Intent(this, ConsentActivity::class.java))
+        }
 
         // Show first tab immediately (no savedInstanceState check needed for demo)
         showTab(0)

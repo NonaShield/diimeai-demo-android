@@ -107,6 +107,13 @@
             android:screenOrientation="portrait"
             android:label="Trust Dashboard" />
 
+        <!-- Consent demo — shows the SDK consent panel -->
+        <activity
+            android:name=".ConsentActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:label="Consent" />
+
         <!-- SOC dashboard is a backend admin web UI — not a customer-facing screen -->
         <!-- SocDashboardActivity retained for internal/admin reference only -->
 
