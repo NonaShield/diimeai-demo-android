@@ -125,10 +125,20 @@ android {
         // Every other check and all on-device enforcement match production, so a debug build
         // or a phone with developer options / ADB on is blocked here just as in production.
         // Same applicationId as release so the backend's attestation app-identity pin matches.
+        // `initWith release` copies release as it is at this point, and release is declared further down, so
+        // everything release sets is repeated here (a bare `initWith` left IS_DEBUG, minify and signing unset:
+        // app-build run 42197372809 failed on "Unresolved reference IS_DEBUG").
         demo {
             initWith release
             versionNameSuffix '-demo'
             matchingFallbacks = ['release']
+            minifyEnabled   true
+            shrinkResources true
+            proguardFiles   getDefaultProguardFile('proguard-android-optimize.txt'),
+                            'proguard-rules.pro'
+            signingConfig   signingConfigs.release
+            debuggable false
+            buildConfigField 'Boolean', 'IS_DEBUG', 'false'
             buildConfigField 'String', 'SDK_ENVIRONMENT', '"DEVELOPMENT"'
         }
         release {
