@@ -108,33 +108,6 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-      # ── Optional: signed release APK (only when keystore secrets are set) ──
-      - name: Build signed release APK
-        if: ${{ env.DIIMEAI_KEYSTORE_BASE64 != '' }}
-        env:
-          DEMO_API_KEY: "ABCDEFGHI"
-          DIIMEAI_KEYSTORE_BASE64: ${{ secrets.DIIMEAI_KEYSTORE_BASE64 }}
-          DIIMEAI_STORE_PASSWORD:  ${{ secrets.DIIMEAI_STORE_PASSWORD }}
-          DIIMEAI_KEY_ALIAS:       ${{ secrets.DIIMEAI_KEY_ALIAS }}
-          DIIMEAI_KEY_PASSWORD:    ${{ secrets.DIIMEAI_KEY_PASSWORD }}
-        run: |
-          echo "$DIIMEAI_KEYSTORE_BASE64" | base64 -d > /tmp/diimeai.keystore
-          export DIIMEAI_KEYSTORE_PATH=/tmp/diimeai.keystore
-          ./gradlew :app:assembleRelease --warning-mode none --no-daemon
-          echo "✓ Signed release APK built"
-          rm -f /tmp/diimeai.keystore
-
-      - name: Upload signed APK artifact
-        if: ${{ env.DIIMEAI_KEYSTORE_BASE64 != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: nonashield-release-apk-${{ github.sha }}
-          path: app/build/outputs/apk/release/app-release.apk
-          retention-days: 30
-          if-no-files-found: warn
-        env:
-          DIIMEAI_KEYSTORE_BASE64: ${{ secrets.DIIMEAI_KEYSTORE_BASE64 }}
-
       # ── Tester build: the `demo` flavor, signed with the keystore in the DIIMEAI_* secrets ──
       # Same applicationId as release (com.nonashield.app). Fails, never falls back to an unsigned or
       # debug-signed file, when a signing secret is missing.
