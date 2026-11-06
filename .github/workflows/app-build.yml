@@ -29,6 +29,19 @@ name: Build App
 on:
   # Manual only: nothing starts on a push, pull request, schedule or tag. Run it from the Actions tab (branch demo or main).
   workflow_dispatch:
+    inputs:
+      distribute:
+        description: "Upload the signed demo APK to Firebase App Distribution"
+        type: boolean
+        default: false
+      group:
+        description: "Firebase tester group alias"
+        type: string
+        default: "dimeai-testers"
+      release_notes:
+        description: "Release notes shown to testers"
+        type: string
+        default: "NonaShield demo build"
 
 concurrency:
   group: app-build
@@ -121,6 +134,65 @@ jobs:
           if-no-files-found: warn
         env:
           DIIMEAI_KEYSTORE_BASE64: ${{ secrets.DIIMEAI_KEYSTORE_BASE64 }}
+
+      # ── Tester build: the `demo` flavor, signed with the keystore in the DIIMEAI_* secrets ──
+      # Same applicationId as release (com.nonashield.app). Fails, never falls back to an unsigned or
+      # debug-signed file, when a signing secret is missing.
+      - name: Build signed demo APK (tester build)
+        env:
+          DEMO_API_KEY: "ABCDEFGHI"
+          DIIMEAI_KEYSTORE_BASE64: ${{ secrets.DIIMEAI_KEYSTORE_BASE64 }}
+          DIIMEAI_STORE_PASSWORD:  ${{ secrets.DIIMEAI_STORE_PASSWORD }}
+          DIIMEAI_KEY_ALIAS:       ${{ secrets.DIIMEAI_KEY_ALIAS }}
+          DIIMEAI_KEY_PASSWORD:    ${{ secrets.DIIMEAI_KEY_PASSWORD }}
+        run: |
+          for v in DIIMEAI_KEYSTORE_BASE64 DIIMEAI_STORE_PASSWORD DIIMEAI_KEY_ALIAS DIIMEAI_KEY_PASSWORD; do
+            if [[ -z "${!v}" ]]; then
+              echo "::error::$v is not set (non-empty). The tester APK is never built unsigned."
+              exit 1
+            fi
+          done
+          KS="$RUNNER_TEMP/diimeai.keystore"
+          echo "$DIIMEAI_KEYSTORE_BASE64" | base64 -d > "$KS"
+          export DIIMEAI_KEYSTORE_PATH="$KS"
+          # Backend certificate pins (leaf, Let's Encrypt intermediate, ISRG root): the same three as in DiimeApiClient.kt.
+          ./gradlew :app:assembleDemo             "-PnonashieldCertPins=sha256/DNUBm2e3pjQxpmeLywECXQohfN2Z+fuGWkqt/oiBAVA=,sha256/brzvtCELCIZUo4sD/qPX0ccRtPsd3DY6RfmxpOU9oB4=,sha256/diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI="             --warning-mode none --no-daemon
+          rm -f "$KS"
+
+      - name: Verify the demo APK signature
+        id: demo_apk
+        run: |
+          APK="app/build/outputs/apk/demo/app-demo.apk"
+          [[ -f "$APK" ]] || { echo "::error::$APK not found"; ls -la app/build/outputs/apk/ || true; exit 1; }
+          BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          "$BT/apksigner" verify --print-certs "$APK" | tee "$RUNNER_TEMP/certs.txt"
+          grep -q "Signer #1 certificate SHA-256 digest" "$RUNNER_TEMP/certs.txt"
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+
+      - name: Upload demo APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nonashield-demo-signed-apk-${{ github.sha }}
+          path: app/build/outputs/apk/demo/app-demo.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Distribute to Firebase App Distribution
+        if: ${{ inputs.distribute }}
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          FIREBASE_APP_ID_DEMO: ${{ secrets.FIREBASE_APP_ID_DEMO }}
+          GROUP: ${{ inputs.group }}
+          NOTES: ${{ inputs.release_notes }}
+        run: |
+          for v in FIREBASE_SERVICE_ACCOUNT_JSON FIREBASE_APP_ID_DEMO; do
+            [[ -n "${!v}" ]] || { echo "::error::$v is not set"; exit 1; }
+          done
+          SA="$RUNNER_TEMP/firebase-sa.json"
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$SA"
+          export GOOGLE_APPLICATION_CREDENTIALS="$SA"
+          npx --yes firebase-tools@13.29.1 appdistribution:distribute "${{ steps.demo_apk.outputs.apk }}"             --app "$FIREBASE_APP_ID_DEMO" --groups "$GROUP" --release-notes "$NOTES"
+          rm -f "$SA"
 
       - name: Print build summary
         if: always()
