@@ -13,10 +13,17 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // No freeRASP-KMP repo needed here — FreeRASP is bundled inside the
-        // payshield-android-sdk-*.aar and hidden behind PayShieldRaspConfig.
-        // App code passes PayShieldRaspConfig (an SDK type); freeRASP-KMP is
-        // an implementation detail of the SDK, not a consumer dependency.
+        // FreeRASP's classes are bundled inside the payshield-android-sdk-*.aar and hidden behind
+        // PayShieldRaspConfig, but the AAR does not carry FreeRASP's own runtime libraries
+        // (fingerprint-android, truetime-android). Talsec publishes those in its "common" repo only;
+        // the content filter limits this repo to exactly those two groups.
+        maven {
+            url 'https://europe-west3-maven.pkg.dev/talsec-artifact-repository/common'
+            content {
+                includeGroup 'com.github.fingerprintjs'
+                includeGroup 'com.github.instacart'
+            }
+        }
         // NonaShield SDK — AAR bundled at app/libs/android-sdk-release.aar
         // flatDir lets the name+ext declaration in app/build.gradle resolve to that file.
         flatDir { dirs 'app/libs' }

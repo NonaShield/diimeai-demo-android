@@ -190,6 +190,18 @@ dependencies {
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'
     implementation 'com.google.android.play:integrity:1.3.0'
 
+    // ── FreeRASP runtime libraries ───────────────────────────────────────────
+    // Versions are the ones Talsec's own POM declares for TalsecSecurity-Community-KMP 19.2.1 (the version the
+    // SDK bundles, via freeRASP_KMP 2.1.0). The SDK AAR contains Talsec's classes but not these, and R8 fails
+    // with "Missing class" on a minified build without them (app-build run 42194548181).
+    implementation 'org.jetbrains.kotlin:kotlin-parcelize-runtime:2.0.0'
+    implementation 'androidx.biometric:biometric:1.1.0'
+    implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0'
+    implementation 'com.android.tools.build:apksig:9.3.1'
+    implementation 'com.google.android.gms:play-services-base:18.10.0'
+    implementation 'com.github.fingerprintjs:fingerprint-android:2.2.0'
+    implementation 'com.github.instacart:truetime-android:4.0.0.alpha'
+
     // ── Coroutines ───────────────────────────────────────────────────────────
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0'
 
